@@ -1,0 +1,18 @@
+import react from "@vitejs/plugin-react";
+import path from "path";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
+  server: {
+    port: 5173,
+    // The backend only trusts http://localhost:5173 (CSRF origin check). Without this,
+    // a second `npm run dev` silently hops to 5174 and every login fails with 403.
+    strictPort: true,
+    proxy: {
+      // The SPA always calls relative /api/v1/... paths so cookies are same-origin in dev.
+      "/api": { target: "http://localhost:3000", changeOrigin: true },
+    },
+  },
+});

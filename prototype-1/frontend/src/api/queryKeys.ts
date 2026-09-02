@@ -1,0 +1,13 @@
+export const qk = {
+  me: ["me"] as const,
+  calendar: (params: Record<string, unknown>) => ["calendar", params] as const,
+  bookings: ["bookings"] as const,
+  bookingList: (params: Record<string, unknown>) => ["bookings", "list", params] as const,
+  bookingDetail: (id: string) => ["bookings", "detail", id] as const,
+  courses: (params: Record<string, unknown> = {}) => ["courses", params] as const,
+  rooms: (params: Record<string, unknown> = {}) => ["rooms", params] as const,
+  buildings: ["buildings"] as const,
+  terms: ["terms"] as const,
+  users: (params: Record<string, unknown> = {}) => ["users", params] as const,
+  notifications: ["notifications"] as const,
+};

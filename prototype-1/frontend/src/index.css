@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+  }
+
+  * {
+    @apply border-neutral-200;
+  }
+
+  body {
+    @apply bg-white text-neutral-950 antialiased;
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+      "Noto Sans", sans-serif;
+  }
+}
+
+@layer components {
+  /*
+   * Status is texture, not colour (§3.2). Pending = 45° diagonal stripes + dashed border.
+   * Verbatim from the wireframes so the calendar block and the legend swatch match exactly.
+   */
+  .stripes-pending {
+    background-image: repeating-linear-gradient(
+      45deg,
+      oklch(0.97 0 0),
+      oklch(0.97 0 0) 6px,
+      oklch(0.922 0 0) 6px,
+      oklch(0.922 0 0) 12px
+    );
+  }
+
+  .stripes-pending-sm {
+    background-image: repeating-linear-gradient(
+      45deg,
+      oklch(0.97 0 0),
+      oklch(0.97 0 0) 3px,
+      oklch(0.922 0 0) 3px,
+      oklch(0.922 0 0) 6px
+    );
+  }
+}
