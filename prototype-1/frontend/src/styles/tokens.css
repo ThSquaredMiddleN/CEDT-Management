@@ -1,0 +1,89 @@
+:root {
+  --color-primary: #0e0e0e;
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-grey-100: #f6f6f6;
+  --color-grey-200: #bcbec0;
+  --color-grey-400: #676767;
+  --color-grey-700: #2b2b2b;
+  --color-grey-900: #121212;
+
+  --font-family-body: "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+
+  --text-display-md-size: 96px;
+  --text-display-md-weight: 500;
+  --text-display-md-line-height: 1.2;
+  --text-display-md-letter-spacing: 0em;
+
+  --text-header-lg-size: 64px;
+  --text-header-lg-weight: 400;
+  --text-header-lg-line-height: 1.2;
+  --text-header-lg-letter-spacing: 0em;
+  --text-header-lg-emphasize-size: 64px;
+  --text-header-lg-emphasize-weight: 600;
+  --text-header-lg-emphasize-line-height: 1.2;
+  --text-header-lg-emphasize-letter-spacing: 0em;
+
+  --text-header-md-size: 48px;
+  --text-header-md-weight: 400;
+  --text-header-md-line-height: 1.2;
+  --text-header-md-letter-spacing: 0em;
+  --text-header-md-emphasize-size: 48px;
+  --text-header-md-emphasize-weight: 600;
+  --text-header-md-emphasize-line-height: 1.2;
+  --text-header-md-emphasize-letter-spacing: 0em;
+
+  --text-header-sm-size: 32px;
+  --text-header-sm-weight: 400;
+  --text-header-sm-line-height: 1.2;
+  --text-header-sm-letter-spacing: 0em;
+  --text-header-sm-emphasize-size: 32px;
+  --text-header-sm-emphasize-weight: 600;
+  --text-header-sm-emphasize-line-height: 1.2;
+  --text-header-sm-emphasize-letter-spacing: 0em;
+
+  --text-header-xs-size: 24px;
+  --text-header-xs-weight: 400;
+  --text-header-xs-line-height: 1.2;
+  --text-header-xs-letter-spacing: 0em;
+  --text-header-xs-emphasize-size: 24px;
+  --text-header-xs-emphasize-weight: 600;
+  --text-header-xs-emphasize-line-height: 1.2;
+  --text-header-xs-emphasize-letter-spacing: 0em;
+
+  --text-header-xxs-size: 20px;
+  --text-header-xxs-weight: 400;
+  --text-header-xxs-line-height: 1.2;
+  --text-header-xxs-letter-spacing: 0em;
+  --text-header-xxs-emphasize-size: 20px;
+  --text-header-xxs-emphasize-weight: 600;
+  --text-header-xxs-emphasize-line-height: 1.2;
+  --text-header-xxs-emphasize-letter-spacing: 0em;
+
+  --text-body-md-size: 16px;
+  --text-body-md-weight: 400;
+  --text-body-md-line-height: 1.2;
+  --text-body-md-letter-spacing: 0em;
+  --text-body-md-emphasize-size: 16px;
+  --text-body-md-emphasize-weight: 600;
+  --text-body-md-emphasize-line-height: 1.2;
+  --text-body-md-emphasize-letter-spacing: 0em;
+
+  --text-body-sm-size: 14px;
+  --text-body-sm-weight: 400;
+  --text-body-sm-line-height: 1.2;
+  --text-body-sm-letter-spacing: 0em;
+  --text-body-sm-emphasize-size: 14px;
+  --text-body-sm-emphasize-weight: 600;
+  --text-body-sm-emphasize-line-height: 1.2;
+  --text-body-sm-emphasize-letter-spacing: 0em;
+
+  --text-body-xs-size: 12px;
+  --text-body-xs-weight: 600;
+  --text-body-xs-line-height: 1.2;
+  --text-body-xs-letter-spacing: 0em;
+  --text-body-xs-emphasize-size: 12px;
+  --text-body-xs-emphasize-weight: 600;
+  --text-body-xs-emphasize-line-height: 1.2;
+  --text-body-xs-emphasize-letter-spacing: 0em;
+}
