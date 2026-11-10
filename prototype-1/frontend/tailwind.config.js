@@ -6,7 +6,9 @@ export default {
     extend: {
       colors: {
         primary: "var(--color-primary)",
+        "brand-primary": "var(--color-brand-primary)",
         white: "var(--color-white)",
+        "white-50": "var(--color-white-50)",
         black: "var(--color-black)",
         grey: {
           100: "var(--color-grey-100)",
