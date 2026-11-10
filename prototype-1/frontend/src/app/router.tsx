@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { AdminHome } from "@/features/admin-home/AdminHome";
 import { AdminDashboard } from "@/features/admin-dashboard/AdminDashboard";
 import { BookingForm } from "@/features/booking-form/BookingForm";
 import { CalendarPage } from "@/features/calendar/CalendarPage";
@@ -35,9 +36,9 @@ export function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 
-      {/* AppShell renders for everyone — the calendar is public. It tolerates a null user. */}
+      {/* AppShell renders for everyone and tolerates a null user. */}
       <Route element={<AppShell />}>
-        <Route index element={<Navigate to="/calendar" replace />} />
+        <Route index element={<Navigate to="/admin" replace />} />
         {/* Public: anyone can view the calendar without logging in. */}
         <Route path="/calendar" element={<CalendarPage />} />
 
@@ -60,6 +61,10 @@ export function AppRoutes() {
         />
         <Route
           path="/admin"
+          element={<AdminHome />}
+        />
+        <Route
+          path="/admin/dashboard"
           element={
             <RequireAuth>
               <AdminDashboard />

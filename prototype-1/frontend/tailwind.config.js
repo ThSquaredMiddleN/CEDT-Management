@@ -7,7 +7,10 @@ export default {
       colors: {
         primary: "var(--color-primary)",
         "brand-primary": "var(--color-brand-primary)",
+        "brand-primary-hover": "var(--color-brand-primary-hover)",
         white: "var(--color-white)",
+        surface: "var(--color-surface)",
+        background: "var(--color-background)",
         "white-50": "var(--color-white-50)",
         black: "var(--color-black)",
         grey: {

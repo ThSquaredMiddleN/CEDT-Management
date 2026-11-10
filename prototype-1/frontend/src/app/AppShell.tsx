@@ -10,7 +10,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { LogOut, Settings } from "lucide-react";
 import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { logout } from "@/api/endpoints";
 import { Sidebar, type SidebarItem } from "@/components/Sidebar";
@@ -39,6 +39,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
 
 export function AppShell() {
   const { user } = useAuth();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -52,33 +53,38 @@ export function AppShell() {
   const displayName = [user?.titlePrefix, user?.name]
     .filter(Boolean)
     .join(" ");
+  const sidebarItems = SIDEBAR_ITEMS.map((item) => ({
+    ...item,
+    active: item.label === "หน้าหลัก" && pathname === "/admin",
+  }));
+  const sidebarName = user ? displayName : "Staff TA";
+  const sidebarRole = user?.role ?? "admin";
 
   return (
     <div className="flex min-h-screen bg-white">
       <Sidebar
-        items={SIDEBAR_ITEMS}
+        items={sidebarItems}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
         footer={
-          user ? (
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <Avatar className="size-8 shrink-0 rounded-lg bg-brand-primary text-white">
-                <AvatarFallback className="rounded-lg bg-brand-primary text-[11px] font-bold leading-[16.5px] text-white">
-                  {initials(user.name || "?")}
-                </AvatarFallback>
-              </Avatar>
-              {!sidebarCollapsed && (
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-body text-body-sm-emphasize text-grey-900">{displayName}</p>
-                  <p className="truncate font-body text-body-xs text-grey-400">{user.role}</p>
-                </div>
-              )}
-            </div>
-          ) : null
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Avatar className="size-8 shrink-0 rounded-lg bg-brand-primary text-white">
+              <AvatarFallback className="rounded-lg bg-brand-primary text-[11px] font-bold leading-[16.5px] text-white">
+                {user ? initials(user.name || "?") : "JD"}
+              </AvatarFallback>
+            </Avatar>
+            {!sidebarCollapsed && (
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-body text-body-sm-emphasize text-grey-900">{sidebarName}</p>
+                <p className="truncate font-body text-body-xs text-grey-400">{sidebarRole}</p>
+              </div>
+            )}
+          </div>
         }
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[63px] shrink-0 items-center justify-end gap-2 border-b border-neutral-200 bg-white px-6">
+        {pathname !== "/admin" && (
+          <header className="flex h-[63px] shrink-0 items-center justify-end gap-2 border-b border-neutral-200 bg-white px-6">
           {!user && (
             <Button asChild size="sm">
               <NavLink to="/login">Log in</NavLink>
@@ -140,7 +146,8 @@ export function AppShell() {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-        </header>
+          </header>
+        )}
         <main className="min-h-0 flex-1">
           <Outlet />
         </main>
