@@ -1,13 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  CalendarIcon,
-  CpuChipIcon,
-  DocumentTextIcon,
-  HomeIcon,
-  MegaphoneIcon,
-  NewspaperIcon,
-  UserCircleIcon,
-} from "@heroicons/react/24/outline";
+import { UserCircleIcon } from "@heroicons/react/24/outline";
 import { LogOut, Settings } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -28,16 +20,13 @@ import { NotificationBell } from "@/features/notifications/NotificationBell";
 import { initials } from "@/lib/formatters";
 import { useAuth } from "./AuthProvider";
 
-const SIDEBAR_ITEMS: SidebarItem[] = [
-  { label: "หน้าหลัก", icon: <HomeIcon /> },
-  { label: "จัดการประกาศ", icon: <MegaphoneIcon /> },
-  { label: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon /> },
-  { label: "จัดการห้องเรียน", icon: <CalendarIcon /> },
-  { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon /> },
-  { label: "ยืมอุปกรณ์", icon: <CpuChipIcon /> },
-];
-
-export function AppShell() {
+export function AppShell({
+  sidebarItems,
+  showGuestProfile = false,
+}: {
+  sidebarItems: SidebarItem[];
+  showGuestProfile?: boolean;
+}) {
   const { user } = useAuth();
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -53,10 +42,6 @@ export function AppShell() {
   const displayName = [user?.titlePrefix, user?.name]
     .filter(Boolean)
     .join(" ");
-  const sidebarItems = SIDEBAR_ITEMS.map((item) => ({
-    ...item,
-    active: item.label === "หน้าหลัก" && pathname === "/admin",
-  }));
   const sidebarName = user ? displayName : "Staff TA";
   const sidebarRole = user?.role ?? "admin";
 
@@ -67,19 +52,21 @@ export function AppShell() {
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
         footer={
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <Avatar className="size-8 shrink-0 rounded-lg bg-brand-primary text-white">
-              <AvatarFallback className="rounded-lg bg-brand-primary text-[11px] font-bold leading-[16.5px] text-white">
-                {user ? initials(user.name || "?") : "JD"}
-              </AvatarFallback>
-            </Avatar>
-            {!sidebarCollapsed && (
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-body text-body-sm-emphasize text-grey-900">{sidebarName}</p>
-                <p className="truncate font-body text-body-xs text-grey-400">{sidebarRole}</p>
-              </div>
-            )}
-          </div>
+          user || showGuestProfile ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <Avatar className="size-8 shrink-0 rounded-lg bg-brand-primary text-white">
+                <AvatarFallback className="rounded-lg bg-brand-primary text-[11px] font-bold leading-[16.5px] text-white">
+                  {user ? initials(user.name || "?") : "JD"}
+                </AvatarFallback>
+              </Avatar>
+              {!sidebarCollapsed && (
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-body text-body-sm-emphasize text-grey-900">{sidebarName}</p>
+                  <p className="truncate font-body text-body-xs text-grey-400">{sidebarRole}</p>
+                </div>
+              )}
+            </div>
+          ) : null
         }
       />
       <div className="flex min-w-0 flex-1 flex-col">

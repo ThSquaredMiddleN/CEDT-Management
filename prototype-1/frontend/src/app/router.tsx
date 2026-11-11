@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { AdminHome } from "@/features/admin-home/AdminHome";
+import { AdminHome } from "@/features/admin/pages/AdminHome";
+import { AdminLayout } from "@/features/admin/layout/AdminLayout";
 import { AdminDashboard } from "@/features/admin-dashboard/AdminDashboard";
 import { BookingForm } from "@/features/booking-form/BookingForm";
 import { CalendarPage } from "@/features/calendar/CalendarPage";
 import { LoginPage } from "@/features/login/LoginPage";
 import { MasterDataPage } from "@/features/master-data/MasterDataPage";
 import { MyRequests } from "@/features/my-requests/MyRequests";
-import { AppShell } from "./AppShell";
+import { StudentHome } from "@/features/student/pages/StudentHome";
+import { StudentLayout } from "@/features/student/layout/StudentLayout";
 import { useAuth } from "./AuthProvider";
 import { MapPage } from "./MapPage";
 
@@ -36,15 +38,14 @@ export function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 
-      {/* AppShell renders for everyone and tolerates a null user. */}
-      <Route element={<AppShell />}>
-        <Route index element={<Navigate to="/admin" replace />} />
+      <Route element={<StudentLayout />}>
+        <Route index element={<StudentHome />} />
         {/* Public: anyone can view the calendar without logging in. */}
-        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="calendar" element={<CalendarPage />} />
 
         {/* Staff-only pages — a single `staff` role, so plain auth gating. */}
         <Route
-          path="/requests/new"
+          path="requests/new"
           element={
             <RequireAuth>
               <BookingForm />
@@ -52,7 +53,7 @@ export function AppRoutes() {
           }
         />
         <Route
-          path="/requests"
+          path="requests"
           element={
             <RequireAuth>
               <MyRequests />
@@ -60,11 +61,17 @@ export function AppRoutes() {
           }
         />
         <Route
-          path="/admin"
-          element={<AdminHome />}
+          path="schedule/a"
+          element={
+            <MapPage />
+          }
         />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+      <Route path="admin" element={<AdminLayout />}>
+        <Route index element={<AdminHome />} />
         <Route
-          path="/admin/dashboard"
+          path="dashboard"
           element={
             <RequireAuth>
               <AdminDashboard />
@@ -72,17 +79,11 @@ export function AppRoutes() {
           }
         />
         <Route
-          path="/admin/data"
+          path="data"
           element={
             <RequireAuth>
               <MasterDataPage />
             </RequireAuth>
-          }
-        />
-        <Route
-          path="/schedule/a"
-          element={
-            <MapPage />
           }
         />
         <Route path="*" element={<NotFound />} />

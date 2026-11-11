@@ -44,7 +44,7 @@ export function Sidebar({ items, collapsed, onToggle, footer }: SidebarProps) {
       </div>
 
       <nav className={cn("min-h-0 flex-1 overflow-y-auto", collapsed ? "px-[10px] py-2" : "px-3 py-2")}>
-        {!collapsed && (
+        {!collapsed && items.length > 0 && (
           <p className="px-2 py-1 font-body text-body-xs text-grey-200">
             เมนู
           </p>

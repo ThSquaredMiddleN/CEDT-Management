@@ -5,7 +5,7 @@ import {
   MegaphoneIcon,
   NewspaperIcon,
 } from "@heroicons/react/24/outline";
-import { MenuItem } from "@/components/AdminMenuItem";
+import { MenuItem } from "@/features/admin/components/AdminMenuItem";
 
 const MENU_GROUPS = [
   {
