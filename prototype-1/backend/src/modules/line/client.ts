@@ -34,6 +34,25 @@ export function isPermanentStatus(status: number): boolean {
   return status >= 400 && status < 500 && status !== 429;
 }
 
+/**
+ * LINE_DRY_RUN=true: the same interface with no network. Each reply or push is logged in full, link included,
+ * so it is for local development only: the text carries a one-time login link and a LINE user ID.
+ */
+export function createDryRunLineClient(log: { info(msg: string): void }): LineClient {
+  const joined = (messages: LineMessage[]) => messages.map((m) => m.text).join("\n");
+  return {
+    async reply(_replyToken, messages) {
+      // A reply goes to a reply token, not a user ID, so the log names it "reply".
+      log.info(`[LINE dry-run] reply to reply: ${joined(messages)}`);
+      return { ok: true };
+    },
+    async push(to, messages) {
+      log.info(`[LINE dry-run] push to ${to}: ${joined(messages)}`);
+      return { ok: true };
+    },
+  };
+}
+
 export function createLineClient(accessToken: string, fetchImpl: FetchFn = fetch): LineClient {
   async function post(
     path: string,

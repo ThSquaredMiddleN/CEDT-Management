@@ -11,7 +11,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset --force",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "line:sim": "tsx --env-file=.env scripts/line-sim.ts"
   },
   "prisma": {
     "seed": "tsx --env-file=.env prisma/seed.ts"
