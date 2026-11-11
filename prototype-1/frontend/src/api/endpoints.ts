@@ -244,3 +244,9 @@ export function useMarkNotificationsRead() {
     },
   });
 }
+
+// --------------------------------------------------------------------------- line
+
+/** Links the signed-in staff member's LINE account. 400 = invalid, expired or used token. */
+export const linkLineAccount = (token: string) =>
+  post<{ linked: true }>("/line/link", { token });

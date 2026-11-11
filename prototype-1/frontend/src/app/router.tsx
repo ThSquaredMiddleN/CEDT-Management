@@ -5,6 +5,7 @@ import { AdminLayout } from "@/features/admin/layout/AdminLayout";
 import { AdminDashboard } from "@/features/admin-dashboard/AdminDashboard";
 import { BookingForm } from "@/features/booking-form/BookingForm";
 import { CalendarPage } from "@/features/calendar/CalendarPage";
+import { LineLinkPage } from "@/features/line-link/LineLinkPage";
 import { LoginPage } from "@/features/login/LoginPage";
 import { MasterDataPage } from "@/features/master-data/MasterDataPage";
 import { MyRequests } from "@/features/my-requests/MyRequests";
@@ -64,6 +65,15 @@ export function AppRoutes() {
           path="schedule/a"
           element={
             <MapPage />
+          }
+        />
+        {/* Token comes from the LINE chat link; RequireAuth's `next` keeps the ?token= query. */}
+        <Route
+          path="line/link"
+          element={
+            <RequireAuth>
+              <LineLinkPage />
+            </RequireAuth>
           }
         />
         <Route path="*" element={<NotFound />} />

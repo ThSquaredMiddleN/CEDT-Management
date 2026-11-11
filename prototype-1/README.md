@@ -94,7 +94,53 @@ These are the only places the implementation departs from the two guides.
 
 7. **The `booking_events` audit table is implemented**, though the backend guide lists it as optional for the prototype, so `GET /bookings/:id` returns a real `events[]` timeline.
 
-Not built, per the guides' own out-of-scope lists: email/LINE notifications, CSV export, SSO, student views, and the optional MSW mocks (the real backend runs locally, so they would be redundant).
+Not built, per the guides' own out-of-scope lists: email notifications, CSV export, SSO, student views, and the optional MSW mocks (the real backend runs locally, so they would be redundant).
+
+---
+
+## LINE notifications (optional)
+
+Staff can link their LINE account and get every in-app notification (submitted, approved, rejected, moved,
+cancelled, withdrawn) pushed to LINE as well, in Thai then English. Code: `backend/src/modules/line/`,
+`frontend/src/features/line-link/`. It is **off unless both LINE keys are set**, so the app runs as before without them.
+
+**How linking works:** the staff member adds the LINE Official Account → the bot replies with a one-time link
+(`/line/link?token=…`, valid 15 minutes, single use) → they log in as usual and press **Confirm** → done.
+Unfollowing the OA, or `POST /api/v1/line/unlink`, removes the link. Only notifications created after linking are
+sent, so linking never floods old ones.
+
+**Setup**
+
+1. In the [LINE Official Account Manager](https://manager.line.biz/), create an OA and enable the Messaging API.
+   In [LINE Developers](https://developers.line.biz/console/), copy the **channel secret** and issue a
+   **long-lived channel access token**.
+2. In `backend/.env` (never commit it):
+   ```
+   LINE_CHANNEL_SECRET=...
+   LINE_CHANNEL_ACCESS_TOKEN=...
+   # optional: LINE_LINK_TTL_MINUTES=15, LINE_DISPATCH_INTERVAL_MS=5000
+   ```
+   `APP_ORIGIN` is also the base of the link the bot sends, so it must be a URL the phone can open.
+3. LINE needs a public HTTPS webhook. Locally, a quick tunnel works:
+   `cloudflared tunnel --url http://localhost:3000`, then set the webhook URL in LINE Developers to
+   `https://<tunnel>/api/v1/line/webhook`, turn **Use webhook** on, and press **Verify**. Turn **Webhook redelivery**
+   on too, so a failed delivery is retried.
+4. `npx prisma migrate deploy` (adds `users.line_user_id`, `users.line_linked_at`, `line_link_tokens`,
+   `line_webhook_events`), then `npm run dev`.
+
+**Behaviour worth knowing**
+
+- The webhook is checked against LINE's signature over the raw body and is the only route exempt from the
+  `X-Requested-With` CSRF rule (`config: { csrf: false }`). Bad or missing signature → 401.
+- The dispatcher polls for undelivered notifications every 5 s and marks `notifications.delivered_line_at`.
+  A LINE 429 (rate limit or monthly push quota) pauses it for 60 s; a notification that can't be rendered or that
+  LINE rejects permanently is marked and logged, not retried. Deactivated users get nothing.
+- The free LINE plan has a monthly push quota (each notification is one push).
+- `migration.sql` for `line_notify` was trimmed by hand: `prisma migrate diff` also proposes dropping
+  `booking_occurrences.timeslot`, the raw-SQL column behind the exclusion constraint. **If `prisma migrate dev`
+  ever proposes that drop, remove it** or `no_double_booking` is lost.
+- Tests (`backend/test/line/`) use a fake LINE client and fake credentials from `vitest.config.ts`; they never call
+  LINE.
 
 ---
 

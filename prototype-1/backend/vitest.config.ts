@@ -26,6 +26,12 @@ export default defineConfig({
     sequence: { concurrent: false },
     testTimeout: 30_000,
     hookTimeout: 30_000,
-    env: { ...loadDotEnv(), NODE_ENV: "test" },
+    // Fake LINE credentials, set after the .env spread so a real secret or token is never used by tests.
+    env: {
+      ...loadDotEnv(),
+      NODE_ENV: "test",
+      LINE_CHANNEL_SECRET: "test-line-channel-secret",
+      LINE_CHANNEL_ACCESS_TOKEN: "test-line-access-token",
+    },
   },
 });
