@@ -20,6 +20,29 @@ Screenshots need PaddleOCR too (`pip install -r requirements-paddle.txt`, CPU bu
 `paddlepaddle-gpu` instead). The worker runs in the interpreter named by `PADDLE_PYTHON`, which defaults to the
 one running `server.py`. Without Paddle, start with `OCR_ENGINE=stub`.
 
+## Hosting
+
+On a Linux server, use the Dockerfile. It runs Paddle on CPU with high-performance inference (OpenVINO):
+
+```
+docker build -t cedt-ocr prototype-1/ocr-service
+docker run -d --name cedt-ocr --restart unless-stopped -p 127.0.0.1:8790:8790 -v cedt-ocr-models:/models cedt-ocr
+```
+
+Keep the `127.0.0.1:` in `-p`: the backend on the same machine is the only client. Models (~170 MB) download
+into the volume on first start, and the first screenshot after a start is slower while OpenVINO compiles.
+
+Measured 2026-11-13 on real CU NEX screenshots, all fields correct:
+
+| Machine | Per screenshot | RAM |
+|---|---|---|
+| This image, 4 CPU / 4 GB | ~4 s | ~2 GB |
+| This image, 2 CPU / 2 GB | ~7 s | at the 2 GB limit |
+| Plain Paddle CPU, no HPI | ~22 s | Linux: killed at 8 GB |
+| Laptop GPU (`PADDLE_DEVICE=gpu`) | 0.3 s | |
+
+PDFs take under 0.1 s anywhere (text layer, no OCR). Plan for 4 CPU / 4 GB.
+
 ## Env
 
 | Variable | Default | Meaning |
@@ -31,6 +54,8 @@ one running `server.py`. Without Paddle, start with `OCR_ENGINE=stub`.
 | `PADDLE_PYTHON` | this interpreter | Python that runs `paddle_worker.py`. Started on the first image request. |
 | `PADDLE_DEVICE` | `cpu` | Passed to PaddleOCR (`gpu` needs paddlepaddle-gpu). |
 | `PADDLE_PDX_CACHE_HOME` | unset | Model cache folder. Only used if set. |
+| `PADDLE_HPI` | unset | `1` = high-performance CPU inference (Linux; set in the Dockerfile). |
+| `PADDLE_HPI_BACKEND` | `openvino` | `openvino` or `onnxruntime` (~same speed). |
 
 ## Endpoints
 
