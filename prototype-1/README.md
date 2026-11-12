@@ -62,7 +62,31 @@ The most interesting week to look at is **2026-08-17** (`/calendar?date=2026-08-
 cd backend
 npm test          # integration tests against your local Postgres
 npm run db:seed   # idempotent; only seeds bookings when the booking table is empty
+npm run receipts:purge   # delete receipt checks older than RECEIPT_RETENTION_DAYS (default 365)
 ```
+
+### Receipt checks (OCR)
+
+Staff check a student's tuition receipt once per semester at **Admin → Receipt checks** (`/admin/receipts`):
+enter the student ID, pick the term, upload the CU receipt PDF or the CU NEX payment screenshot. The page
+shows the fields read and the checks (paid, this semester, belongs to this student, reference not used by
+another student). The result is saved, one row per student per term; **the file and the student's name are
+never stored**.
+
+Reading the receipt is done by a small Python service on localhost (`ocr-service/`, see its README). Start
+it next to the backend:
+
+```bash
+cd ocr-service
+python -m venv .venv && .venv\Scripts\activate   # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt                  # PDFs only
+pip install -r requirements-paddle.txt           # optional: screenshots, via PaddleOCR
+python server.py                                 # :8790; OCR_ENGINE=stub fakes screenshots without Paddle
+```
+
+Without the service the page says "OCR service is not running". The backend refuses an `OCR_SERVICE_URL`
+that isn't localhost: receipts carry names and student IDs (PDPA), so never point it at a cloud OCR API.
+Backend tests use a fake service, so `npm test` doesn't need Python.
 
 ---
 

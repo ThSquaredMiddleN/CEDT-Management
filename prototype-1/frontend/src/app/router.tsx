@@ -7,6 +7,7 @@ import { BookingForm } from "@/features/booking-form/BookingForm";
 import { CalendarPage } from "@/features/calendar/CalendarPage";
 import { LoginPage } from "@/features/login/LoginPage";
 import { MasterDataPage } from "@/features/master-data/MasterDataPage";
+import { ReceiptChecksPage } from "@/features/receipts/ReceiptChecksPage";
 import { MyRequests } from "@/features/my-requests/MyRequests";
 import { StudentHome } from "@/features/student/pages/StudentHome";
 import { StudentLayout } from "@/features/student/layout/StudentLayout";
@@ -83,6 +84,14 @@ export function AppRoutes() {
           element={
             <RequireAuth>
               <MasterDataPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="receipts"
+          element={
+            <RequireAuth>
+              <ReceiptChecksPage />
             </RequireAuth>
           }
         />

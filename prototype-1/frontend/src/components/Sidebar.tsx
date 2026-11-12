@@ -7,6 +7,7 @@ export interface SidebarItem {
   label: string;
   icon: ReactNode;
   active?: boolean;
+  onClick?: () => void;
 }
 
 interface SidebarProps {
@@ -50,10 +51,11 @@ export function Sidebar({ items, collapsed, onToggle, footer }: SidebarProps) {
           </p>
         )}
         <div className={cn("flex flex-col", collapsed ? "items-center" : "items-stretch")}>
-          {items.map(({ label, icon, active }) => (
+          {items.map(({ label, icon, active, onClick }) => (
             <button
               key={label}
               type="button"
+              onClick={onClick}
               title={collapsed ? label : undefined}
               aria-label={collapsed ? label : undefined}
               aria-current={active ? "page" : undefined}

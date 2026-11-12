@@ -9,6 +9,11 @@ export type ErrorCode =
   | "NEEDS_CONFIRM"
   | "VALIDATION"
   | "LOCKED"
+  | "PAYLOAD_TOO_LARGE"
+  | "UNSUPPORTED_MEDIA_TYPE"
+  | "BAD_GATEWAY"
+  | "SERVICE_UNAVAILABLE"
+  | "GATEWAY_TIMEOUT"
   | "INTERNAL";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -20,9 +25,14 @@ const STATUS: Record<ErrorCode, number> = {
   INVALID_TRANSITION: 409,
   DUPLICATE: 409,
   NEEDS_CONFIRM: 409,
+  PAYLOAD_TOO_LARGE: 413,
+  UNSUPPORTED_MEDIA_TYPE: 415,
   VALIDATION: 422,
   LOCKED: 423,
   INTERNAL: 500,
+  BAD_GATEWAY: 502,
+  SERVICE_UNAVAILABLE: 503,
+  GATEWAY_TIMEOUT: 504,
 };
 
 export class AppError extends Error {

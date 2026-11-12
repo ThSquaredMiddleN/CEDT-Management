@@ -1,14 +1,17 @@
 import {
   CalendarIcon,
   CpuChipIcon,
+  DocumentMagnifyingGlassIcon,
   DocumentTextIcon,
   HomeIcon,
   MegaphoneIcon,
   NewspaperIcon,
 } from "@heroicons/react/24/outline";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { AppShell } from "@/app/AppShell";
 import type { SidebarItem } from "@/components/Sidebar";
+
+const RECEIPTS_PATH = "/admin/receipts";
 
 const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
   { label: "หน้าหลัก", icon: <HomeIcon /> },
@@ -21,10 +24,19 @@ const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
 
 export function AdminLayout() {
   const { pathname } = useLocation();
-  const items = ADMIN_SIDEBAR_ITEMS.map((item) => ({
-    ...item,
-    active: item.label === "หน้าหลัก" && pathname === "/admin",
-  }));
+  const navigate = useNavigate();
+  const items: SidebarItem[] = [
+    ...ADMIN_SIDEBAR_ITEMS.map((item) => ({
+      ...item,
+      active: item.label === "หน้าหลัก" && pathname === "/admin",
+    })),
+    {
+      label: "Receipt checks",
+      icon: <DocumentMagnifyingGlassIcon />,
+      active: pathname.startsWith(RECEIPTS_PATH),
+      onClick: () => navigate(RECEIPTS_PATH),
+    },
+  ];
 
   return <AppShell sidebarItems={items} showGuestProfile />;
 }

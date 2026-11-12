@@ -9,6 +9,7 @@ import { calendarRoutes } from "./modules/calendar/routes.js";
 import { importRoutes } from "./modules/import/routes.js";
 import { masterDataRoutes } from "./modules/masterdata/routes.js";
 import { notificationRoutes } from "./modules/notifications/routes.js";
+import { receiptRoutes } from "./modules/receipts/routes.js";
 import { registerAuth } from "./plugins/auth.js";
 import { registerErrorHandler } from "./plugins/errors.js";
 
@@ -34,6 +35,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await v1.register(masterDataRoutes);
       await v1.register(notificationRoutes);
       await v1.register(importRoutes);
+      await v1.register(receiptRoutes);
     },
     { prefix: "/api/v1" },
   );

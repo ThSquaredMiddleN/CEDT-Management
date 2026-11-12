@@ -19,6 +19,9 @@ import type {
   Course,
   DirectoryUser,
   NotificationsResponse,
+  ReceiptCheckResponse,
+  ReceiptCheckRow,
+  ReceiptVerdict,
   Room,
   Term,
   User,
@@ -241,6 +244,43 @@ export function useMarkNotificationsRead() {
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: qk.notifications });
       void qc.invalidateQueries({ queryKey: qk.bookings });
+    },
+  });
+}
+
+// ------------------------------------------------------------------ receipt checks
+
+// A type alias (not an interface) so it satisfies qk's Record<string, unknown> parameter.
+export type ReceiptListParams = {
+  term?: string;
+  verdict?: ReceiptVerdict;
+};
+
+/** Saved checks, newest first. `term` and `verdict` are optional filters. */
+export function useReceiptChecks(params: ReceiptListParams) {
+  const s = new URLSearchParams();
+  if (params.term) s.set("term", params.term);
+  if (params.verdict) s.set("verdict", params.verdict);
+
+  return useQuery({
+    queryKey: qk.receiptList(params),
+    queryFn: () => api<{ items: ReceiptCheckRow[] }>(`/receipts?${s.toString()}`),
+  });
+}
+
+/**
+ * Uploads one receipt. Deliberately not a React Query mutation: the response carries the
+ * student's name, which must stay in the page's own state and not in a query cache.
+ */
+export const checkReceipt = (form: FormData) =>
+  api<ReceiptCheckResponse>("/receipts/check", { method: "POST", body: form });
+
+export function useDeleteReceiptCheck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/receipts/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.receipts });
     },
   });
 }
