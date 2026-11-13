@@ -7,9 +7,10 @@ import {
   type DispatchCounts,
   type DispatchLog,
   type DispatchState,
+  MAX_AGE_MS,
   RATE_LIMIT_BACKOFF_MS,
 } from "../../src/modules/line/dispatcher.js";
-import { cleanLineState, fakeLine, LINE_A, newEventId, UUID } from "./fixtures.js";
+import { cleanLineState, fakeLine, LINE_A, LINE_B, newEventId, UUID } from "./fixtures.js";
 
 /** Seeded staff accounts. Their LINE fields are reset to null after every test. */
 const SOMCHAI = "somchai@cedt.edu";
@@ -42,8 +43,26 @@ const tally = (over: Partial<DispatchCounts> = {}): DispatchCounts => ({
   ...over,
 });
 
+/** Fake LINE ID prefix for the test that links all six users: the seed has five, so one extra user is added. */
+const CAP_PREFIX = `U${"0".repeat(29)}c`;
+const EXTRA_EMAIL = "dispatcher-test-extra@example.test";
+
+/** Creates the extra user. It has no notifications from other tests, so a test can link it as far back as it needs. */
+async function extraUser(): Promise<string> {
+  const user = await prisma.user.create({
+    data: { email: EXTRA_EMAIL, passwordHash: "not-a-login", name: "Dispatcher Test", role: "staff" },
+    select: { id: true },
+  });
+  return user.id;
+}
+
 async function cleanup(): Promise<void> {
   await prisma.notification.deleteMany({ where: { message: { startsWith: MARK } } });
+  await prisma.user.updateMany({
+    where: { lineUserId: { startsWith: CAP_PREFIX } },
+    data: { lineUserId: null, lineLinkedAt: null },
+  });
+  await prisma.user.deleteMany({ where: { email: EXTRA_EMAIL } });
   await cleanLineState();
 }
 
@@ -267,7 +286,7 @@ describe("dispatchLineOnce", () => {
     expect(await deliveredAt(id)).not.toBeNull();
   });
 
-  it("a throw on one notification does not stop the others in the batch", async () => {
+  it("a throw on one notification holds back that user's later rows for this tick, and the next tick sends them", async () => {
     const linkedAt = new Date();
     await link(SOMCHAI, LINE_A, linkedAt);
     const first = await addNotification(SOMCHAI, new Date(linkedAt.getTime() + 1000));
@@ -283,17 +302,19 @@ describe("dispatchLineOnce", () => {
     };
     const log = { warn: vi.fn(), error: vi.fn() };
 
-    const counts = await dispatch({ client: flaky, log });
-
-    expect(counts).toEqual(tally({ sent: 2, retry: 1 }));
-    expect(line.sent.map((s) => s.retryKey)).toEqual([first, third]);
+    // A throw counts as a retry, so the user's rows after it wait for the next tick.
+    expect(await dispatch({ client: flaky, log })).toEqual(tally({ sent: 1, retry: 1 }));
+    expect(line.sent.map((s) => s.retryKey)).toEqual([first]);
     expect(await deliveredAt(first)).not.toBeNull();
     expect(await deliveredAt(broken)).toBeNull();
-    expect(await deliveredAt(third)).not.toBeNull();
+    expect(await deliveredAt(third)).toBeNull();
     expect(log.error).toHaveBeenCalledWith(expect.objectContaining({ notificationId: broken }), expect.any(String));
+
+    expect(await dispatch()).toEqual(tally({ sent: 2 }));
+    expect(line.sent.map((s) => s.retryKey)).toEqual([first, broken, third]);
   });
 
-  it("sends at most 50 per tick, oldest first", async () => {
+  it("sends at most 10 per user per tick, oldest first", async () => {
     const linkedAt = new Date();
     await link(SOMCHAI, LINE_A, linkedAt);
     const user = await prisma.user.findUniqueOrThrow({ where: { email: SOMCHAI }, select: { id: true } });
@@ -307,19 +328,120 @@ describe("dispatchLineOnce", () => {
       })),
     });
 
-    expect(await dispatch()).toEqual(tally({ sent: 50 }));
+    expect(await dispatch()).toEqual(tally({ sent: 10 }));
 
     const pending = await prisma.notification.findMany({
       where: { message: { startsWith: MARK }, deliveredLineAt: null },
       orderBy: { createdAt: "asc" },
       select: { createdAt: true },
     });
-    expect(pending.map((p) => p.createdAt.getTime())).toEqual([
-      linkedAt.getTime() + 51_000,
-      linkedAt.getTime() + 52_000,
-    ]);
+    expect(pending.map((p) => p.createdAt.getTime())).toEqual(
+      Array.from({ length: 42 }, (_, i) => linkedAt.getTime() + (i + 11) * 1000),
+    );
 
-    expect(await dispatch()).toEqual(tally({ sent: 2 }));
+    expect(await dispatch()).toEqual(tally({ sent: 10 }));
+  });
+
+  it("caps a tick at 50 across users, taking the users round-robin", async () => {
+    const linkedAt = new Date();
+    const staff = await prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true },
+      orderBy: { id: "asc" },
+      take: 5,
+    });
+    const ids = [...staff.map((s) => s.id), await extraUser()];
+    expect(ids).toHaveLength(6);
+    for (const [i, id] of ids.entries()) {
+      await prisma.user.update({ where: { id }, data: { lineUserId: `${CAP_PREFIX}${i}`, lineLinkedAt: linkedAt } });
+    }
+    await prisma.notification.createMany({
+      data: ids.flatMap((userId, u) =>
+        Array.from({ length: 10 }, (_, k) => ({
+          userId,
+          type: "request_submitted" as const,
+          message: `${MARK} cap`,
+          payload: PAYLOAD,
+          createdAt: new Date(linkedAt.getTime() + (k * ids.length + u + 1) * 1000),
+        })),
+      ),
+    });
+
+    expect(await dispatch()).toEqual(tally({ sent: 50 }));
+    // 50 over 6 users in turn: eight each, plus one more for the first two in id order.
+    const perUser = new Map<string, number>();
+    for (const s of line.sent) perUser.set(s.to!, (perUser.get(s.to!) ?? 0) + 1);
+    expect([...perUser.values()].sort((a, b) => a - b)).toEqual([8, 8, 8, 8, 9, 9]);
+
+    expect(await dispatch()).toEqual(tally({ sent: 10 }));
+  });
+
+  it("does not push a notification older than 24 hours, even one created after the user linked", async () => {
+    const now = new Date();
+    const linkedAt = new Date(now.getTime() - 3 * DAY_MS);
+    await extraUser();
+    await prisma.user.update({ where: { email: EXTRA_EMAIL }, data: { lineUserId: LINE_A, lineLinkedAt: linkedAt } });
+    const old = await addNotification(EXTRA_EMAIL, new Date(now.getTime() - MAX_AGE_MS - 60_000));
+    const recent = await addNotification(EXTRA_EMAIL, new Date(now.getTime() - MAX_AGE_MS + 60_000));
+
+    expect(await dispatch({ now })).toEqual(tally({ sent: 1 }));
+
+    expect(line.sent.map((s) => s.retryKey)).toEqual([recent]);
+    expect(await deliveredAt(old)).toBeNull();
+    expect(await deliveredAt(recent)).not.toBeNull();
+  });
+
+  it("a user whose pushes keep failing does not hold back another user's newer notification", async () => {
+    const linkedAt = new Date();
+    await link(SOMCHAI, LINE_A, linkedAt);
+    await link(ANUCHA, LINE_B, linkedAt);
+    for (let i = 0; i < 50; i++) await addNotification(SOMCHAI, new Date(linkedAt.getTime() + (i + 1) * 1000));
+    const newer = await addNotification(ANUCHA, new Date(linkedAt.getTime() + 100_000));
+
+    const attempts: string[] = [];
+    const failingForA: LineClient = {
+      reply: line.client.reply,
+      push: (to, messages, retryKey) => {
+        if (to !== LINE_A) return line.client.push(to, messages, retryKey);
+        attempts.push(to);
+        return Promise.resolve({ ok: false, status: 500, permanent: false });
+      },
+    };
+
+    // Tick 1: A is attempted once, B's notification goes out.
+    expect(await dispatch({ client: failingForA })).toEqual(tally({ sent: 1, retry: 1 }));
+    expect(await deliveredAt(newer)).not.toBeNull();
+    // Ticks 2 and 3: A's oldest row is still due, one attempt per tick.
+    expect(await dispatch({ client: failingForA })).toEqual(tally({ retry: 1 }));
+    expect(await dispatch({ client: failingForA })).toEqual(tally({ retry: 1 }));
+    expect(attempts).toHaveLength(3);
+    expect(line.sent.map((s) => s.to)).toEqual([LINE_B]);
+  });
+
+  it("takes two users' backlogs round-robin, not all of the older user's first", async () => {
+    const linkedAt = new Date();
+    await link(SOMCHAI, LINE_A, linkedAt);
+    await link(ANUCHA, LINE_B, linkedAt);
+    // Somchai's rows are all older than Anucha's, so a global oldest-first order would send all of Somchai's first.
+    const somchai: string[] = [];
+    const anucha: string[] = [];
+    for (const s of [1, 2, 3]) somchai.push(await addNotification(SOMCHAI, new Date(linkedAt.getTime() + s * 1000)));
+    for (const s of [11, 12, 13]) anucha.push(await addNotification(ANUCHA, new Date(linkedAt.getTime() + s * 1000)));
+
+    expect(await dispatch()).toEqual(tally({ sent: 6 }));
+
+    // The user order is by id, so whichever of the two has the lower id goes first in each round.
+    const somchaiId = (await prisma.user.findUniqueOrThrow({ where: { email: SOMCHAI }, select: { id: true } })).id;
+    const anuchaId = (await prisma.user.findUniqueOrThrow({ where: { email: ANUCHA }, select: { id: true } })).id;
+    const [firstRows, secondRows] = somchaiId < anuchaId ? [somchai, anucha] : [anucha, somchai];
+    expect(line.sent.map((s) => s.retryKey)).toEqual([
+      firstRows[0],
+      secondRows[0],
+      firstRows[1],
+      secondRows[1],
+      firstRows[2],
+      secondRows[2],
+    ]);
   });
 
   it("prunes webhook events older than 7 days and keeps the rest", async () => {

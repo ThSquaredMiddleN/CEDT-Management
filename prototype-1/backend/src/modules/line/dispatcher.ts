@@ -11,8 +11,15 @@ import { lineTextFor } from "./messages.js";
  * LINE user IDs or tokens: logs carry the notification ID, its type and a status only.
  */
 
-/** Oldest notifications handled per tick. */
+/** Most notifications pushed per tick, across all users. */
 const BATCH_SIZE = 50;
+/** Most due notifications read per user per tick, so one user's backlog cannot fill the batch. */
+const PER_USER = 10;
+/**
+ * LINE's retry key is only honoured for 24 h, so a later retry could duplicate a push. Older undelivered
+ * notifications are given up: they are left undelivered and never pushed.
+ */
+export const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** Webhook dedupe rows only matter while LINE may redeliver an event, so older ones are pruned. */
 const WEBHOOK_EVENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 /** After LINE answers 429, no push is sent until this much time has passed. */
@@ -32,6 +39,8 @@ const SILENT_LOG: DispatchLog = { warn() {}, error() {} };
 export interface DispatchState {
   /** Epoch ms. Ticks before this send nothing. Set when LINE answers 429. */
   rateLimitedUntil?: number;
+  /** Ticks run so far. The round-robin starts one user later each tick, so a cut at BATCH_SIZE moves around. */
+  rotation?: number;
 }
 
 export interface DispatchDeps {
@@ -50,7 +59,10 @@ export interface DispatchCounts {
   sent: number;
   /** Rejected for good: LINE answered 4xx other than 429, or the payload cannot be rendered. Marked delivered. */
   permanent: number;
-  /** Transient failure or a thrown error. Left undelivered for the next tick. A 429 counts here too. */
+  /**
+   * Transient failure or a thrown error. Left undelivered for the next tick. A 429 counts here too. The user's
+   * later rows in the same tick are not attempted and not counted: they stay due.
+   */
   retry: number;
   /** 1 when LINE answered 429 this tick. The batch stopped there and the rest stay due. */
   rateLimited: number;
@@ -59,6 +71,14 @@ export interface DispatchCounts {
 }
 
 type Outcome = "sent" | "permanent" | "retry" | "rateLimited";
+
+/** The columns of a due notification that delivery needs. */
+interface DueRow {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  payload: unknown;
+}
 
 /** DispatchDeps with the defaults filled in. */
 interface Resolved extends DispatchDeps {
@@ -105,10 +125,24 @@ async function deliver(
   return result.ok ? "sent" : "permanent";
 }
 
+/** Takes items from each queue in turn (the first of each, then the second of each, ...) up to `cap`. */
+function interleave<T>(queues: T[][], cap: number): T[] {
+  const out: T[] = [];
+  const longest = queues.reduce((max, q) => Math.max(max, q.length), 0);
+  for (let i = 0; i < longest && out.length < cap; i++) {
+    for (const q of queues) {
+      if (i < q.length && out.length < cap) out.push(q[i]!);
+    }
+  }
+  return out;
+}
+
 /**
  * Sends one batch of due notifications and prunes old webhook dedupe rows. A notification is due when it is
- * undelivered, its recipient is an active user with a LINE ID, and it was created at or after that recipient
- * linked. The last rule stops a new link from flooding the user with older notifications.
+ * undelivered, its recipient is an active user with a LINE ID, it was created at or after that recipient
+ * linked (so a new link is not flooded with older notifications), and it is younger than MAX_AGE_MS.
+ * Each user's oldest due rows are read separately and taken round-robin, up to BATCH_SIZE, so one user's
+ * backlog cannot hold back another's. After a user's transient failure, that user's other rows wait for the next tick.
  */
 export async function dispatchLineOnce(deps: DispatchDeps): Promise<DispatchCounts> {
   const full: Resolved = {
@@ -125,48 +159,53 @@ export async function dispatchLineOnce(deps: DispatchDeps): Promise<DispatchCoun
     return counts;
   }
 
+  // Ordered by id, then rotated by state.rotation below, so the users cut at BATCH_SIZE differ from tick to tick.
   const users = await full.prisma.user.findMany({
     where: { lineUserId: { not: null }, lineLinkedAt: { not: null }, isActive: true },
     select: { id: true, lineUserId: true, lineLinkedAt: true },
+    orderBy: { id: "asc" },
   });
-  const linked = users.flatMap((u) =>
-    u.lineUserId && u.lineLinkedAt ? [{ id: u.id, lineUserId: u.lineUserId, lineLinkedAt: u.lineLinkedAt }] : [],
-  );
 
-  if (linked.length > 0) {
-    // The per-user createdAt bound has to be in the query, not a filter after `take`, or old skipped rows would
-    // fill the batch and block new ones.
-    const due = await full.prisma.notification.findMany({
-      where: {
-        deliveredLineAt: null,
-        OR: linked.map((u) => ({ userId: u.id, createdAt: { gte: u.lineLinkedAt } })),
-      },
+  // One query per linked user, so a user with a large backlog cannot crowd out the others. The createdAt bound
+  // is in each query, not a filter after `take`, or old skipped rows would fill the take and block new ones.
+  const queues: { row: DueRow; lineUserId: string }[][] = [];
+  for (const u of users) {
+    const { lineUserId, lineLinkedAt } = u;
+    if (!lineUserId || !lineLinkedAt) continue;
+    const earliest = Math.max(lineLinkedAt.getTime(), full.now.getTime() - MAX_AGE_MS);
+    const rows = await full.prisma.notification.findMany({
+      where: { userId: u.id, deliveredLineAt: null, createdAt: { gte: new Date(earliest) } },
       orderBy: { createdAt: "asc" },
-      take: BATCH_SIZE,
+      take: PER_USER,
       select: { id: true, userId: true, type: true, payload: true },
     });
-    const lineIdByUser = new Map(linked.map((u) => [u.id, u.lineUserId]));
+    if (rows.length > 0) queues.push(rows.map((row) => ({ row, lineUserId })));
+  }
 
-    for (const n of due) {
-      const lineUserId = lineIdByUser.get(n.userId);
-      if (lineUserId === undefined) continue;
-      let outcome: Outcome;
-      try {
-        outcome = await deliver(full, n, lineUserId);
-      } catch (err) {
-        // One bad notification must not hold up the rest of the batch.
-        full.log.error({ notificationId: n.id, detail: errorCodeOf(err) }, "LINE dispatch failed for one notification; will retry");
-        outcome = "retry";
-      }
-      if (outcome === "rateLimited") {
-        // LINE is limiting the channel, not this notification, so the rest of the batch waits for the backoff.
-        counts.retry += 1;
-        counts.rateLimited = 1;
-        full.state.rateLimitedUntil = full.now.getTime() + RATE_LIMIT_BACKOFF_MS;
-        break;
-      }
-      counts[outcome] += 1;
+  // A user with a transient failure is left alone for the rest of this tick, so their later rows do not each fail too.
+  const stopped = new Set<string>();
+  const start = queues.length > 0 ? (full.state.rotation ?? 0) % queues.length : 0;
+  full.state.rotation = (full.state.rotation ?? 0) + 1;
+  const rotated = [...queues.slice(start), ...queues.slice(0, start)];
+  for (const { row: n, lineUserId } of interleave(rotated, BATCH_SIZE)) {
+    if (stopped.has(n.userId)) continue;
+    let outcome: Outcome;
+    try {
+      outcome = await deliver(full, n, lineUserId);
+    } catch (err) {
+      // One bad notification must not hold up other users. Its user's later rows wait for the next tick, as on a retry.
+      full.log.error({ notificationId: n.id, detail: errorCodeOf(err) }, "LINE dispatch failed for one notification; will retry");
+      outcome = "retry";
     }
+    if (outcome === "rateLimited") {
+      // LINE is limiting the channel, not this notification, so the rest of the batch waits for the backoff.
+      counts.retry += 1;
+      counts.rateLimited = 1;
+      full.state.rateLimitedUntil = full.now.getTime() + RATE_LIMIT_BACKOFF_MS;
+      break;
+    }
+    if (outcome === "retry") stopped.add(n.userId);
+    counts[outcome] += 1;
   }
 
   await full.prisma.lineWebhookEvent.deleteMany({

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.js";
 import { config } from "../../src/config.js";
@@ -157,8 +157,9 @@ describe("webhook events", () => {
     line.next({ ok: false, status: 503, permanent: false });
     const failed = await postWebhook(app, first);
     expect(failed.statusCode).toBe(500);
-    // The dedupe row is removed and the unsent link is revoked.
-    expect(await prisma.lineWebhookEvent.count({ where: { webhookEventId: id } })).toBe(0);
+    // The dedupe row stays unmarked, so the redelivery runs the handler again. The unsent link is revoked.
+    const unmarked = await prisma.lineWebhookEvent.findUniqueOrThrow({ where: { webhookEventId: id } });
+    expect(unmarked.handledAt).toBeNull();
     expect(await countTokensFor(LINE_A)).toBe(0);
 
     const redelivery = webhookBody([
@@ -168,6 +169,49 @@ describe("webhook events", () => {
     expect(ok.statusCode).toBe(200);
     expect(line.sent.map((s) => s.kind)).toEqual(["reply", "push"]);
     expect(await prisma.lineWebhookEvent.count({ where: { webhookEventId: id } })).toBe(1);
+    expect((await prisma.lineWebhookEvent.findUniqueOrThrow({ where: { webhookEventId: id } })).handledAt).not.toBeNull();
+    expect(await countTokensFor(LINE_A)).toBe(1);
+  });
+
+  it("answers 200 when the handler ran but its completion mark fails; a later redelivery runs it again", async () => {
+    const id = newEventId();
+    const first = webhookBody([lineEvent({ type: "follow", userId: LINE_A, webhookEventId: id, replyToken: "rt-1" })]);
+    const redelivery = webhookBody([
+      lineEvent({ type: "follow", userId: LINE_A, webhookEventId: id, replyToken: "rt-1", isRedelivery: true }),
+    ]);
+
+    // The rejection is queued once and the original method is put back afterwards (mockRestore would leave it unset).
+    const originalUpdate = prisma.lineWebhookEvent.update;
+    vi.spyOn(prisma.lineWebhookEvent, "update").mockRejectedValueOnce(new Error("simulated mark failure"));
+    try {
+      // The link was sent, so a 500 here would make LINE run the handler again for nothing.
+      expect((await postWebhook(app, first)).statusCode).toBe(200);
+      expect(line.sent.map((s) => s.kind)).toEqual(["reply"]);
+      const row = await prisma.lineWebhookEvent.findUniqueOrThrow({ where: { webhookEventId: id } });
+      expect(row.handledAt).toBeNull();
+
+      // At-least-once: the unmarked row runs again, the newer link replaces the older one.
+      expect((await postWebhook(app, redelivery)).statusCode).toBe(200);
+      expect(line.sent.map((s) => s.kind)).toEqual(["reply", "push"]);
+      expect(await countTokensFor(LINE_A)).toBe(1);
+    } finally {
+      prisma.lineWebhookEvent.update = originalUpdate;
+    }
+  });
+
+  it("skips a redelivery of an event that was already handled: no second send, and the row is marked", async () => {
+    const id = newEventId();
+    const body = webhookBody([lineEvent({ type: "follow", userId: LINE_A, webhookEventId: id, replyToken: "rt-ok" })]);
+    expect((await postWebhook(app, body)).statusCode).toBe(200);
+
+    const row = await prisma.lineWebhookEvent.findUniqueOrThrow({ where: { webhookEventId: id } });
+    expect(row.handledAt).not.toBeNull();
+
+    const redelivery = webhookBody([
+      lineEvent({ type: "follow", userId: LINE_A, webhookEventId: id, replyToken: "rt-ok", isRedelivery: true }),
+    ]);
+    expect((await postWebhook(app, redelivery)).statusCode).toBe(200);
+    expect(line.sent).toHaveLength(1);
     expect(await countTokensFor(LINE_A)).toBe(1);
   });
 

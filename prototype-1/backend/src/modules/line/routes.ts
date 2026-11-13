@@ -153,9 +153,9 @@ async function handleEvent(ctx: Ctx, event: LineEvent): Promise<void> {
 const inFlight = new Set<string>();
 
 /**
- * Records the event ID first, so a redelivered event is skipped. A unique violation means it was already
- * handled, unless this process is still handling it: then it answers false, so LINE redelivers and the
- * record is checked again. A handler failure deletes the record, so the redelivery runs it again. Returns true on success.
+ * Records the event ID, runs the handler, then sets handledAt. A redelivery is skipped only when handledAt is set;
+ * a record left unmarked (the handler failed, or the process died) runs again. A redelivery that arrives while this
+ * process is still handling the event answers false, so LINE redelivers it later. Returns true when the event is done.
  */
 async function runEvent(ctx: Ctx, event: LineEvent): Promise<boolean> {
   const { webhookEventId } = event;
@@ -163,25 +163,38 @@ async function runEvent(ctx: Ctx, event: LineEvent): Promise<boolean> {
   if (inFlight.has(webhookEventId)) return false;
   inFlight.add(webhookEventId);
   try {
-    await prisma.lineWebhookEvent.create({ data: { webhookEventId } });
-  } catch (err) {
-    inFlight.delete(webhookEventId);
-    if (isUniqueViolation(err)) return true;
-    throw err;
-  }
-  try {
-    await handleEvent(ctx, event);
+    try {
+      await prisma.lineWebhookEvent.create({ data: { webhookEventId } });
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      const row = await prisma.lineWebhookEvent.findUnique({ where: { webhookEventId }, select: { handledAt: true } });
+      if (row?.handledAt) return true;
+      // Not marked handled: an earlier attempt failed or stopped before it finished. Run it again.
+    }
+
+    try {
+      await handleEvent(ctx, event);
+    } catch (err) {
+      // Log the event type and a status only: never the event, user ID, token or Prisma message.
+      ctx.log.error(
+        { eventType: event.type, detail: err instanceof LineSendError ? err.status : errorCodeOf(err) },
+        "LINE event handler failed; LINE will redeliver",
+      );
+      return false;
+    }
+
+    try {
+      await prisma.lineWebhookEvent.update({ where: { webhookEventId }, data: { handledAt: new Date() } });
+    } catch (err) {
+      // The handler's effects are done, so this still answers true: a 500 would make LINE run them again.
+      ctx.log.error(
+        { eventType: event.type, detail: errorCodeOf(err) },
+        "LINE event handled but its completion mark was not saved",
+      );
+    }
     return true;
-  } catch (err) {
-    // Log the event type and a status only: never the event, user ID, token or Prisma message.
-    ctx.log.error(
-      { eventType: event.type, detail: err instanceof LineSendError ? err.status : errorCodeOf(err) },
-      "LINE event handler failed; LINE will redeliver",
-    );
-    await prisma.lineWebhookEvent.deleteMany({ where: { webhookEventId } });
-    return false;
   } finally {
-    // After the delete: a redelivery in between still sees the ID in flight and gets a 500, not a skip.
+    // Released after the mark: a redelivery in between still sees the ID in flight and gets a 500, not a skip.
     inFlight.delete(webhookEventId);
   }
 }

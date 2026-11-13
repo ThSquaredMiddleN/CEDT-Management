@@ -298,10 +298,12 @@ model LineLinkToken {
   @@map("line_link_tokens")
 }
 
-/** webhookEventId of every LINE event already handled, so a redelivered event is skipped. */
+/// Dedupe row per LINE webhook event. Written before the handler runs; handledAt is set only after the handler
+/// succeeds. A row with handledAt null means the event has not finished, so a redelivery runs it again.
 model LineWebhookEvent {
-  webhookEventId String   @id @map("webhook_event_id")
-  receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  webhookEventId String    @id @map("webhook_event_id")
+  receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  handledAt      DateTime? @map("handled_at") @db.Timestamptz(6)
 
   @@map("line_webhook_events")
 }
