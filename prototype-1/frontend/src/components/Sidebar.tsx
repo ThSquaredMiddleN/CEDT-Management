@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Bars3CenterLeftIcon } from "@heroicons/react/24/outline";
+import { Link } from "react-router-dom";
 import { Brand } from "@/components/Brand";
 import { cn } from "@/lib/utils";
 
@@ -7,6 +8,7 @@ export interface SidebarItem {
   label: string;
   icon: ReactNode;
   active?: boolean;
+  to?: string;
 }
 
 interface SidebarProps {
@@ -50,29 +52,49 @@ export function Sidebar({ items, collapsed, onToggle, footer }: SidebarProps) {
           </p>
         )}
         <div className={cn("flex flex-col", collapsed ? "items-center" : "items-stretch")}>
-          {items.map(({ label, icon, active }) => (
-            <button
-              key={label}
-              type="button"
-              title={collapsed ? label : undefined}
-              aria-label={collapsed ? label : undefined}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex shrink-0 items-center rounded-lg font-body text-body-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary",
-                collapsed
-                  ? "my-0.5 h-10 w-full justify-center px-2 py-3"
-                  : "min-h-10 w-full gap-2.5 p-3",
-                active
-                  ? "bg-brand-primary text-white"
-                  : "text-grey-400 hover:bg-transparent hover:text-grey-700",
-              )}
-            >
-              <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
-                {icon}
-              </span>
-              {!collapsed && <span className="min-w-0 truncate">{label}</span>}
-            </button>
-          ))}
+          {items.map(({ label, icon, active, to }) => {
+            const className = cn(
+              "flex shrink-0 items-center rounded-lg font-body text-body-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary",
+              collapsed
+                ? "my-0.5 h-10 w-full justify-center px-2 py-3"
+                : "min-h-10 w-full gap-2.5 p-3",
+              active
+                ? "bg-brand-primary text-white"
+                : "text-grey-400 hover:bg-transparent hover:text-grey-700",
+            );
+            const content = (
+              <>
+                <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">
+                  {icon}
+                </span>
+                {!collapsed && <span className="min-w-0 truncate">{label}</span>}
+              </>
+            );
+
+            return to ? (
+              <Link
+                key={label}
+                to={to}
+                title={collapsed ? label : undefined}
+                aria-label={collapsed ? label : undefined}
+                aria-current={active ? "page" : undefined}
+                className={className}
+              >
+                {content}
+              </Link>
+            ) : (
+              <button
+                key={label}
+                type="button"
+                title={collapsed ? label : undefined}
+                aria-label={collapsed ? label : undefined}
+                aria-current={active ? "page" : undefined}
+                className={className}
+              >
+                {content}
+              </button>
+            );
+          })}
         </div>
       </nav>
 

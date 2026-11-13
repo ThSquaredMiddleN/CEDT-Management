@@ -11,8 +11,8 @@ import { AppShell } from "@/app/AppShell";
 import type { SidebarItem } from "@/components/Sidebar";
 
 const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
-  { label: "หน้าหลัก", icon: <HomeIcon /> },
-  { label: "จัดการประกาศ", icon: <MegaphoneIcon /> },
+  { label: "หน้าหลัก", icon: <HomeIcon />, to: "/admin" },
+  { label: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements" },
   { label: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon /> },
   { label: "จัดการห้องเรียน", icon: <CalendarIcon /> },
   { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon /> },
@@ -23,8 +23,19 @@ export function AdminLayout() {
   const { pathname } = useLocation();
   const items = ADMIN_SIDEBAR_ITEMS.map((item) => ({
     ...item,
-    active: item.label === "หน้าหลัก" && pathname === "/admin",
+    active:
+      item.to === "/admin"
+        ? pathname === item.to
+        : item.to
+          ? pathname.startsWith(item.to)
+          : false,
   }));
 
-  return <AppShell sidebarItems={items} showGuestProfile />;
+  return (
+    <AppShell
+      sidebarItems={items}
+      showGuestProfile
+      hideHeader={pathname.startsWith("/admin/announcements")}
+    />
+  );
 }
