@@ -5,18 +5,22 @@ import { EmptyState, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useBorrowRequest, useConfirmBorrow, useInventory } from "../api/hooks";
+import { useBorrowRequest, useConfirmBorrow, useReopenBorrow } from "../api/hooks";
 import { TaskStatusBadge } from "../components/badges";
 import { BarcodeScanner } from "../components/BarcodeScanner";
 import { CartManager } from "../components/CartManager";
 import { ItemImage } from "../components/ItemImage";
 import { ResultDialog, StoragePage } from "../components/layout";
 import { useCart, type CatalogEntry } from "../components/useCart";
-import type { BorrowRequest, InventoryItem, PickupDetails } from "../types";
+import type { BorrowRequest, PickupDetails } from "../types";
 
-function Workspace({ req, inventory }: { req: BorrowRequest; inventory: InventoryItem[] }) {
+export const formatHold = (ms: number) =>
+  new Date(ms).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+
+function Workspace({ req }: { req: BorrowRequest }) {
   const navigate = useNavigate();
   const confirm = useConfirmBorrow();
+  const reopen = useReopenBorrow();
   const [pickupAt, setPickupAt] = useState("");
   const [location, setLocation] = useState<PickupDetails["location"]>("locker");
   const [remark, setRemark] = useState("");
@@ -32,9 +36,10 @@ function Workspace({ req, inventory }: { req: BorrowRequest; inventory: Inventor
         barcode: it.itemId,
         isUnique: it.isUnique,
         reqQty: it.reqQty,
-        maxStock: inventory.find((i) => i.id === it.itemId)?.available ?? 0,
+        maxStock: it.available ?? 0,
+        serials: it.availableSerials,
       })),
-    [req, inventory],
+    [req],
   );
 
   // Partial fulfilment: every requested line starts at zero.
@@ -46,7 +51,7 @@ function Workspace({ req, inventory }: { req: BorrowRequest; inventory: Inventor
     isUnique: it.isUnique,
     qty: req.status === "UNFULFILLED" ? 0 : it.issuedQty,
     sns: [],
-    maxStock: inventory.find((i) => i.id === it.itemId)?.available ?? 0,
+    maxStock: it.available ?? 0,
     reqQty: it.reqQty,
   }));
 
@@ -82,6 +87,20 @@ function Workspace({ req, inventory }: { req: BorrowRequest; inventory: Inventor
             </div>
 
             <div className="space-y-4 p-6">
+              {req.status === "UNFULFILLED" && req.restock && (
+                <div className="flex flex-col gap-3 rounded-lg border border-status-info-border bg-status-info-bg p-4 font-body text-body-sm text-status-info-fg sm:flex-row sm:items-center sm:justify-between">
+                  <p>
+                    <span className="font-bold">สต็อกกลับมาแล้ว</span> — จองอุปกรณ์ให้คำขอนี้ถึง {formatHold(req.restock.expiresAt)}
+                    <br />
+                    <span className="text-xs">เปิดคำขอใหม่แล้วจะได้คิวเดิม (ตามเวลาที่ขอ)</span>
+                  </p>
+                  <Button variant="filled" size="small" className="px-4" loading={reopen.isPending} onClick={() => reopen.mutate(req.id)}>
+                    เปิดคำขออีกครั้ง
+                  </Button>
+                </div>
+              )}
+              {reopen.isError && <p role="alert" className="text-sm text-status-danger-fg">{(reopen.error as Error).message}</p>}
+
               {readOnly ? (
                 <div className="flex gap-3 rounded-lg border border-neutral-300 bg-neutral-100 p-3 font-body text-body-sm text-grey-700">
                   <Lock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -195,16 +214,15 @@ function Workspace({ req, inventory }: { req: BorrowRequest; inventory: Inventor
 export function BorrowDetailPage() {
   const { id = "" } = useParams();
   const req = useBorrowRequest(id);
-  const inv = useInventory();
 
   return (
     <StoragePage wide title="รายละเอียดคำขอ" backTo="/admin/storage/borrow" backLabel="กลับหน้ารายการ">
       {req.isError ? (
         <EmptyState title="ไม่พบคำขอนี้" />
-      ) : !req.data || !inv.data ? (
+      ) : !req.data ? (
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
-        <Workspace req={req.data} inventory={inv.data} />
+        <Workspace req={req.data} />
       )}
     </StoragePage>
   );

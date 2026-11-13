@@ -1,23 +1,21 @@
-import { PackageOpen, User, X } from "lucide-react";
+import { User } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import { usePendingReturns, useStudentLookup, useSubmitReturn } from "../api/hooks";
-import { IndexTypeBadge } from "../components/badges";
-import { ItemImage } from "../components/ItemImage";
-import { itemLabel } from "../components/itemLabel";
 import { ResultDialog, StoragePage } from "../components/layout";
-import type { ReturnDecision } from "../types";
+import { LIABILITY_FORM_ID, LiabilityForm, type LiabilityValues } from "../components/LiabilityForm";
+import { ReturnItemRow, countsTotal, emptyCounts } from "../components/ReturnItemRow";
+import type { ReturnCounts } from "../types";
 
 export function ReturnPage() {
   const navigate = useNavigate();
   const [studentId, setStudentId] = useState("6632199921");
   const [groupId, setGroupId] = useState("");
   const [remark, setRemark] = useState("");
-  const [decisions, setDecisions] = useState<Record<string, ReturnDecision>>({});
+  const [counts, setCounts] = useState<Record<string, ReturnCounts>>({});
   const [done, setDone] = useState<string | null>(null);
 
   const lookup = useStudentLookup();
@@ -26,9 +24,33 @@ export function ReturnPage() {
   const submit = useSubmitReturn();
 
   const items = pending.data ?? [];
-  const allProcessed = items.length > 0 && items.every((i) => decisions[i.id]);
+  // Every line must be fully split: counts add up to what the student owes.
+  const allProcessed = items.length > 0 && items.every((i) => countsTotal(counts[i.id] ?? emptyCounts()) === i.qty);
+  const hasLost = items.some((i) => (counts[i.id]?.LOST ?? 0) > 0);
 
-  const choose = (id: string, d: ReturnDecision) => setDecisions((p) => ({ ...p, [id]: d }));
+  const send = (fine?: LiabilityValues) =>
+    submit.mutate(
+      {
+        studentId: student!.studentId,
+        results: Object.fromEntries(items.map((i) => [i.id, counts[i.id] ?? emptyCounts()])),
+        remark,
+        fine: fine ? { amount: fine.amount, remark: fine.remark } : undefined,
+      },
+      {
+        onSuccess: ({ queued, lost }) => {
+          setCounts({});
+          setDone(
+            [
+              queued > 0 && `รับคืน ${queued} รายการ เข้าสู่สถานะ PENDING_TEST เพื่อรอคิว QC`,
+              lost > 0 && `บันทึกสูญหาย ${lost} รายการ และสร้างบิลค่าปรับ (PENDING_PAYMENT)`,
+              items.some((i) => (counts[i.id]?.NOT_BROUGHT ?? 0) > 0) && "รายการที่ไม่ได้นำมายังคงค้างส่ง จะแสดงเป็นอันดับแรกครั้งถัดไป",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          );
+        },
+      },
+    );
 
   return (
     <StoragePage wide title="รับคืนหน้าเคาน์เตอร์ (Face-to-Face)" backTo="/admin/storage" backLabel="กลับหน้า Dashboard">
@@ -41,7 +63,7 @@ export function ReturnPage() {
               className="flex gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                setDecisions({});
+                setCounts({});
                 setGroupId("");
                 lookup.mutate(studentId, { onSuccess: (s) => setGroupId(s.groups[0]?.id ?? "") });
               }}
@@ -85,55 +107,38 @@ export function ReturnPage() {
             ) : items.length === 0 ? (
               <p className="flex min-h-[300px] items-center justify-center text-sm text-grey-200">ไม่มีรายการค้างส่ง</p>
             ) : (
-              items.map((item) => {
-                const d = decisions[item.id];
-                return (
-                  <div key={item.id} className={cn("rounded-lg border border-neutral-200 p-4", d ? "bg-neutral-100" : "bg-white")}>
-                    <div className="mb-4 flex items-center gap-3">
-                      <ItemImage itemId={item.itemId} name={item.name} />
-                      <p className="flex flex-wrap items-center gap-2 font-body text-body-sm-emphasize text-grey-900">
-                        {itemLabel(item)} <IndexTypeBadge isUnique={item.isUnique} />
-                      </p>
-                    </div>
-                    <div role="radiogroup" aria-label={`สถานะ ${itemLabel(item)}`} className="flex flex-col gap-2 sm:flex-row">
-                      <button
-                        type="button" role="radio" aria-checked={d === "RETURNED"}
-                        onClick={() => choose(item.id, "RETURNED")}
-                        className={cn("flex flex-1 items-center justify-center gap-1 rounded-lg border py-2 text-sm font-bold transition-colors", d === "RETURNED" ? "border-status-info-solid bg-brand-primary text-white" : "border-neutral-300 bg-white text-grey-400 hover:bg-neutral-100")}
-                      >
-                        <PackageOpen className="size-4" /> รับของคืนแล้ว (รอ QC)
-                      </button>
-                      <button
-                        type="button" role="radio" aria-checked={d === "NOT_BROUGHT"}
-                        onClick={() => choose(item.id, "NOT_BROUGHT")}
-                        className={cn("flex flex-1 items-center justify-center gap-1 rounded-lg border py-2 text-sm font-bold transition-colors", d === "NOT_BROUGHT" ? "border-grey-400 bg-grey-400 text-white" : "border-neutral-300 bg-white text-grey-400 hover:bg-neutral-100")}
-                      >
-                        <X className="size-4" /> ไม่ได้นำมา
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
+              items.map((item) => (
+                <ReturnItemRow
+                  key={item.id}
+                  item={item}
+                  counts={counts[item.id]}
+                  onChange={(c) => setCounts((p) => ({ ...p, [item.id]: c }))}
+                />
+              ))
             )}
           </div>
+
+          {hasLost && (
+            <div className="mt-4">
+              <LiabilityForm onSubmit={(v) => send(v)} />
+            </div>
+          )}
 
           {submit.isError && <p role="alert" className="mt-3 text-sm text-status-danger-fg">{(submit.error as Error).message}</p>}
           <Button
             variant="filled" size="lg" className="mt-6 w-full"
             disabled={!allProcessed || submit.isPending} loading={submit.isPending}
-            onClick={() =>
-              submit.mutate(
-                { studentId: student!.studentId, decisions, remark },
-                { onSuccess: () => setDone("บันทึกหลักฐานการคืนเรียบร้อย อุปกรณ์เข้าสู่สถานะ PENDING_TEST เพื่อรอคิว QC ต่อไป") },
-              )
-            }
+            // With a lost item the zod-validated fine form submits; otherwise send directly.
+            {...(hasLost
+              ? { type: "submit" as const, form: LIABILITY_FORM_ID }
+              : { type: "button" as const, onClick: () => send() })}
           >
-            ยืนยันรับคืน และส่งเข้าคิว QC
+            {hasLost ? "ยืนยัน และสร้างบิลค่าปรับ" : "ยืนยันรับคืน และส่งเข้าคิว QC"}
           </Button>
         </section>
       </div>
 
-      <ResultDialog open={done !== null} title="รับคืนเบื้องต้นสำเร็จ" message={done ?? ""} onClose={() => navigate("/admin/storage")} />
+      <ResultDialog open={done !== null} title="บันทึกการรับคืนสำเร็จ" message={done ?? ""} onClose={() => navigate("/admin/storage")} />
     </StoragePage>
   );
 }

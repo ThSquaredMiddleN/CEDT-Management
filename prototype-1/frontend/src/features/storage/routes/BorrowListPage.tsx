@@ -39,6 +39,11 @@ export function BorrowListPage() {
               <div className="mb-2 flex items-center gap-3">
                 <span className="font-body text-body-md-emphasize text-grey-900">{r.id}</span>
                 <TaskStatusBadge status={r.status} />
+                {r.restock && (
+                  <span className="rounded-full border border-status-info-border bg-status-info-bg px-2 py-0.5 text-[10px] font-bold text-status-info-fg">
+                    สต็อกกลับมาแล้ว
+                  </span>
+                )}
               </div>
               <p className="font-body text-body-sm text-grey-400">
                 ประเภท: <span className="font-semibold text-grey-700">{r.type}</span>

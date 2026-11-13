@@ -8,30 +8,32 @@ import { useQCRequest, useSubmitQC, useVerifySlip } from "../api/hooks";
 import { ResultDialog, StoragePage } from "../components/layout";
 import { LIABILITY_FORM_ID, LiabilityForm, type LiabilityValues } from "../components/LiabilityForm";
 import { PromptPayQR } from "../components/PromptPayQR";
-import { QCItemRow } from "../components/QCItemRow";
-import type { QCItemStatus, QCRequest } from "../types";
-
-type Decision = Exclude<QCItemStatus, "PENDING_TEST">;
+import { QCItemRow, emptyResults, resultsTotal } from "../components/QCItemRow";
+import type { QCRequest, QCResults } from "../types";
 
 type Outcome = { title: string; message: string; qrAmount?: number };
 
 function InspectView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) => void }) {
   const submitQC = useSubmitQC();
   const readOnly = req.status === "CLOSED";
-  const [statuses, setStatuses] = useState<Record<string, QCItemStatus>>(() =>
-    Object.fromEntries(req.items.map((i) => [i.id, i.status])),
+  // Inspection counts per item; a bulk batch can be split (e.g. 3 ok, 1 damaged, 1 lost).
+  const [results, setResults] = useState<Record<string, QCResults>>(() =>
+    Object.fromEntries(req.items.map((i) => [i.id, i.results ?? emptyResults()])),
   );
 
-  const items = req.items.map((i) => ({ ...i, status: statuses[i.id] ?? i.status }));
-  const allProcessed = items.every((i) => i.status !== "PENDING_TEST");
-  const hasLiability = items.some((i) => i.status === "DAMAGED" || i.status === "LOST");
+  const items = req.items;
+  const allProcessed = items.every((i) => resultsTotal(results[i.id] ?? emptyResults()) === i.qty);
+  const hasLiability = items.some((i) => {
+    const r = results[i.id] ?? emptyResults();
+    return r.DAMAGED > 0 || r.LOST > 0;
+  });
 
   const send = (fineAmount: number, fineRemark: string) =>
     submitQC.mutate(
       {
         id: req.id,
         submission: {
-          items: items.map((i) => ({ id: i.id, status: i.status as Decision })),
+          items: items.map((i) => ({ id: i.id, results: results[i.id] ?? emptyResults() })),
           fineAmount,
           fineRemark,
         },
@@ -76,8 +78,9 @@ function InspectView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) => 
                 <QCItemRow
                   key={item.id}
                   item={item}
+                  results={results[item.id]}
                   readOnly={readOnly}
-                  onChange={(s) => setStatuses((p) => ({ ...p, [item.id]: s }))}
+                  onChange={(r) => setResults((p) => ({ ...p, [item.id]: r }))}
                 />
               ))}
             </div>

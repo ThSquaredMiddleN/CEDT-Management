@@ -27,6 +27,7 @@ function Workspace({ inventory }: { inventory: InventoryItem[] }) {
         barcode: i.id,
         isUnique: i.isUnique,
         maxStock: i.available,
+        serials: i.availableSerials,
       })),
     [inventory],
   );

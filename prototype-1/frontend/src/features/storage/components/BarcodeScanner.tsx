@@ -9,7 +9,7 @@ import type { CatalogEntry } from "./useCart";
 
 interface BarcodeScannerProps {
   catalog: CatalogEntry[];
-  onScan: (entry: CatalogEntry) => void;
+  onScan: (entry: CatalogEntry, serial?: string) => void;
   disabled?: boolean;
 }
 
@@ -30,16 +30,29 @@ export function BarcodeScanner({ catalog, onScan, disabled }: BarcodeScannerProp
 
   const [notice, setNotice] = useState<string | null>(null);
 
-  const scan = (entry: CatalogEntry) => {
+  const scan = (entry: CatalogEntry, serial?: string) => {
     if (disabled) return;
     setNotice(null);
-    onScan(entry);
+    onScan(entry, serial);
   };
 
-  const handleCode = (code: string) => {
-    const hit = catalog.find((c) => c.barcode.toLowerCase() === code.toLowerCase());
-    if (hit) scan(hit);
-    else setNotice(`ไม่พบบาร์โค้ด "${code}" ในรายการที่จ่ายได้`);
+  /** Matches a type barcode (EQ-001) or a single unit's label (EQ-001-003). Returns false if unknown. */
+  const handleCode = (raw: string): boolean => {
+    const code = raw.trim().toLowerCase();
+    const byType = catalog.find((c) => c.barcode.toLowerCase() === code);
+    if (byType) {
+      scan(byType);
+      return true;
+    }
+    for (const c of catalog) {
+      const serial = c.serials?.find((s) => s.toLowerCase() === code);
+      if (serial) {
+        scan(c, serial);
+        return true;
+      }
+    }
+    setNotice(`ไม่พบบาร์โค้ด "${raw}" ในรายการที่จ่ายได้`);
+    return false;
   };
 
   const camera = useCameraScan(handleCode);
@@ -96,11 +109,7 @@ export function BarcodeScanner({ catalog, onScan, disabled }: BarcodeScannerProp
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key !== "Enter") return;
-            const exact = catalog.find((c) => c.barcode.toLowerCase() === query.trim().toLowerCase());
-            if (exact) {
-              scan(exact);
-              setQuery("");
-            }
+            if (query.trim() && handleCode(query)) setQuery("");
           }}
           placeholder="ค้นหาด้วยชื่อ หรือ ยิงเลขบาร์โค้ด..."
           aria-label="ค้นหาหรือสแกนบาร์โค้ด"

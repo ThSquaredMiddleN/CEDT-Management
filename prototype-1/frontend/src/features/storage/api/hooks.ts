@@ -4,7 +4,8 @@ import type {
   IssuedLine,
   PickupDetails,
   QCSubmission,
-  ReturnDecision,
+  ReturnCounts,
+  ReturnFine,
 } from "../types";
 
 export const storageKeys = {
@@ -71,9 +72,11 @@ export const useWalkInCheckout = () =>
 
 export const useSubmitReturn = () =>
   useStorageMutation(
-    (v: { studentId: string; decisions: Record<string, ReturnDecision>; remark: string }) =>
-      storageApi.submitReturn(v.studentId, v.decisions, v.remark),
+    (v: { studentId: string; results: Record<string, ReturnCounts>; remark: string; fine?: ReturnFine }) =>
+      storageApi.submitReturn(v.studentId, v.results, v.remark, v.fine),
   );
+
+export const useReopenBorrow = () => useStorageMutation((id: string) => storageApi.reopenBorrow(id));
 
 export const useSubmitQC = () =>
   useStorageMutation((v: { id: string; submission: QCSubmission }) =>

@@ -102,6 +102,7 @@ export function StorageDashboardPage() {
               <TableHead>ชื่ออุปกรณ์</TableHead>
               <TableHead className="text-center">ประเภท Index</TableHead>
               <TableHead className="text-center">Available</TableHead>
+              <TableHead className="text-center">Reserved</TableHead>
               <TableHead className="text-center">QC</TableHead>
               <TableHead className="text-center">Damaged</TableHead>
               <TableHead className="text-center">Lost</TableHead>
@@ -113,7 +114,7 @@ export function StorageDashboardPage() {
             {isLoading &&
               Array.from({ length: 4 }, (_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={10}>
+                  <TableCell colSpan={11}>
                     <SkeletonRow />
                   </TableCell>
                 </TableRow>
@@ -125,6 +126,7 @@ export function StorageDashboardPage() {
                 <TableCell className="font-semibold text-grey-900">{i.name}</TableCell>
                 <TableCell className="text-center"><IndexTypeBadge isUnique={i.isUnique} /></TableCell>
                 <TableCell className="bg-status-success-bg text-center font-bold text-status-success-fg">{i.available}</TableCell>
+                <TableCell className="text-center font-bold text-status-info-fg" title="กันไว้ให้คำขอที่สต็อกกลับมา (24 ชม.)">{i.reserved}</TableCell>
                 <TableCell className="text-center font-bold text-status-info-fg">{i.qc}</TableCell>
                 <TableCell className="text-center font-bold text-status-warning-fg">{i.damaged}</TableCell>
                 <TableCell className="text-center font-bold text-status-danger-fg">{i.lost}</TableCell>

@@ -18,6 +18,8 @@ export interface CatalogEntry {
   isUnique: boolean;
   maxStock: number;
   reqQty?: number;
+  /** Available unit serials (Unique items). Scanning picks real units from here. */
+  serials?: string[];
 }
 
 interface Options {
@@ -25,27 +27,26 @@ interface Options {
   removeAtZero?: boolean;
 }
 
-function mockSerial(barcode: string, taken: string[]) {
-  let sn: string;
-  do {
-    sn = `${barcode}-${Math.floor(Math.random() * 900 + 100)}`;
-  } while (taken.includes(sn));
-  return sn;
-}
-
 export function useCart(initial: CatalogEntry[] = [], { removeAtZero = false }: Options = {}) {
   const [lines, setLines] = useState<CartLine[]>(() =>
     initial.map((c) => ({ ...c, qty: 0, sns: [] })),
   );
 
-  const scan = useCallback((entry: CatalogEntry) => {
+  /** `serial` picks that exact unit (label scan); otherwise the next free available unit. */
+  const scan = useCallback((entry: CatalogEntry, serial?: string) => {
     setLines((prev) => {
       const idx = prev.findIndex((l) => l.itemId === entry.itemId);
       const line: CartLine = idx >= 0 ? prev[idx] : { ...entry, qty: 0, sns: [] };
       if (line.qty >= line.maxStock) return prev; // never exceed real stock
-      const next: CartLine = line.isUnique
-        ? { ...line, sns: [...line.sns, mockSerial(entry.barcode, line.sns)], qty: line.qty + 1 }
-        : { ...line, qty: line.qty + 1 };
+      let next: CartLine;
+      if (line.isUnique) {
+        const pool = entry.serials ?? [];
+        const sn = serial ?? pool.find((s) => !line.sns.includes(s));
+        if (!sn || !pool.includes(sn) || line.sns.includes(sn)) return prev; // no real unit to hand out
+        next = { ...line, sns: [...line.sns, sn], qty: line.qty + 1 };
+      } else {
+        next = { ...line, qty: line.qty + 1 };
+      }
       return idx >= 0 ? prev.map((l, i) => (i === idx ? next : l)) : [...prev, next];
     });
   }, []);

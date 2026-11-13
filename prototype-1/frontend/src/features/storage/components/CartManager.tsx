@@ -40,6 +40,11 @@ export function CartManager({
               <div className="min-w-0">
               <p className="flex flex-wrap items-center gap-2 font-body text-body-sm-emphasize text-grey-900">
                 {l.name} <IndexTypeBadge isUnique={l.isUnique} />
+                {l.maxStock === 0 && (
+                  <Badge variant="outline" className="border-status-danger-border bg-status-danger-bg text-status-danger-fg">
+                    สินค้าหมด
+                  </Badge>
+                )}
               </p>
               <p className="mt-1 font-body text-body-xs text-grey-400">
                 {showRequested && l.reqQty !== undefined && <>ขอยืมมา: {l.reqQty} ชิ้น | </>}
