@@ -10,10 +10,17 @@ try {
     where: { isActive: true },
   });
   const today = ccToday();
+  // Submission dates must lie inside the active term (the same rule staff are held to), so the
+  // demo can only open a window when today is inside it. It never moves or extends the term.
   if (today < isoDate(term.startDate) || today > isoDate(term.endDate))
     throw new Error(
-      "Today is outside the active demo term. Configure an explicit demo term first.",
+      `Today (${today}) is outside the active term ${isoDate(term.startDate)} – ${isoDate(term.endDate)}, ` +
+        "so no valid submission dates exist. Activate a term that contains today " +
+        "(Master Data → Terms), or set COURSE_CHANGE_TODAY in backend/.env to a date inside the term " +
+        "for a simulated demo. Nothing was changed.",
     );
+  // Open from today for a week, clipped to the last day of the term.
+  const closesOn = [addDaysISO(today, 7), isoDate(term.endDate)].sort()[0]!;
   const staff = await prisma.user.findUniqueOrThrow({
     where: { email: "admin@cedt.edu" },
   });
@@ -64,14 +71,20 @@ try {
     },
   });
   for (const requestType of ["drop", "withdraw"] as const) {
+    // DEMO-CC-V2 is synthetic (guarded above), so a stale window from an earlier run may be
+    // moved to today. A schedule that is published and still covers today is left as it is.
+    const existing = await prisma.courseChangeSchedule.findFirst({
+      where: { termId: term.id, courseId: course.id, requestType },
+    });
     if (
-      await prisma.courseChangeSchedule.findFirst({
-        where: { termId: term.id, courseId: course.id, requestType },
-      })
+      existing?.published &&
+      isoDate(existing.opensOn) <= today &&
+      isoDate(existing.closesOn) >= today
     )
       continue;
     await saveSchedule(
       {
+        ...(existing ? { id: existing.id, revision: existing.revision } : {}),
         termId: term.id,
         courseId: course.id,
         section: "DEMO",
@@ -79,7 +92,7 @@ try {
         label: `สาธิตเท่านั้น — ${requestType === "drop" ? "ลดผ่าน Reg" : "ถอน ลงนาม รวมไฟล์ และ PI"}`,
         format: "block",
         opensOn: today,
-        closesOn: [addDaysISO(today, 7), isoDate(term.endDate)].sort()[0]!,
+        closesOn,
         finalOn: null,
         flow: requestType === "drop" ? "reg_direct" : "advisor_pi",
         needsSignature: requestType === "withdraw",
@@ -95,7 +108,8 @@ try {
   }
   await createDemoScenarios(term, today, staff, student);
   console.log(
-    "Ready: student3@cedt.edu → DEMO-CC-V2. No existing requests or programme schedules were reset.",
+    `Ready: student3@cedt.edu → DEMO-CC-V2, open ${today} – ${closesOn}. ` +
+      "No existing requests or programme schedules were reset.",
   );
 } finally {
   await prisma.$disconnect();

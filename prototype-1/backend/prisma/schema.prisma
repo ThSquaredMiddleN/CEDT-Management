@@ -119,6 +119,8 @@ model User {
   courseChangeDecided  CourseChangeRequest[] @relation("ccDecidedBy")
   courseChangeEvents   CourseChangeEvent[]
   courseChangeSettingsEvents CourseChangeSettingsEvent[]
+  courseChangeFilesUploaded    CourseChangeFile[]
+  courseChangeSignatureBatches CourseChangeSignatureBatch[]
 
   @@index([role, isActive])
   @@map("users")
@@ -184,6 +186,8 @@ model Course {
   enrollments          Enrollment[]
   allowedCourses       AllowedCourse[]
   courseChangeRequests CourseChangeRequest[]
+  courseChangeSchedules        CourseChangeSchedule[]
+  courseChangeSignatureBatches CourseChangeSignatureBatch[]
 
   @@map("courses")
 }
@@ -202,6 +206,8 @@ model Term {
   allowedCourses       AllowedCourse[]
   courseChangeRequests CourseChangeRequest[]
   courseChangeSettingsEvents CourseChangeSettingsEvent[]
+  courseChangeSchedules        CourseChangeSchedule[]
+  courseChangeSignatureBatches CourseChangeSignatureBatch[]
 
   @@unique([academicYear, termNumber])
   @@map("terms")
@@ -509,7 +515,10 @@ model CourseChangeSchedule {
   needsMerge    Boolean @map("needs_merge")
   published     Boolean @default(false)
   revision      Int @default(0)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  // FKs below mirror migration 20261104120000 (plain REFERENCES = NO ACTION).
+  term   Term   @relation(fields: [termId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course Course @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   @@index([termId, courseId, requestType])
   @@map("course_change_schedules")
 }
@@ -524,7 +533,8 @@ model CourseChangeFile {
   data        Bytes
   uploaderId  String @map("uploader_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  request CourseChangeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request  CourseChangeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  uploader User                @relation(fields: [uploaderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   @@index([requestId, createdAt])
   @@map("course_change_files")
 }
@@ -542,6 +552,10 @@ model CourseChangeSignatureBatch {
   payloadHash String @map("payload_hash")
   summary     Json
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  // FKs below mirror migration 20261104140000 (plain REFERENCES = NO ACTION).
+  term   Term   @relation(fields: [termId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course Course @relation(fields: [courseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actor  User   @relation(fields: [actorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   @@index([termId, createdAt(sort: Desc)])
   @@map("course_change_signature_batches")
 }
