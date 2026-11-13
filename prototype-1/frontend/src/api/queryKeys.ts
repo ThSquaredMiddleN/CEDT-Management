@@ -15,4 +15,6 @@ export const qk = {
   ccEligible: (type: string) => ["course-change", "eligible", type] as const,
   ccList: (params: Record<string, unknown>) => ["course-change", "list", params] as const,
   ccDetail: (id: string) => ["course-change", "detail", id] as const,
+  announcements: ["announcements"] as const,
+  announcement: (id: string) => ["announcements", "detail", id] as const,
 };

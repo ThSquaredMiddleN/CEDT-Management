@@ -4,6 +4,7 @@ import multipart from "@fastify/multipart";
 import Fastify, { type FastifyInstance } from "fastify";
 import { config } from "./config.js";
 import { authRoutes } from "./modules/auth/routes.js";
+import { announcementRoutes } from "./modules/announcements/routes.js";
 import { bookingRoutes } from "./modules/bookings/routes.js";
 import { calendarRoutes } from "./modules/calendar/routes.js";
 import { courseChangeRoutes } from "./modules/course-change/routes.js";
@@ -30,6 +31,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(
     async (v1) => {
       await v1.register(authRoutes);
+      await v1.register(announcementRoutes);
       await v1.register(calendarRoutes);
       await v1.register(bookingRoutes);
       await v1.register(masterDataRoutes);

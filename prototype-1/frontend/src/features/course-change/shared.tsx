@@ -36,9 +36,11 @@ const thDateTime = new Intl.DateTimeFormat("th-TH", {
   timeZone: "Asia/Bangkok",
 });
 
-/** "2026-09-20" or an ISO timestamp → "20 ก.ย. 2569". */
-export const fmtDate = (iso: string): string =>
-  thDate.format(new Date(iso.length === 10 ? `${iso}T00:00:00+07:00` : iso));
+/** "2026-09-20" or an ISO timestamp → "20 ก.ย. 2569"; "—" while a date is still empty/invalid. */
+export const fmtDate = (iso: string): string => {
+  const d = new Date(iso.length === 10 ? `${iso}T00:00:00+07:00` : iso);
+  return Number.isNaN(d.getTime()) ? "—" : thDate.format(d);
+};
 
 export const fmtDateTime = (iso: string): string => thDateTime.format(new Date(iso));
 
