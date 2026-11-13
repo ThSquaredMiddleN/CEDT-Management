@@ -121,10 +121,15 @@ console in full, link included. No LINE account, phone or tunnel is needed.
 3. Open the link, log in as `somchai@cedt.edu` and press **Confirm**.
 4. In another browser or profile, log in as `admin@cedt.edu`, open `/admin/dashboard` and reject (or approve)
    Somchai's seeded pending request. Within about 5 s the console prints `[LINE dry-run] push to U` + 31 zeros +
-   `1:` followed by the Thai and English text. (Staff bookings auto-approve, so a new booking notifies every staff
-   member instead.)
-5. `npm run line:sim -- unfollow` removes the link, so no more pushes reach that LINE ID. Run `follow` again for a new link.
-6. For a second person, give the simulator another ID: `npm run line:sim -- follow --user U` + 32 lowercase hex
+   `1:` followed by the Thai and English text, and a link to `/requests`.
+5. **"New request" push:** staff bookings made in the app are auto-approved and notify no one, so the app cannot
+   create a pending request. `npm run line:pending` makes one on the seed data (options: `--as <email>`, `--date`,
+   `--start`, `--end`; see `scripts/line-pending.ts`). Every staff member gets "New request", the linked one by LINE,
+   with a link to `/admin/dashboard`. Use `--as` with the linked account to get a request you can then reject.
+6. `npm run line:sim -- message` replies "already linked to <name>". Opening a used or older link and pressing
+   **Confirm** shows "invalid or expired" (the page checks the token only on Confirm, so a reload before it is safe).
+7. `npm run line:sim -- unfollow` removes the link, so no more pushes reach that LINE ID. Run `follow` again for a new link.
+8. For a second person, give the simulator another ID: `npm run line:sim -- follow --user U` + 32 lowercase hex
    digits. Each LINE ID links to one account.
 
 The default user is `U` + 31 zeros + `1`. Dry-run prints the one-time link and the LINE user ID, so keep it to local

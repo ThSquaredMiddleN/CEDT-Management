@@ -12,7 +12,8 @@
     "db:reset": "prisma migrate reset --force",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
     "test": "vitest run",
-    "line:sim": "tsx --env-file=.env scripts/line-sim.ts"
+    "line:sim": "tsx --env-file=.env scripts/line-sim.ts",
+    "line:pending": "tsx --env-file=.env scripts/line-pending.ts"
   },
   "prisma": {
     "seed": "tsx --env-file=.env prisma/seed.ts"
