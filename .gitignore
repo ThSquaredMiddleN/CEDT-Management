@@ -29,3 +29,6 @@ test-results/
 
 # Design/spec docs kept local only
 roles/
+
+# Copilot instructions
+.github/copilot-instructions.md
