@@ -8,6 +8,11 @@ export default {
         primary: "var(--color-primary)",
         "brand-primary": "var(--color-brand-primary)",
         "brand-primary-hover": "var(--color-brand-primary-hover)",
+        "button-primary-hover": "var(--color-button-primary-hover)",
+        "button-primary-pressed": "var(--color-button-primary-pressed)",
+        "button-primary-pressed-border": "var(--color-button-primary-pressed-border)",
+        "button-primary-disabled-foreground": "var(--color-button-primary-disabled-foreground)",
+        "button-primary-disabled-background": "var(--color-button-primary-disabled-background)",
         white: "var(--color-white)",
         surface: "var(--color-surface)",
         background: "var(--color-background)",
@@ -166,6 +171,10 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      boxShadow: {
+        "light-6": "var(--shadow-light-6)",
+        button: "var(--shadow-button)",
       },
       keyframes: {
         "accordion-down": {

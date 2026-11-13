@@ -32,3 +32,6 @@ roles/
 
 # Local-only Vite overrides (e.g. allowedHosts for a LINE test tunnel)
 vite.local.config.mts
+
+# Copilot instructions
+.github/copilot-instructions.md

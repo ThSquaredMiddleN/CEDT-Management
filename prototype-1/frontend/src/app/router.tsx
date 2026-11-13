@@ -1,18 +1,77 @@
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AdminHome } from "@/features/admin/pages/AdminHome";
 import { AdminLayout } from "@/features/admin/layout/AdminLayout";
-import { AdminDashboard } from "@/features/admin-dashboard/AdminDashboard";
-import { BookingForm } from "@/features/booking-form/BookingForm";
-import { CalendarPage } from "@/features/calendar/CalendarPage";
-import { LineLinkPage } from "@/features/line-link/LineLinkPage";
-import { LoginPage } from "@/features/login/LoginPage";
-import { MasterDataPage } from "@/features/master-data/MasterDataPage";
-import { MyRequests } from "@/features/my-requests/MyRequests";
 import { StudentHome } from "@/features/student/pages/StudentHome";
 import { StudentLayout } from "@/features/student/layout/StudentLayout";
 import { useAuth } from "./AuthProvider";
-import { MapPage } from "./MapPage";
+
+const AdminDashboard = lazy(() =>
+  import("@/features/admin-dashboard/AdminDashboard").then((module) => ({
+    default: module.AdminDashboard,
+  })),
+);
+const BookingForm = lazy(() =>
+  import("@/features/booking-form/BookingForm").then((module) => ({
+    default: module.BookingForm,
+  })),
+);
+const CalendarPage = lazy(() =>
+  import("@/features/calendar/CalendarPage").then((module) => ({
+    default: module.CalendarPage,
+  })),
+);
+const LoginPage = lazy(() =>
+  import("@/features/login/LoginPage").then((module) => ({
+    default: module.LoginPage,
+  })),
+);
+const LineLinkPage = lazy(() =>
+  import("@/features/line-link/LineLinkPage").then((module) => ({
+    default: module.LineLinkPage,
+  })),
+);
+const MasterDataPage = lazy(() =>
+  import("@/features/master-data/MasterDataPage").then((module) => ({
+    default: module.MasterDataPage,
+  })),
+);
+const MyRequests = lazy(() =>
+  import("@/features/my-requests/MyRequests").then((module) => ({
+    default: module.MyRequests,
+  })),
+);
+const MapPage = lazy(() =>
+  import("./MapPage").then((module) => ({ default: module.MapPage })),
+);
+const AnnouncementListPage = lazy(() =>
+  import("@/features/announcements/pages/AnnouncementListPage").then((module) => ({
+    default: module.AnnouncementListPage,
+  })),
+);
+const AnnouncementCreatePage = lazy(() =>
+  import("@/features/announcements/pages/AnnouncementCreatePage").then((module) => ({
+    default: module.AnnouncementCreatePage,
+  })),
+);
+const AnnouncementDetailPage = lazy(() =>
+  import("@/features/announcements/pages/AnnouncementDetailPage").then((module) => ({
+    default: module.AnnouncementDetailPage,
+  })),
+);
+const AnnouncementEditPage = lazy(() =>
+  import("@/features/announcements/pages/AnnouncementEditPage").then((module) => ({
+    default: module.AnnouncementEditPage,
+  })),
+);
+
+function PageLoading() {
+  return (
+    <div className="flex min-h-40 items-center justify-center" role="status" aria-label="Loading page">
+      <span className="size-6 animate-spin rounded-full border-2 border-current border-r-transparent" />
+    </div>
+  );
+}
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -36,68 +95,97 @@ function NotFound() {
 
 export function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
+    <Suspense fallback={<PageLoading />}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
 
-      <Route element={<StudentLayout />}>
-        <Route index element={<StudentHome />} />
-        {/* Public: anyone can view the calendar without logging in. */}
-        <Route path="calendar" element={<CalendarPage />} />
+        <Route element={<StudentLayout />}>
+          <Route index element={<StudentHome />} />
+          {/* Public: anyone can view the calendar without logging in. */}
+          <Route path="calendar" element={<CalendarPage />} />
 
-        {/* Staff-only pages — a single `staff` role, so plain auth gating. */}
-        <Route
-          path="requests/new"
-          element={
-            <RequireAuth>
-              <BookingForm />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="requests"
-          element={
-            <RequireAuth>
-              <MyRequests />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="schedule/a"
-          element={
-            <MapPage />
-          }
-        />
-        {/* Token comes from the LINE chat link; RequireAuth's `next` keeps the ?token= query. */}
-        <Route
-          path="line/link"
-          element={
-            <RequireAuth>
-              <LineLinkPage />
-            </RequireAuth>
-          }
-        />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-      <Route path="admin" element={<AdminLayout />}>
-        <Route index element={<AdminHome />} />
-        <Route
-          path="dashboard"
-          element={
-            <RequireAuth>
-              <AdminDashboard />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="data"
-          element={
-            <RequireAuth>
-              <MasterDataPage />
-            </RequireAuth>
-          }
-        />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
+          {/* Staff-only pages — a single `staff` role, so plain auth gating. */}
+          <Route
+            path="requests/new"
+            element={
+              <RequireAuth>
+                <BookingForm />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="requests"
+            element={
+              <RequireAuth>
+                <MyRequests />
+              </RequireAuth>
+            }
+          />
+          <Route path="schedule/a" element={<MapPage />} />
+          {/* Token comes from the LINE chat link; RequireAuth's `next` keeps the ?token= query. */}
+          <Route
+            path="line/link"
+            element={
+              <RequireAuth>
+                <LineLinkPage />
+              </RequireAuth>
+            }
+          />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+        <Route path="admin" element={<AdminLayout />}>
+          <Route index element={<AdminHome />} />
+          <Route
+            path="dashboard"
+            element={
+              <RequireAuth>
+                <AdminDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="data"
+            element={
+              <RequireAuth>
+                <MasterDataPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="announcements"
+            element={
+              <RequireAuth>
+                <AnnouncementListPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="announcements/create"
+            element={
+              <RequireAuth>
+                <AnnouncementCreatePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="announcements/:id"
+            element={
+              <RequireAuth>
+                <AnnouncementDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="announcements/:id/edit"
+            element={
+              <RequireAuth>
+                <AnnouncementEditPage />
+              </RequireAuth>
+            }
+          />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }

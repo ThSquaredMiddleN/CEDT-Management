@@ -9,6 +9,8 @@ import { api, patch, post } from "./client";
 import { qk } from "./queryKeys";
 import type {
   AppNotification,
+  Announcement,
+  AnnouncementInput,
   Booking,
   BookingDetail,
   BookingInput,
@@ -32,6 +34,52 @@ export const login = (body: { email: string; password: string }) =>
   post<{ user: User }>("/auth/login", body);
 
 export const logout = () => post<void>("/auth/logout");
+
+// --------------------------------------------------------------- announcements
+
+export function useAnnouncements(enabled = true) {
+  return useQuery({
+    queryKey: qk.announcements,
+    queryFn: () => api<{ items: Announcement[] }>("/announcements"),
+    enabled,
+  });
+}
+
+export function useAnnouncement(id: string | null, enabled = true) {
+  return useQuery({
+    queryKey: qk.announcement(id ?? ""),
+    queryFn: () => api<{ announcement: Announcement }>(`/announcements/${id}`),
+    enabled: !!id && enabled,
+  });
+}
+
+function useAnnouncementMutation<TVariables>(
+  mutationFn: (variables: TVariables) => Promise<{ announcement: Announcement }>,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: ({ announcement }) => {
+      qc.setQueryData(qk.announcement(announcement.id), { announcement });
+      void qc.invalidateQueries({ queryKey: qk.announcements });
+    },
+  });
+}
+
+export const useCreateAnnouncement = () =>
+  useAnnouncementMutation<AnnouncementInput>((body) =>
+    post<{ announcement: Announcement }>("/announcements", body),
+  );
+
+export const useUpdateAnnouncement = (id: string) =>
+  useAnnouncementMutation<AnnouncementInput>((body) =>
+    patch<{ announcement: Announcement }>(`/announcements/${id}`, body),
+  );
+
+export const usePublishAnnouncement = (id: string) =>
+  useAnnouncementMutation<void>(() =>
+    post<{ announcement: Announcement }>(`/announcements/${id}/publish`),
+  );
 
 // ---------------------------------------------------------------------- calendar
 
