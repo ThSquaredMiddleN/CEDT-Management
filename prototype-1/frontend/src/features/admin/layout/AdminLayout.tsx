@@ -16,7 +16,7 @@ const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
   { label: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon /> },
   { label: "จัดการห้องเรียน", icon: <CalendarIcon /> },
   { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon /> },
-  { label: "ยืมอุปกรณ์", icon: <CpuChipIcon /> },
+  { label: "จัดการคลังอุปกรณ์", icon: <CpuChipIcon />, to: "/admin/storage" },
 ];
 
 export function AdminLayout() {
