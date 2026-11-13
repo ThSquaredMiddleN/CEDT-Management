@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { useAnnouncements } from "@/api/endpoints";
 import type { Announcement } from "@/api/types";
@@ -87,13 +87,6 @@ function PublishedCard({ announcement }: { announcement: Announcement }) {
 
 export function AnnouncementListPage() {
   const [filter, setFilter] = useState<AnnouncementYearAudience | "any">("any");
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [successMessage] = useState<string | null>(() =>
-    location.state === "announcement-created"
-      ? "สร้างร่างประกาศและบันทึกแล้ว"
-      : null,
-  );
   const query = useAnnouncements();
   const { data, error, isPending, refetch, isFetching } = query;
   const announcements = data?.items ?? [];
@@ -105,24 +98,9 @@ export function AnnouncementListPage() {
         normalizeAnnouncementAudiences(announcement.audiences).includes(filter)),
   );
 
-  useEffect(() => {
-    if (location.state === "announcement-created") {
-      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-    }
-  }, [location.pathname, location.search, location.state, navigate]);
-
   return (
     <div className="w-full px-4 py-6 md:px-8 lg:px-16 lg:py-8">
       <h1 className="font-body text-header-sm-emphasize text-grey-900">จัดการประกาศ</h1>
-      {successMessage && (
-        <p
-          className="mb-5 rounded-lg border border-grey-200 bg-grey-100 px-4 py-3 font-body text-body-sm text-grey-700"
-          role="status"
-        >
-          {successMessage}
-        </p>
-      )}
-
       <div className="mt-6 grid min-w-0 grid-cols-1 items-start gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
         <section aria-labelledby="announcement-drafts-title" className="min-w-0">
           <div className="flex items-center justify-between gap-3">

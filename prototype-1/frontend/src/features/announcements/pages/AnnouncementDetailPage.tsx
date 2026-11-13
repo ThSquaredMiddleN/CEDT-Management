@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { ArrowLeftIcon } from "@heroicons/react/20/solid";
 import { useAnnouncement, usePublishAnnouncement } from "@/api/endpoints";
+import { useToast } from "@/app/toast";
 import type { Announcement } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -56,21 +56,9 @@ function AnnouncementArticle({ announcement }: { announcement: Announcement }) {
 
 export function AnnouncementDetailPage() {
   const { id } = useParams();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [successMessage, setSuccessMessage] = useState<string | null>(() =>
-    location.state === "announcement-updated"
-      ? "แก้ไขประกาศและบันทึกแล้ว"
-      : null,
-  );
+  const toast = useToast();
   const query = useAnnouncement(id ?? null);
   const publishAnnouncement = usePublishAnnouncement(id ?? "");
-
-  useEffect(() => {
-    if (location.state === "announcement-updated") {
-      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-    }
-  }, [location.pathname, location.search, location.state, navigate]);
 
   if (!id) return <ErrorCard message="ไม่พบรหัสประกาศ" />;
   if (query.isPending) {
@@ -108,14 +96,6 @@ export function AnnouncementDetailPage() {
         <ArrowLeftIcon className="size-5" aria-hidden="true" />
         Back
       </Link>
-      {successMessage && (
-        <p
-          className="mb-5 rounded-lg border border-grey-200 bg-grey-100 px-4 py-3 font-body text-body-sm text-grey-700"
-          role="status"
-        >
-          {successMessage}
-        </p>
-      )}
       <div className="mt-6">
         <AnnouncementArticle announcement={announcement} />
       </div>
@@ -142,7 +122,7 @@ export function AnnouncementDetailPage() {
             onClick={() =>
               publishAnnouncement.mutate(undefined, {
                 onSuccess: () => {
-                  setSuccessMessage("เผยแพร่ประกาศและบันทึกแล้ว");
+                  toast("เผยแพร่ประกาศเรียบร้อยแล้ว");
                   void query.refetch();
                 },
               })
