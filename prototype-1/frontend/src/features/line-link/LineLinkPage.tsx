@@ -52,15 +52,6 @@ export function LineLinkPage() {
   const link = useMutation({ mutationFn: linkLineAccount });
   const { mutate } = link;
 
-  // Drop only the token param from the address bar. history.state is kept so react-router's
-  // history index survives. Runs after mount, so it is harmless under StrictMode's double effect.
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has("token")) return;
-    url.searchParams.delete("token");
-    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
-  }, []);
-
   const view: View = !token
     ? "invalid"
     : link.isSuccess
@@ -70,6 +61,18 @@ export function LineLinkPage() {
           ? "invalid"
           : "error"
         : "confirm";
+
+  // Drop only the token param from the address bar, once the attempt has settled as success or invalid.
+  // Until then the token stays in the URL, so a reload before Confirm still shows the confirm view. "error"
+  // keeps it too, so Try again and reload both work. history.state is kept so react-router's history index
+  // survives. Harmless under StrictMode's double effect: the second run finds no token param.
+  useEffect(() => {
+    if (view !== "success" && view !== "invalid") return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("token")) return;
+    url.searchParams.delete("token");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, [view]);
 
   return (
     <main className="flex flex-col items-center px-12 py-16">

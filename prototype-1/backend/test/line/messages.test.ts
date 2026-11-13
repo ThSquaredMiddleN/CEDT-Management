@@ -46,13 +46,39 @@ describe("lineTextFor", () => {
     expect(en).toBeDefined();
     expect(en).not.toMatch(THAI);
     expect(en).toMatch(LATIN);
-    expect(link).toBe(`${ORIGIN}/requests`);
+    expect(link).toBe(`${ORIGIN}${type === "request_submitted" ? "/admin/dashboard" : "/requests"}`);
     expect(blocks(text)).toHaveLength(3);
+  });
+
+  it("links request_submitted to the approvers' dashboard, not to the reader's own requests", () => {
+    const [, , link] = blocks(lineTextFor("request_submitted", PAYLOAD, ORIGIN));
+    expect(link).toBe(`${ORIGIN}/admin/dashboard`);
+    expect(link).not.toBe(`${ORIGIN}/requests`);
   });
 
   it.each(ALL_TYPES)("keeps %s at most 5000 characters even with a very long reason", (type) => {
     const text = lineTextFor(type, { ...PAYLOAD, reason: "x".repeat(20_000) }, ORIGIN);
     expect(text.length).toBeLessThanOrEqual(5000);
+  });
+
+  it("never splits an emoji when clipping a reason at the 500-character limit", () => {
+    // 498 plain characters, then an emoji (a surrogate pair at UTF-16 index 498-499), then more text.
+    // Code-unit slicing to 499 would keep the high surrogate and drop the low one.
+    const reason = `${"a".repeat(498)}😀${"b".repeat(50)}`;
+    const text = lineTextFor("request_rejected", { ...PAYLOAD, reason }, ORIGIN);
+    const [, en] = blocks(text);
+    expect(en).toContain(`${"a".repeat(498)}😀…`);
+    expect(text).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+    expect(text).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+  });
+
+  it("keeps a reason of exactly 500 code points (emoji included) whole", () => {
+    // 500 code points but 501 UTF-16 units: a code-unit length check would wrongly clip it.
+    const reason = `${"a".repeat(499)}😀`;
+    const text = lineTextFor("request_rejected", { ...PAYLOAD, reason }, ORIGIN);
+    const [, en] = blocks(text);
+    expect(en).toContain(`Reason: ${reason}`);
+    expect(text).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
   });
 
   it("shows the reason in both languages when one is given", () => {

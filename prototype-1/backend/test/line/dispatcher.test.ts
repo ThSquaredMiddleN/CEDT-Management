@@ -112,7 +112,7 @@ describe("dispatchLineOnce", () => {
     expect(line.sent).toHaveLength(1);
     expect(line.sent[0]).toMatchObject({ kind: "push", to: LINE_A });
     expect(line.sent[0]!.text).toContain("DT-0001");
-    expect(line.sent[0]!.text).toContain(`${config.APP_ORIGIN}/requests`);
+    expect(line.sent[0]!.text).toContain(`${config.APP_ORIGIN}/admin/dashboard`);
     expect(await deliveredAt(id)).not.toBeNull();
   });
 

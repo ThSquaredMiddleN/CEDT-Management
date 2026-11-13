@@ -36,8 +36,10 @@ function formatDate(ymd: string, lang: "th" | "en"): string {
   }).format(new Date(`${ymd}T00:00:00+07:00`));
 }
 
+/** Clips by code points, so an emoji is never split into a lone surrogate. */
 function clip(s: string, max: number): string {
-  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+  const cps = Array.from(s);
+  return cps.length > max ? `${cps.slice(0, max - 1).join("")}…` : s;
 }
 
 /** "CEDT205 · Room 301 · 12 November 2026 · 09:00-12:00", with missing parts left out. */
@@ -75,7 +77,9 @@ export function lineTextFor(type: NotificationType, payload: NotifyPayload, appO
 
   const th = [title.th, detailLine(payload, "th"), ...(reason ? [`เหตุผล: ${reason}`] : [])].join("\n");
   const en = [title.en, detailLine(payload, "en"), ...(reason ? [`Reason: ${reason}`] : [])].join("\n");
-  const text = [th, en, `${appOrigin}/requests`].join("\n\n");
+  // Approvers act on the dashboard queue; every other type is about the reader's own request.
+  const path = type === "request_submitted" ? "/admin/dashboard" : "/requests";
+  const text = [th, en, `${appOrigin}${path}`].join("\n\n");
   return clip(text, MAX_TEXT_CHARS);
 }
 

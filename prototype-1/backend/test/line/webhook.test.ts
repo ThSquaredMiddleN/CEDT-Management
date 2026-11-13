@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.js";
 import { config } from "../../src/config.js";
 import { prisma } from "../../src/db.js";
+import type { LineClient } from "../../src/modules/line/client.js";
 import { hashToken } from "../../src/plugins/auth.js";
 import {
   cleanLineState,
@@ -229,5 +230,56 @@ describe("webhook events", () => {
     expect(somchai.lineUserId).toBeNull();
     expect(somchai.lineLinkedAt).toBeNull();
     expect(await countTokensFor(LINE_A)).toBe(0);
+  });
+});
+
+describe("webhook redelivery while the first attempt is still running", () => {
+  it("answers 500 to a redelivery that arrives during the first attempt, and the first attempt still completes", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reachedReply!: () => void;
+    const reached = new Promise<void>((resolve) => {
+      reachedReply = resolve;
+    });
+    // Blocks the first attempt inside reply, after its dedupe row is written and marked in flight.
+    const blocking: LineClient = {
+      async reply() {
+        reachedReply();
+        await gate;
+        return { ok: true };
+      },
+      async push() {
+        return { ok: true };
+      },
+    };
+    const gatedApp = await buildApp({ lineClient: blocking });
+    await gatedApp.ready();
+    try {
+      const id = newEventId();
+      const first = webhookBody([lineEvent({ type: "follow", userId: LINE_A, webhookEventId: id, replyToken: "rt-1" })]);
+      const firstRes = postWebhook(gatedApp, first);
+      await reached;
+
+      const redelivery = webhookBody([
+        lineEvent({ type: "follow", userId: LINE_A, webhookEventId: id, replyToken: "rt-1", isRedelivery: true }),
+      ]);
+      const during = await postWebhook(gatedApp, redelivery);
+      expect(during.statusCode).toBe(500);
+
+      release();
+      expect((await firstRes).statusCode).toBe(200);
+      expect(await prisma.lineWebhookEvent.count({ where: { webhookEventId: id } })).toBe(1);
+      expect(await countTokensFor(LINE_A)).toBe(1);
+
+      // Once the first attempt has finished, a later redelivery is a plain skip.
+      const after = await postWebhook(gatedApp, redelivery);
+      expect(after.statusCode).toBe(200);
+      expect(await countTokensFor(LINE_A)).toBe(1);
+    } finally {
+      release();
+      await gatedApp.close();
+    }
   });
 });

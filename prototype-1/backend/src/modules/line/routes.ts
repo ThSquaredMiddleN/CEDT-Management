@@ -147,13 +147,25 @@ async function handleEvent(ctx: Ctx, event: LineEvent): Promise<void> {
 }
 
 /**
+ * Event IDs this process is handling now. A redelivery that arrives during the first attempt must not be skipped.
+ * Per process: this holds for the prototype's single backend instance, not across several.
+ */
+const inFlight = new Set<string>();
+
+/**
  * Records the event ID first, so a redelivered event is skipped. A unique violation means it was already
- * handled. A handler failure deletes the record, so the redelivery runs it again. Returns true on success.
+ * handled, unless this process is still handling it: then it answers false, so LINE redelivers and the
+ * record is checked again. A handler failure deletes the record, so the redelivery runs it again. Returns true on success.
  */
 async function runEvent(ctx: Ctx, event: LineEvent): Promise<boolean> {
+  const { webhookEventId } = event;
+  // Checked and claimed before the insert, so no await sits between a redelivery's check and the claim.
+  if (inFlight.has(webhookEventId)) return false;
+  inFlight.add(webhookEventId);
   try {
-    await prisma.lineWebhookEvent.create({ data: { webhookEventId: event.webhookEventId } });
+    await prisma.lineWebhookEvent.create({ data: { webhookEventId } });
   } catch (err) {
+    inFlight.delete(webhookEventId);
     if (isUniqueViolation(err)) return true;
     throw err;
   }
@@ -166,8 +178,11 @@ async function runEvent(ctx: Ctx, event: LineEvent): Promise<boolean> {
       { eventType: event.type, detail: err instanceof LineSendError ? err.status : errorCodeOf(err) },
       "LINE event handler failed; LINE will redeliver",
     );
-    await prisma.lineWebhookEvent.deleteMany({ where: { webhookEventId: event.webhookEventId } });
+    await prisma.lineWebhookEvent.deleteMany({ where: { webhookEventId } });
     return false;
+  } finally {
+    // After the delete: a redelivery in between still sees the ID in flight and gets a 500, not a skip.
+    inFlight.delete(webhookEventId);
   }
 }
 
