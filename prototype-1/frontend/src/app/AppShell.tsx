@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   Calendar as CalendarIcon,
   ClipboardList,
@@ -9,6 +10,9 @@ import {
   Settings,
   User as UserIcon,
   ChevronDown,
+  FileMinus,
+  Menu,
+  type LucideIcon,
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
@@ -25,9 +29,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
+import { clearStudentDrafts } from "@/features/course-change/draft";
 import { initials } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { useAuth } from "./AuthProvider";
+import { clearSessionCache } from "./session";
+import { useToast } from "./toast";
 
 const PROTOTYPE_NAV = [
   { to: "/calendar", label: "Calendar", icon: CalendarIcon },
@@ -36,6 +43,8 @@ const PROTOTYPE_NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/data", label: "Master Data", icon: Database },
 ];
+
+const COURSE_CHANGE_NAV = [{ to: "/course-change", label: "ลด / ถอนรายวิชา", icon: FileMinus }];
 
 const SCHEDULE_NAV = [
   { to: "/schedule/a", label: "A" },
@@ -46,10 +55,19 @@ export function AppShell() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const toast = useToast();
+  const [signingOut, setSigningOut] = useState(false);
 
   const signOut = async () => {
-    await logout().catch(() => undefined);
-    qc.clear();
+    if (signingOut) return;
+    setSigningOut(true);
+    try { await logout(); } catch {
+      setSigningOut(false);
+      toast("ออกจากระบบไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง");
+      return;
+    }
+    try { clearStudentDrafts(sessionStorage); } catch { /* Storage may be disabled. */ }
+    clearSessionCache(qc);
     navigate("/login", { replace: true });
   };
 
@@ -60,104 +78,23 @@ export function AppShell() {
   return (
     <div className="min-h-screen bg-white">
 
-      <header className="flex h-16 items-center justify-between border-b border-neutral-200 bg-white px-8">
-
-        <div className="flex items-center gap-10">
-
+      <header className="flex h-16 items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 sm:px-8">
+        <div className="flex min-w-0 items-center gap-4 lg:gap-8">
           <Brand />
-
-          <div className="group relative">
-
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-950"
-            >
-              Prototype1
-              <ChevronDown className="size-4 transition-transform group-hover:rotate-180" />
-            </button>
-
-            <div
-              className="
-                invisible absolute left-0 top-full z-50
-                w-56 translate-y-1
-                rounded-xl border border-neutral-200
-                bg-white p-2
-                opacity-0 shadow-lg
-                transition-all duration-150
-                group-hover:visible
-                group-hover:translate-y-0
-                group-hover:opacity-100
-              "
-            >
-              {PROTOTYPE_NAV.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === "/admin"}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                      isActive
-                        ? "bg-neutral-900 font-medium text-neutral-50"
-                        : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950",
-                    )
-                  }
-                >
-                  <item.icon className="size-4" />
-                  {item.label}
-                </NavLink>
-              ))}
-            </div>
-
-          </div>
-
-          <div className="group relative">
-
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-950"
-            >
-              Schedule
-              <ChevronDown className="size-4 transition-transform group-hover:rotate-180" />
-            </button>
-
-            <div
-              className="
-                invisible absolute left-0 top-full z-50
-                w-56 translate-y-1
-                rounded-xl border border-neutral-200
-                bg-white p-2
-                opacity-0 shadow-lg
-                transition-all duration-150
-                group-hover:visible
-                group-hover:translate-y-0
-                group-hover:opacity-100
-              "
-            >
-              {SCHEDULE_NAV.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                      isActive
-                        ? "bg-neutral-900 font-medium text-neutral-50"
-                        : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950",
-                    )
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              ))}
-            </div>
-
-          </div>
-
+          <nav aria-label="เมนูหลัก" className="hidden items-center gap-2 md:flex">
+            {user?.role !== "student" && <NavMenu label="Prototype1" items={PROTOTYPE_NAV} />}
+            <NavMenu label="Course Change" items={COURSE_CHANGE_NAV} />
+            <NavMenu label="Schedule" items={SCHEDULE_NAV} />
+          </nav>
         </div>
-        
+        <div className="ml-auto md:hidden">
+          <NavMenu label="เมนู" mobile items={[
+            ...COURSE_CHANGE_NAV,
+            ...(user?.role !== "student" ? PROTOTYPE_NAV : []),
+            ...SCHEDULE_NAV,
+          ]} />
+        </div>
 
-        
         <div className="flex items-center gap-2">
 
           {!user && (
@@ -172,6 +109,7 @@ export function AppShell() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
+                  aria-label="บัญชีผู้ใช้"
                   className="
                     rounded-full outline-none
                     focus-visible:ring-2
@@ -212,9 +150,9 @@ export function AppShell() {
 
                 <DropdownMenuSeparator />
 
-                <DropdownMenuItem onSelect={() => void signOut()}>
+                <DropdownMenuItem disabled={signingOut} onSelect={() => void signOut()}>
                   <LogOut className="size-4" />
-                  Log out
+                  {signingOut ? "กำลังออกจากระบบ…" : "ออกจากระบบ"}
                 </DropdownMenuItem>
 
               </DropdownMenuContent>
@@ -228,5 +166,34 @@ export function AppShell() {
       <Outlet />
 
     </div>
+  );
+}
+
+function NavMenu({ label, items, mobile }: {
+  label: string;
+  items: { to: string; label: string; icon?: LucideIcon }[];
+  mobile?: boolean;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neutral-950">
+          {mobile && <Menu className="size-4" />}
+          {label}
+          {!mobile && <ChevronDown className="size-4" />}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align={mobile ? "end" : "start"} className="w-56">
+        {items.map((item) => (
+          <DropdownMenuItem key={item.to} asChild>
+            <NavLink to={item.to} end={item.to === "/admin"}
+              className={({ isActive }) => cn(isActive && "bg-neutral-100 font-medium")}>
+              {item.icon && <item.icon className="size-4" />}
+              {item.label}
+            </NavLink>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

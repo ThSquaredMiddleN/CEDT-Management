@@ -10,4 +10,9 @@ export const qk = {
   terms: ["terms"] as const,
   users: (params: Record<string, unknown> = {}) => ["users", params] as const,
   notifications: ["notifications"] as const,
+  courseChange: ["course-change"] as const,
+  ccContext: ["course-change", "context"] as const,
+  ccEligible: (type: string) => ["course-change", "eligible", type] as const,
+  ccList: (params: Record<string, unknown>) => ["course-change", "list", params] as const,
+  ccDetail: (id: string) => ["course-change", "detail", id] as const,
 };

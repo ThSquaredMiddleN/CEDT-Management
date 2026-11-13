@@ -40,8 +40,9 @@ export async function calendarRoutes(app: FastifyInstance): Promise<void> {
       "approved",
       "pending",
     ]) as ("approved" | "pending")[];
-    // Not logged in → approved only, regardless of what was asked for.
-    const statuses = me ? requested : (["approved"] as ("approved" | "pending")[]);
+    // Not staff (anonymous or a student) → approved only, regardless of what was asked for.
+    const statuses =
+      me?.role === "staff" ? requested : (["approved"] as ("approved" | "pending")[]);
 
     const occurrences = await prisma.bookingOccurrence.findMany({
       where: {

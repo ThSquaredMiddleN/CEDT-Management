@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiError } from "@/api/client";
 import { useToast } from "./toast";
+import { clearSessionCache } from "./session";
 
 /**
  * Global 401/403 handling (§4). A 401 after bootstrap means the session expired mid-use:
@@ -20,13 +21,13 @@ export function SessionExpiryWatcher() {
       if (!(error instanceof ApiError)) return;
 
       if (error.status === 401 && location.pathname !== "/login") {
-        qc.clear();
+        clearSessionCache(qc);
         const next = encodeURIComponent(location.pathname + location.search);
         navigate(`/login?expired=1&next=${next}`, { replace: true });
         return;
       }
       if (error.status === 403) {
-        toast("You don't have permission to do that.");
+        toast("บัญชีนี้ไม่มีสิทธิ์ทำรายการดังกล่าว");
       }
     };
 

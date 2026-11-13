@@ -1,16 +1,21 @@
-import type { ReactNode } from "react";
+import { lazy, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AdminDashboard } from "@/features/admin-dashboard/AdminDashboard";
-import { BookingForm } from "@/features/booking-form/BookingForm";
 import { CalendarPage } from "@/features/calendar/CalendarPage";
 import { LoginPage } from "@/features/login/LoginPage";
-import { MasterDataPage } from "@/features/master-data/MasterDataPage";
 import { MyRequests } from "@/features/my-requests/MyRequests";
+import type { Role } from "@/api/types";
 import { AppShell } from "./AppShell";
-import { useAuth } from "./AuthProvider";
+import { roleLanding, useAuth } from "./AuthProvider";
 import { MapPage } from "./MapPage";
+import { DeferredPage } from "./DeferredPage";
 
-function RequireAuth({ children }: { children: ReactNode }) {
+const CourseChangePage = lazy(() => import("@/features/course-change/CourseChangePage").then((m) => ({ default: m.CourseChangePage })));
+const BookingForm = lazy(() => import("@/features/booking-form/BookingForm").then((m) => ({ default: m.BookingForm })));
+const MasterDataPage = lazy(() => import("@/features/master-data/MasterDataPage").then((m) => ({ default: m.MasterDataPage })));
+
+/** Staff pages are the default; pass `roles` to open a page to students as well. */
+function RequireAuth({ children, roles = ["staff"] }: { children: ReactNode; roles?: Role[] }) {
   const { user } = useAuth();
   const location = useLocation();
 
@@ -18,6 +23,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
   }
+  if (!roles.includes(user.role)) return <Navigate to={roleLanding(user.role)} replace />;
   return <>{children}</>;
 }
 
@@ -41,12 +47,22 @@ export function AppRoutes() {
         {/* Public: anyone can view the calendar without logging in. */}
         <Route path="/calendar" element={<CalendarPage />} />
 
-        {/* Staff-only pages — a single `staff` role, so plain auth gating. */}
+        {/* Course Change (ลด / ถอนรายวิชา) — students and staff, one page with two views. */}
+        <Route
+          path="/course-change"
+          element={
+            <RequireAuth roles={["student", "staff"]}>
+              <DeferredPage><CourseChangePage /></DeferredPage>
+            </RequireAuth>
+          }
+        />
+
+        {/* Staff-only pages. */}
         <Route
           path="/requests/new"
           element={
             <RequireAuth>
-              <BookingForm />
+              <DeferredPage><BookingForm /></DeferredPage>
             </RequireAuth>
           }
         />
@@ -70,7 +86,7 @@ export function AppRoutes() {
           path="/admin/data"
           element={
             <RequireAuth>
-              <MasterDataPage />
+              <DeferredPage><MasterDataPage /></DeferredPage>
             </RequireAuth>
           }
         />

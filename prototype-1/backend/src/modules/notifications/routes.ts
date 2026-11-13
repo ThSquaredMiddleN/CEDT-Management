@@ -15,7 +15,7 @@ const readSchema = z.union([
 ]);
 
 export async function notificationRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/notifications", { config: { auth: "any" } }, async (req) => {
+  app.get("/notifications", { config: { auth: "user" } }, async (req) => {
     const me = requireUser(req);
     const q = listQuery.parse(req.query);
 
@@ -38,6 +38,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
         type: n.type,
         message: n.message,
         bookingId: n.bookingId,
+        courseChangeRequestId: n.courseChangeRequestId,
         payload: n.payload,
         isRead: n.isRead,
         createdAt: n.createdAt.toISOString(),
@@ -49,7 +50,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post("/notifications/read", { config: { auth: "any" } }, async (req, reply) => {
+  app.post("/notifications/read", { config: { auth: "user" } }, async (req, reply) => {
     const me = requireUser(req);
     const body = readSchema.parse(req.body);
 

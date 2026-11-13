@@ -11,6 +11,7 @@ datasource db {
 
 enum UserRole {
   staff
+  student
 
   @@map("user_role")
 }
@@ -61,6 +62,11 @@ enum NotificationType {
   booking_moved
   booking_cancelled_by_instructor
   request_withdrawn
+  cc_submitted
+  cc_approved
+  cc_rejected
+  cc_completed
+  cc_cancelled
 
   @@map("notification_type")
 }
@@ -75,6 +81,8 @@ model User {
   isActive         Boolean   @default(true) @map("is_active")
   failedLoginCount Int       @default(0) @map("failed_login_count")
   lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(6)
+  studentNo        String?   @unique @map("student_no")
+  advisorId        String?   @map("advisor_id") @db.Uuid
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -85,6 +93,14 @@ model User {
   defaultForCourses   Course[]
   events              BookingEvent[]
   notifications       Notification[]
+
+  advisor              User?                 @relation("advisor", fields: [advisorId], references: [id])
+  advisees             User[]                @relation("advisor")
+  enrollments          Enrollment[]
+  courseChangeRequests CourseChangeRequest[] @relation("ccStudent")
+  courseChangeDecided  CourseChangeRequest[] @relation("ccDecidedBy")
+  courseChangeEvents   CourseChangeEvent[]
+  courseChangeSettingsEvents CourseChangeSettingsEvent[]
 
   @@index([role, isActive])
   @@map("users")
@@ -140,9 +156,16 @@ model Course {
   name                String
   defaultInstructorId String? @map("default_instructor_id") @db.Uuid
   isActive            Boolean @default(true) @map("is_active")
+  /// Where the course record comes from. "cedt-google-forms" = the CEDT drop/withdraw form
+  /// catalog (docs/course-change/DATABASE.md). Null = LabSync booking course (e.g. legacy
+  /// CEDT101 placeholders), which Course Change ignores.
+  catalogSource       String? @map("catalog_source")
 
-  defaultInstructor User?     @relation(fields: [defaultInstructorId], references: [id])
-  bookings          Booking[]
+  defaultInstructor    User?                 @relation(fields: [defaultInstructorId], references: [id])
+  bookings             Booking[]
+  enrollments          Enrollment[]
+  allowedCourses       AllowedCourse[]
+  courseChangeRequests CourseChangeRequest[]
 
   @@map("courses")
 }
@@ -155,7 +178,12 @@ model Term {
   endDate      DateTime @map("end_date") @db.Date
   isActive     Boolean  @default(false) @map("is_active")
 
-  bookings Booking[]
+  bookings             Booking[]
+  courseChangeWindows  CourseChangeWindow[]
+  enrollments          Enrollment[]
+  allowedCourses       AllowedCourse[]
+  courseChangeRequests CourseChangeRequest[]
+  courseChangeSettingsEvents CourseChangeSettingsEvent[]
 
   @@unique([academicYear, termNumber])
   @@map("terms")
@@ -245,21 +273,257 @@ model BookingEvent {
 }
 
 model Notification {
-  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String           @map("user_id") @db.Uuid
-  type      NotificationType
-  message   String
-  bookingId String?          @map("booking_id") @db.Uuid
-  payload   Json             @default("{}")
-  isRead    Boolean          @default(false) @map("is_read")
-  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                String           @map("user_id") @db.Uuid
+  type                  NotificationType
+  message               String
+  bookingId             String?          @map("booking_id") @db.Uuid
+  courseChangeRequestId String?          @map("course_change_request_id") @db.Uuid
+  payload               Json             @default("{}")
+  isRead                Boolean          @default(false) @map("is_read")
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
 
   deliveredEmailAt DateTime? @map("delivered_email_at") @db.Timestamptz(6)
   deliveredLineAt  DateTime? @map("delivered_line_at") @db.Timestamptz(6)
 
-  user    User     @relation(fields: [userId], references: [id])
-  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user                User                 @relation(fields: [userId], references: [id])
+  booking             Booking?             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  courseChangeRequest CourseChangeRequest? @relation(fields: [courseChangeRequestId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt(sort: Desc)])
   @@map("notifications")
+}
+
+// ============================================================================
+// Course Change (Auto Drop/Withdrawal Portal) — docs/course-change/DESIGN.md
+// ============================================================================
+
+enum CourseChangeType {
+  drop
+  withdraw
+
+  @@map("course_change_type")
+}
+
+model CourseChangeSettingsEvent {
+  id        BigInt   @id @default(autoincrement())
+  termId    String   @map("term_id") @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  reason    String
+  before    Json
+  after     Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  term  Term @relation(fields: [termId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actor User @relation(fields: [actorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([termId, createdAt(sort: Desc)])
+  @@map("course_change_settings_events")
+}
+
+/// A = reg_direct, B = advisor_pi, C = program_registrar (DESIGN.md §3).
+enum CourseChangeFlow {
+  reg_direct
+  advisor_pi
+  program_registrar
+
+  @@map("course_change_flow")
+}
+
+enum CourseChangeStatus {
+  pending_approval
+  processing
+  completed
+  rejected
+  cancelled
+
+  @@map("course_change_status")
+}
+
+enum CourseChangeEventType {
+  submitted
+  approved
+  rejected
+  cancelled
+  document_generated
+  sent_to_reg_chula
+  sent_to_pi
+  forwarded_to_registrar
+  completed
+  workflow_updated
+
+  @@map("course_change_event_type")
+}
+
+/// The routing matrix: which flow handles a request type in a given week range of a term.
+model CourseChangeWindow {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  termId      String           @map("term_id") @db.Uuid
+  requestType CourseChangeType @map("request_type")
+  weekFrom    Int              @map("week_from") @db.SmallInt
+  weekTo      Int              @map("week_to") @db.SmallInt
+  flow        CourseChangeFlow
+
+  term Term @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@unique([termId, requestType, weekFrom])
+  @@map("course_change_windows")
+}
+
+/// Courses the programme has announced as droppable / withdrawable this term (CC-BR-1).
+model AllowedCourse {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  termId        String  @map("term_id") @db.Uuid
+  courseId      String  @map("course_id") @db.Uuid
+  allowDrop     Boolean @default(true) @map("allow_drop")
+  allowWithdraw Boolean @default(true) @map("allow_withdraw")
+  note          String?
+
+  term   Term   @relation(fields: [termId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id])
+
+  @@unique([termId, courseId])
+  @@map("allowed_courses")
+}
+
+/// A student's registration in a course (mirrors Reg Chula; seeded in the prototype).
+model Enrollment {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId String  @map("student_id") @db.Uuid
+  termId    String  @map("term_id") @db.Uuid
+  courseId  String  @map("course_id") @db.Uuid
+  /// Null when unknown — demo data never invents official sections or credits.
+  section   String?
+  credits   Int?    @db.SmallInt
+  /// Provenance, e.g. "synthetic-demo". A future Reg Chula sync would write its own value.
+  source    String?
+
+  student User   @relation(fields: [studentId], references: [id])
+  term    Term   @relation(fields: [termId], references: [id], onDelete: Cascade)
+  course  Course @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, termId, courseId])
+  @@map("enrollments")
+}
+
+model CourseChangeRequest {
+  id                  String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// A retry of the same submission returns its original request, including after a lost response.
+  workflowVersion     Int                @default(1) @map("workflow_version")
+  phase               String?
+  workflowPlan        Json?              @map("workflow_plan")
+  revision            Int                @default(0)
+  files               CourseChangeFile[]
+  clientRequestId     String?            @map("client_request_id") @db.Uuid
+  requestNo           String             @unique @map("request_no")
+  studentId           String             @map("student_id") @db.Uuid
+  termId              String             @map("term_id") @db.Uuid
+  courseId            String             @map("course_id") @db.Uuid
+  requestType         CourseChangeType   @map("request_type")
+  flow                CourseChangeFlow
+  weekNo              Int                @map("week_no") @db.SmallInt
+  status              CourseChangeStatus
+  reason              String
+  decidedById         String?            @map("decided_by") @db.Uuid
+  decidedAt           DateTime?          @map("decided_at") @db.Timestamptz(6)
+  rejectReason        String?            @map("reject_reason")
+  documentHash        String?            @map("document_hash")
+  documentGeneratedAt DateTime?          @map("document_generated_at") @db.Timestamptz(6)
+  regChulaRef         String?            @map("reg_chula_ref")
+  piRef               String?            @map("pi_ref")
+  completedAt         DateTime?          @map("completed_at") @db.Timestamptz(6)
+  /// Student / course / section / advisor as they were at submit time.
+  snapshot            Json
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  // CC-BR-2 partial unique index (one live request per student+course+term) is added by
+  // the raw SQL in the migration — Prisma cannot express partial indexes.
+
+  student       User                @relation("ccStudent", fields: [studentId], references: [id])
+  term          Term                @relation(fields: [termId], references: [id])
+  course        Course              @relation(fields: [courseId], references: [id])
+  decidedBy     User?               @relation("ccDecidedBy", fields: [decidedById], references: [id])
+  events        CourseChangeEvent[]
+  notifications Notification[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([studentId, createdAt(sort: Desc)])
+  @@unique([studentId, clientRequestId])
+  @@map("course_change_requests")
+}
+
+model CourseChangeEvent {
+  id        BigInt                @id @default(autoincrement())
+  requestId String                @map("request_id") @db.Uuid
+  /// Null when the system acted (e.g. the Reg Chula hand-off on a Flow A submit).
+  actorId   String?               @map("actor_id") @db.Uuid
+  eventType CourseChangeEventType @map("event_type")
+  note      String?
+  payload   Json?
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  request CourseChangeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor   User?               @relation(fields: [actorId], references: [id])
+
+  @@index([requestId, createdAt])
+  @@map("course_change_events")
+}
+
+
+/// Published programme dates are explicit; no inferred 1/3-Block or Final rounding.
+model CourseChangeSchedule {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  termId        String @map("term_id") @db.Uuid
+  courseId      String @map("course_id") @db.Uuid
+  section       String @default("*")
+  requestType   CourseChangeType @map("request_type")
+  label         String
+  format        String
+  opensOn       DateTime @map("opens_on") @db.Date
+  closesOn      DateTime @map("closes_on") @db.Date
+  finalOn       DateTime? @map("final_on") @db.Date
+  teachingStartsOn DateTime? @map("teaching_starts_on") @db.Date
+  teachingEndsOn DateTime? @map("teaching_ends_on") @db.Date
+  flow          CourseChangeFlow
+  needsSignature Boolean @map("needs_signature")
+  needsReg      Boolean @map("needs_reg")
+  needsPi       Boolean @map("needs_pi")
+  needsMerge    Boolean @map("needs_merge")
+  published     Boolean @default(false)
+  revision      Int @default(0)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  @@index([termId, courseId, requestType])
+  @@map("course_change_schedules")
+}
+
+/// Prototype storage: private PDFs only, bounded at upload; never public static assets.
+model CourseChangeFile {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId   String @map("request_id") @db.Uuid
+  kind        String
+  filename    String
+  sha256      String
+  data        Bytes
+  uploaderId  String @map("uploader_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  request CourseChangeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  @@index([requestId, createdAt])
+  @@map("course_change_files")
+}
+
+
+/// Immutable record of a human signature handoff; does not send external messages.
+model CourseChangeSignatureBatch {
+  id          String @id @db.Uuid
+  termId      String @map("term_id") @db.Uuid
+  courseId    String @map("course_id") @db.Uuid
+  actorId     String @map("actor_id") @db.Uuid
+  recipient   String
+  sentOn      DateTime @map("sent_on") @db.Date
+  note        String
+  payloadHash String @map("payload_hash")
+  summary     Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@index([termId, createdAt(sort: Desc)])
+  @@map("course_change_signature_batches")
 }
