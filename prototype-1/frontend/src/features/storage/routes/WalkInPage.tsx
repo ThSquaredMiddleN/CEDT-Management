@@ -58,25 +58,25 @@ function Workspace({ inventory }: { inventory: InventoryItem[] }) {
                 ดึงข้อมูล
               </Button>
             </form>
-            {lookup.isError && <p role="alert" className="mt-2 text-sm text-red-600">{(lookup.error as Error).message}</p>}
+            {lookup.isError && <p role="alert" className="mt-2 text-sm text-status-danger-fg">{(lookup.error as Error).message}</p>}
 
             {student && (
-              <div className="mt-4 space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <div className="mt-4 space-y-3 rounded-lg border border-status-info-border bg-status-info-bg p-4">
                 <div>
-                  <p className="text-xs text-blue-600">พบข้อมูลนิสิต</p>
-                  <p className="flex items-center gap-2 font-bold text-blue-900">
-                    <User className="size-4 text-blue-500" /> {student.name} ({student.studentId})
+                  <p className="text-xs text-status-info-fg">พบข้อมูลนิสิต</p>
+                  <p className="flex items-center gap-2 font-bold text-status-info-fg">
+                    <User className="size-4 text-status-info-fg" /> {student.name} ({student.studentId})
                   </p>
                 </div>
                 <div>
-                  <label htmlFor="walkin-group" className="mb-1 block text-xs font-bold text-blue-700">
-                    เลือกกลุ่มที่ต้องการอ้างอิงเบิกอุปกรณ์ <span className="text-red-500">*</span>
+                  <label htmlFor="walkin-group" className="mb-1 block text-xs font-bold text-status-info-fg">
+                    เลือกกลุ่มที่ต้องการอ้างอิงเบิกอุปกรณ์ <span className="text-status-danger-fg">*</span>
                   </label>
                   <select
                     id="walkin-group"
                     value={groupId}
                     onChange={(e) => setGroupId(e.target.value)}
-                    className="h-9 w-full rounded-md border border-blue-300 bg-white px-2 text-sm font-bold shadow-sm"
+                    className="h-9 w-full rounded-md border border-status-info-border bg-white px-2 text-sm font-bold shadow-sm"
                   >
                     {student.groups.map((g) => (
                       <option key={g.id} value={g.id}>{g.label}</option>
@@ -104,7 +104,7 @@ function Workspace({ inventory }: { inventory: InventoryItem[] }) {
           <div className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5 lg:sticky lg:top-6">
             <h3 className="border-b pb-2 font-body text-body-md-emphasize text-grey-900">เครื่องมือสแกน (Scan)</h3>
             <BarcodeScanner catalog={catalog} onScan={cart.scan} />
-            {checkout.isError && <p role="alert" className="text-sm text-red-600">{(checkout.error as Error).message}</p>}
+            {checkout.isError && <p role="alert" className="text-sm text-status-danger-fg">{(checkout.error as Error).message}</p>}
             <Button
               variant="default"
               size="lg"

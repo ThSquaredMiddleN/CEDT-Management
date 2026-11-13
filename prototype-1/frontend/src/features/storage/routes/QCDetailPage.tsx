@@ -52,13 +52,13 @@ function InspectView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) => 
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white md:flex-row">
-        <div className={cn("flex flex-col p-6 text-white md:w-1/3", readOnly ? "bg-slate-600" : "bg-slate-900")}>
-          <h2 className="mb-4 font-body text-header-xs-emphasize text-orange-400">QC & ปรับไหม</h2>
+        <div className={cn("flex flex-col p-6 text-white md:w-1/3", readOnly ? "bg-grey-400" : "bg-grey-900")}>
+          <h2 className="mb-4 font-body text-header-xs-emphasize text-status-warning-fg">QC & ปรับไหม</h2>
           <div className="rounded-xl border border-white/10 bg-white/10 p-5">
-            <p className="mb-1 text-xs uppercase tracking-wider text-slate-300">กลุ่มที่ทำรายการ</p>
-            <p className="mb-4 flex items-center gap-2 font-bold"><Users className="size-4 text-orange-400" /> {req.group}</p>
-            <p className="mb-1 text-xs uppercase tracking-wider text-slate-300">ผู้ส่งคืน</p>
-            <p className="flex items-center gap-2 text-sm font-bold"><User className="size-4 text-orange-400" /> {req.user}</p>
+            <p className="mb-1 text-xs uppercase tracking-wider text-grey-200">กลุ่มที่ทำรายการ</p>
+            <p className="mb-4 flex items-center gap-2 font-bold"><Users className="size-4 text-status-warning-fg" /> {req.group}</p>
+            <p className="mb-1 text-xs uppercase tracking-wider text-grey-200">ผู้ส่งคืน</p>
+            <p className="flex items-center gap-2 text-sm font-bold"><User className="size-4 text-status-warning-fg" /> {req.user}</p>
           </div>
         </div>
 
@@ -87,13 +87,13 @@ function InspectView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) => 
             <LiabilityForm onSubmit={(v: LiabilityValues) => send(v.amount, v.remark)} />
           )}
 
-          {submitQC.isError && <p role="alert" className="text-sm text-red-600">{(submitQC.error as Error).message}</p>}
+          {submitQC.isError && <p role="alert" className="text-sm text-status-danger-fg">{(submitQC.error as Error).message}</p>}
 
           {!readOnly && (
             <Button
               variant="default"
               size="lg"
-              className={cn("w-full", hasLiability && "bg-red-600 hover:bg-red-700")}
+              className={cn("w-full", hasLiability && "bg-status-danger-solid hover:bg-status-danger-fg")}
               disabled={!allProcessed || submitQC.isPending}
               loading={submitQC.isPending}
               // With liability the form (zod-validated) submits; otherwise close directly.
@@ -129,7 +129,7 @@ function SlipVerifyView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) 
   return (
     <>
       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-        <div className="flex items-center justify-between bg-orange-600 p-5 text-white">
+        <div className="flex items-center justify-between bg-status-warning-solid p-5 text-white">
           <h2 className="font-body text-body-md-emphasize">ตรวจสอบสลิปโอนเงิน (PENDING_PAYMENT)</h2>
           <span className="rounded-lg bg-white/20 px-3 py-1 text-sm font-bold">{req.group}</span>
         </div>
@@ -146,7 +146,7 @@ function SlipVerifyView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) 
             <dl className="mb-4 space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-6">
               <div className="flex items-center justify-between">
                 <dt className="text-grey-400">ยอดเรียกเก็บ:</dt>
-                <dd className="text-xl font-bold text-red-600">{req.fineAmount.toLocaleString()}.00 บาท</dd>
+                <dd className="text-xl font-bold text-status-danger-fg">{req.fineAmount.toLocaleString()}.00 บาท</dd>
               </div>
               {slip && (
                 <>
@@ -164,12 +164,12 @@ function SlipVerifyView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) 
               <p className="text-xs text-grey-400">QR PromptPay ที่ส่งให้นิสิต ใช้เทียบยอดกับสลิป</p>
             </div>
 
-            {verify.isError && <p role="alert" className="mb-3 text-sm text-red-600">{(verify.error as Error).message}</p>}
+            {verify.isError && <p role="alert" className="mb-3 text-sm text-status-danger-fg">{(verify.error as Error).message}</p>}
             <div className="space-y-3">
-              <Button className="w-full bg-green-600 hover:bg-green-700" size="lg" disabled={verify.isPending} onClick={() => act(true)}>
+              <Button className="w-full bg-status-success-solid hover:bg-status-success-fg" size="lg" disabled={verify.isPending} onClick={() => act(true)}>
                 <CircleCheck className="size-5" aria-hidden="true" /> สลิปถูกต้อง กดปิดงาน (CLOSED)
               </Button>
-              <Button variant="outline" size="lg" className="w-full border-2 border-red-500 text-red-600 hover:bg-red-50" disabled={verify.isPending} onClick={() => act(false)}>
+              <Button variant="outline" size="lg" className="w-full border-2 border-status-danger-solid text-status-danger-fg hover:bg-status-danger-bg" disabled={verify.isPending} onClick={() => act(false)}>
                 สลิปไม่ถูกต้อง แจ้งตีกลับ
               </Button>
             </div>
@@ -206,7 +206,7 @@ export function QCDetailPage() {
         {outcome?.qrAmount ? (
           <div className="flex flex-col items-center gap-2">
             <PromptPayQR amount={outcome.qrAmount} />
-            <p className="text-sm font-bold text-red-600">{outcome.qrAmount.toLocaleString()} บาท</p>
+            <p className="text-sm font-bold text-status-danger-fg">{outcome.qrAmount.toLocaleString()} บาท</p>
           </div>
         ) : null}
       </ResultDialog>

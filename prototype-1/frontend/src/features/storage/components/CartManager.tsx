@@ -40,14 +40,14 @@ export function CartManager({
               </p>
               <p className="mt-1 font-body text-body-xs text-grey-400">
                 {showRequested && l.reqQty !== undefined && <>ขอยืมมา: {l.reqQty} ชิ้น | </>}
-                มีในคลัง: <span className="font-semibold text-green-600">{l.maxStock}</span> ชิ้น
+                มีในคลัง: <span className="font-semibold text-status-success-fg">{l.maxStock}</span> ชิ้น
                 {!showRequested && <> | บาร์โค้ด: {l.itemId}</>}
               </p>
             </div>
 
             <div className="flex items-center gap-3">
               {l.isUnique ? (
-                <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-700">
+                <Badge variant="outline" className="border-grey-200 bg-grey-100 text-grey-700">
                   จำนวนที่สแกน: {l.qty}
                 </Badge>
               ) : (
@@ -79,7 +79,7 @@ export function CartManager({
                   type="button"
                   aria-label={`ลบ ${l.name}`}
                   onClick={() => onRemove(l.itemId)}
-                  className="flex size-8 items-center justify-center rounded-full bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600"
+                  className="flex size-8 items-center justify-center rounded-full bg-status-danger-bg text-status-danger-fg hover:bg-status-danger-bg hover:text-status-danger-fg"
                 >
                   <Trash2 className="size-4" />
                 </button>
@@ -105,7 +105,7 @@ export function CartManager({
                     type="button"
                     aria-label={`ลบ ${sn}`}
                     onClick={() => onRemoveSn(l.itemId, sn)}
-                    className="text-red-400 hover:text-red-600"
+                    className="text-status-danger-fg hover:text-status-danger-fg"
                   >
                     <Trash2 className="size-3.5" />
                   </button>

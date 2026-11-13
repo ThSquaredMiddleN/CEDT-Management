@@ -5,9 +5,9 @@ import type { QCItem, QCItemStatus } from "../types";
 type Decision = Exclude<QCItemStatus, "PENDING_TEST">;
 
 const OPTIONS: { value: Decision; label: string; active: string }[] = [
-  { value: "AVAILABLE", label: "พร้อมใช้", active: "border-green-500 bg-green-500 text-white" },
-  { value: "DAMAGED", label: "ชำรุด", active: "border-orange-500 bg-orange-500 text-white" },
-  { value: "LOST", label: "สูญหาย", active: "border-red-500 bg-red-500 text-white" },
+  { value: "AVAILABLE", label: "พร้อมใช้", active: "border-status-success-solid bg-status-success-solid text-white" },
+  { value: "DAMAGED", label: "ชำรุด", active: "border-status-warning-solid bg-status-warning-solid text-white" },
+  { value: "LOST", label: "สูญหาย", active: "border-status-danger-solid bg-status-danger-solid text-white" },
 ];
 
 interface QCItemRowProps {

@@ -81,7 +81,7 @@ export function BarcodeScanner({ catalog, onScan, disabled }: BarcodeScannerProp
           {cameraOn ? "ปิดกล้อง" : "เปิดกล้องสแกน"}
         </Button>
         {notice && (
-          <p role="status" className="text-center text-xs text-red-600">
+          <p role="status" className="text-center text-xs text-status-danger-fg">
             {notice}
           </p>
         )}

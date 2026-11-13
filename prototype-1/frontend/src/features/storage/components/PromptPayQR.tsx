@@ -32,7 +32,7 @@ export function PromptPayQR({ amount, size = 192 }: PromptPayQRProps) {
     };
   }, [amount, size]);
 
-  if (failed) return <p role="alert" className="text-sm text-red-600">สร้าง QR ไม่สำเร็จ</p>;
+  if (failed) return <p role="alert" className="text-sm text-status-danger-fg">สร้าง QR ไม่สำเร็จ</p>;
   return (
     <div className="inline-block rounded-xl border border-neutral-200 bg-white p-3" style={{ width: size + 26 }}>
       {src ? (

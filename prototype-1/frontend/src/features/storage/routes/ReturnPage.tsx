@@ -47,19 +47,19 @@ export function ReturnPage() {
               <Input id="ret-sid" value={studentId} onChange={(e) => setStudentId(e.target.value)} className="h-10" />
               <Button type="submit" variant="default" size="lg" className="px-5" loading={lookup.isPending}>ดึงข้อมูล</Button>
             </form>
-            {lookup.isError && <p role="alert" className="mt-2 text-sm text-red-600">{(lookup.error as Error).message}</p>}
+            {lookup.isError && <p role="alert" className="mt-2 text-sm text-status-danger-fg">{(lookup.error as Error).message}</p>}
 
             {student && (
-              <div className="mt-4 space-y-3 rounded-lg border border-teal-200 bg-teal-50 p-4">
+              <div className="mt-4 space-y-3 rounded-lg border border-status-info-border bg-status-info-bg p-4">
                 <div>
-                  <p className="text-xs text-teal-600">พบข้อมูลนิสิต</p>
-                  <p className="flex items-center gap-2 font-bold text-teal-900"><User className="size-4 text-teal-500" /> {student.name} ({student.studentId})</p>
+                  <p className="text-xs text-status-info-fg">พบข้อมูลนิสิต</p>
+                  <p className="flex items-center gap-2 font-bold text-status-info-fg"><User className="size-4 text-status-info-fg" /> {student.name} ({student.studentId})</p>
                 </div>
                 <div>
-                  <label htmlFor="ret-group" className="mb-1 block text-xs font-bold text-teal-700">
-                    เลือกกลุ่มที่ต้องการคืนอุปกรณ์ <span className="text-red-500">*</span>
+                  <label htmlFor="ret-group" className="mb-1 block text-xs font-bold text-status-info-fg">
+                    เลือกกลุ่มที่ต้องการคืนอุปกรณ์ <span className="text-status-danger-fg">*</span>
                   </label>
-                  <select id="ret-group" value={groupId} onChange={(e) => setGroupId(e.target.value)} className="h-9 w-full rounded-md border border-teal-300 bg-white px-2 text-sm font-bold shadow-sm">
+                  <select id="ret-group" value={groupId} onChange={(e) => setGroupId(e.target.value)} className="h-9 w-full rounded-md border border-status-info-border bg-white px-2 text-sm font-bold shadow-sm">
                     {student.groups.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
                   </select>
                 </div>
@@ -94,14 +94,14 @@ export function ReturnPage() {
                       <button
                         type="button" role="radio" aria-checked={d === "RETURNED"}
                         onClick={() => choose(item.id, "RETURNED")}
-                        className={cn("flex flex-1 items-center justify-center gap-1 rounded-lg border py-2 text-sm font-bold transition-colors", d === "RETURNED" ? "border-blue-600 bg-blue-600 text-white" : "border-neutral-300 bg-white text-grey-400 hover:bg-neutral-100")}
+                        className={cn("flex flex-1 items-center justify-center gap-1 rounded-lg border py-2 text-sm font-bold transition-colors", d === "RETURNED" ? "border-status-info-solid bg-brand-primary text-white" : "border-neutral-300 bg-white text-grey-400 hover:bg-neutral-100")}
                       >
                         <PackageOpen className="size-4" /> รับของคืนแล้ว (รอ QC)
                       </button>
                       <button
                         type="button" role="radio" aria-checked={d === "NOT_BROUGHT"}
                         onClick={() => choose(item.id, "NOT_BROUGHT")}
-                        className={cn("flex flex-1 items-center justify-center gap-1 rounded-lg border py-2 text-sm font-bold transition-colors", d === "NOT_BROUGHT" ? "border-slate-500 bg-slate-500 text-white" : "border-neutral-300 bg-white text-grey-400 hover:bg-neutral-100")}
+                        className={cn("flex flex-1 items-center justify-center gap-1 rounded-lg border py-2 text-sm font-bold transition-colors", d === "NOT_BROUGHT" ? "border-grey-400 bg-grey-400 text-white" : "border-neutral-300 bg-white text-grey-400 hover:bg-neutral-100")}
                       >
                         <X className="size-4" /> ไม่ได้นำมา
                       </button>
@@ -112,7 +112,7 @@ export function ReturnPage() {
             )}
           </div>
 
-          {submit.isError && <p role="alert" className="mt-3 text-sm text-red-600">{(submit.error as Error).message}</p>}
+          {submit.isError && <p role="alert" className="mt-3 text-sm text-status-danger-fg">{(submit.error as Error).message}</p>}
           <Button
             variant="default" size="lg" className="mt-6 w-full"
             disabled={!allProcessed || submit.isPending} loading={submit.isPending}

@@ -55,7 +55,7 @@ export function ResultDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="items-center text-center">
-        <div className="flex size-16 items-center justify-center rounded-full bg-green-100 text-green-600">
+        <div className="flex size-16 items-center justify-center rounded-full bg-status-success-bg text-status-success-fg">
           <CircleCheck className="size-9" aria-hidden="true" />
         </div>
         <DialogTitle>{title}</DialogTitle>

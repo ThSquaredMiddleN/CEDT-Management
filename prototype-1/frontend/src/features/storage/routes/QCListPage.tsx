@@ -33,7 +33,7 @@ export function QCListPage() {
                 <span className="font-semibold text-brand-primary">{r.group}</span>
               </p>
               {r.fineAmount > 0 && (
-                <p className="mt-2 flex items-center gap-1 font-body text-body-sm-emphasize text-red-600">
+                <p className="mt-2 flex items-center gap-1 font-body text-body-sm-emphasize text-status-danger-fg">
                   <Receipt className="size-4" aria-hidden="true" /> ยอดรอชำระ: {r.fineAmount.toLocaleString()} บาท
                 </p>
               )}

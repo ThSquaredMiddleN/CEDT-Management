@@ -84,19 +84,19 @@ function Workspace({ req, inventory }: { req: BorrowRequest; inventory: Inventor
               {readOnly ? (
                 <div className="flex gap-3 rounded-lg border border-neutral-300 bg-neutral-100 p-3 font-body text-body-sm text-grey-700">
                   <Lock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                  <p className={req.status === "UNFULFILLED" ? "font-bold text-red-700" : ""}>
+                  <p className={req.status === "UNFULFILLED" ? "font-bold text-status-danger-fg" : ""}>
                     {req.status === "UNFULFILLED"
                       ? "คำขอนี้ถูกยกเลิกเนื่องจากอุปกรณ์ในคลังไม่เพียงพอ (UNFULFILLED) - Read-only View"
                       : "รายการนี้ถูกจัดการเรียบร้อยแล้ว (Read-only View)"}
                   </p>
                 </div>
               ) : (
-                <div className="flex gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3 font-body text-body-sm text-blue-800">
+                <div className="flex gap-3 rounded-lg border border-status-info-border bg-status-info-bg p-3 font-body text-body-sm text-status-info-fg">
                   <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                   <p>
                     กำหนดจำนวนจ่าย (เริ่มที่ 0) สแกนบาร์โค้ดเพื่อเพิ่มจำนวน
                     <br />
-                    <span className="text-xs font-bold text-blue-600">
+                    <span className="text-xs font-bold text-status-info-fg">
                       สามารถจ่ายน้อยกว่าที่ขอได้ โดยระบบจะไม่ให้กรอกเกินจำนวนจริงในคลัง
                     </span>
                   </p>
@@ -134,16 +134,16 @@ function Workspace({ req, inventory }: { req: BorrowRequest; inventory: Inventor
               </h3>
               <BarcodeScanner catalog={catalog} onScan={cart.scan} />
 
-              <div className="space-y-3 rounded-lg border border-blue-100 bg-blue-50/50 p-4">
+              <div className="space-y-3 rounded-lg border border-status-info-border bg-status-info-bg p-4">
                 <div>
-                  <label htmlFor="pickup-at" className="mb-1 block text-xs font-bold text-blue-800">
-                    กำหนดเวลานัดรับ <span className="text-red-500">*</span>
+                  <label htmlFor="pickup-at" className="mb-1 block text-xs font-bold text-status-info-fg">
+                    กำหนดเวลานัดรับ <span className="text-status-danger-fg">*</span>
                   </label>
                   <Input id="pickup-at" type="datetime-local" value={pickupAt} onChange={(e) => setPickupAt(e.target.value)} />
                 </div>
                 <div>
-                  <label htmlFor="pickup-loc" className="mb-1 block text-xs font-bold text-blue-800">
-                    สถานที่รับอุปกรณ์ <span className="text-red-500">*</span>
+                  <label htmlFor="pickup-loc" className="mb-1 block text-xs font-bold text-status-info-fg">
+                    สถานที่รับอุปกรณ์ <span className="text-status-danger-fg">*</span>
                   </label>
                   <select
                     id="pickup-loc"
@@ -157,7 +157,7 @@ function Workspace({ req, inventory }: { req: BorrowRequest; inventory: Inventor
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="pickup-remark" className="mb-1 block text-xs font-bold text-blue-800">
+                  <label htmlFor="pickup-remark" className="mb-1 block text-xs font-bold text-status-info-fg">
                     หมายเหตุ (Remark ถึงผู้ยืม)
                   </label>
                   <Textarea id="pickup-remark" rows={2} value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="เช่น จ่ายของให้บางส่วนก่อน..." />
@@ -165,7 +165,7 @@ function Workspace({ req, inventory }: { req: BorrowRequest; inventory: Inventor
               </div>
 
               {confirm.isError && (
-                <p role="alert" className="text-sm text-red-600">{(confirm.error as Error).message}</p>
+                <p role="alert" className="text-sm text-status-danger-fg">{(confirm.error as Error).message}</p>
               )}
               <Button variant="default" size="lg" className="w-full" disabled={!canSubmit} loading={confirm.isPending} onClick={submit}>
                 ยืนยันการจัดเตรียม (ส่งแจ้งเตือน)

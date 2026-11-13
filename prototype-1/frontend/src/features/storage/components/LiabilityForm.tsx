@@ -34,15 +34,15 @@ export function LiabilityForm({ onSubmit }: LiabilityFormProps) {
       id={LIABILITY_FORM_ID}
       onSubmit={handleSubmit(onSubmit)}
       noValidate
-      className="rounded-xl border border-red-200 bg-red-50 p-5"
+      className="rounded-xl border border-status-danger-border bg-status-danger-bg p-5"
     >
-      <h3 className="mb-3 flex items-center gap-2 border-b border-red-200 pb-2 font-body text-body-md-emphasize text-red-800">
+      <h3 className="mb-3 flex items-center gap-2 border-b border-status-danger-border pb-2 font-body text-body-md-emphasize text-status-danger-fg">
         <Receipt className="size-5" aria-hidden="true" />
         กำหนดค่าปรับความเสียหาย (Liability)
       </h3>
 
       <div className="mb-4">
-        <label htmlFor="fine-amount" className="mb-1 block font-body text-body-sm-emphasize text-red-700">
+        <label htmlFor="fine-amount" className="mb-1 block font-body text-body-sm-emphasize text-status-danger-fg">
           ระบุยอดเงิน (บาท)
         </label>
         <Input
@@ -51,14 +51,14 @@ export function LiabilityForm({ onSubmit }: LiabilityFormProps) {
           inputMode="decimal"
           placeholder="เช่น 1500"
           aria-invalid={!!errors.amount}
-          className="h-11 border-red-300 font-bold text-red-900"
+          className="h-11 border-status-danger-border font-bold text-status-danger-fg"
           {...register("amount")}
         />
-        {errors.amount && <p className="mt-1 text-xs text-red-600">{errors.amount.message}</p>}
+        {errors.amount && <p className="mt-1 text-xs text-status-danger-fg">{errors.amount.message}</p>}
       </div>
 
       <div>
-        <label htmlFor="fine-remark" className="mb-1 block font-body text-body-sm-emphasize text-red-700">
+        <label htmlFor="fine-remark" className="mb-1 block font-body text-body-sm-emphasize text-status-danger-fg">
           Remark เหตุผลปรับเงิน (จะส่งไปให้นิสิต)
         </label>
         <Textarea
@@ -66,10 +66,10 @@ export function LiabilityForm({ onSubmit }: LiabilityFormProps) {
           rows={2}
           placeholder="อธิบายสาเหตุสั้นๆ..."
           aria-invalid={!!errors.remark}
-          className="border-red-300"
+          className="border-status-danger-border"
           {...register("remark")}
         />
-        {errors.remark && <p className="mt-1 text-xs text-red-600">{errors.remark.message}</p>}
+        {errors.remark && <p className="mt-1 text-xs text-status-danger-fg">{errors.remark.message}</p>}
       </div>
     </form>
   );
