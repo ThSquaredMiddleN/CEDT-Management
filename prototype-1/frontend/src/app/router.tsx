@@ -59,6 +59,41 @@ const AnnouncementEditPage = lazy(() =>
     default: module.AnnouncementEditPage,
   })),
 );
+const StorageDashboardPage = lazy(() =>
+  import("@/features/storage/routes/StorageDashboardPage").then((module) => ({
+    default: module.StorageDashboardPage,
+  })),
+);
+const BorrowListPage = lazy(() =>
+  import("@/features/storage/routes/BorrowListPage").then((module) => ({
+    default: module.BorrowListPage,
+  })),
+);
+const BorrowDetailPage = lazy(() =>
+  import("@/features/storage/routes/BorrowDetailPage").then((module) => ({
+    default: module.BorrowDetailPage,
+  })),
+);
+const WalkInPage = lazy(() =>
+  import("@/features/storage/routes/WalkInPage").then((module) => ({
+    default: module.WalkInPage,
+  })),
+);
+const ReturnPage = lazy(() =>
+  import("@/features/storage/routes/ReturnPage").then((module) => ({
+    default: module.ReturnPage,
+  })),
+);
+const QCListPage = lazy(() =>
+  import("@/features/storage/routes/QCListPage").then((module) => ({
+    default: module.QCListPage,
+  })),
+);
+const QCDetailPage = lazy(() =>
+  import("@/features/storage/routes/QCDetailPage").then((module) => ({
+    default: module.QCDetailPage,
+  })),
+);
 
 function PageLoading() {
   return (
@@ -167,6 +202,48 @@ export function AppRoutes() {
               <RequireAuth>
                 <AnnouncementEditPage />
               </RequireAuth>
+            }
+          />
+          <Route
+            path="storage"
+            element={
+              <StorageDashboardPage />
+            }
+          />
+          <Route
+            path="storage/borrow"
+            element={
+              <BorrowListPage />
+            }
+          />
+          <Route
+            path="storage/borrow/walk-in"
+            element={
+              <WalkInPage />
+            }
+          />
+          <Route
+            path="storage/borrow/:id"
+            element={
+              <BorrowDetailPage />
+            }
+          />
+          <Route
+            path="storage/return"
+            element={
+              <ReturnPage />
+            }
+          />
+          <Route
+            path="storage/qc"
+            element={
+              <QCListPage />
+            }
+          />
+          <Route
+            path="storage/qc/:id"
+            element={
+              <QCDetailPage />
             }
           />
           <Route path="*" element={<NotFound />} />
