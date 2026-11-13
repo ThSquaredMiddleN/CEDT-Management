@@ -47,7 +47,7 @@ export function NotificationBell() {
     // Decisions on the caller's own requests land on My Requests; everything else (new
     // submissions, withdrawals, cancellations) is queue work on the Dashboard.
     const toMyRequests = n.type === "request_approved" || n.type === "request_rejected";
-    navigate(toMyRequests ? "/requests" : "/admin");
+    navigate(toMyRequests ? "/requests" : "/admin/dashboard");
   };
 
   return (
