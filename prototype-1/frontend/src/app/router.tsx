@@ -59,6 +59,26 @@ const AnnouncementEditPage = lazy(() =>
     default: module.AnnouncementEditPage,
   })),
 );
+const NewsListPage = lazy(() =>
+  import("@/features/news/pages/NewsListPage").then((module) => ({
+    default: module.NewsListPage,
+  })),
+);
+const NewsCreatePage = lazy(() =>
+  import("@/features/news/pages/NewsCreatePage").then((module) => ({
+    default: module.NewsCreatePage,
+  })),
+);
+const NewsDetailPage = lazy(() =>
+  import("@/features/news/pages/NewsDetailPage").then((module) => ({
+    default: module.NewsDetailPage,
+  })),
+);
+const NewsEditPage = lazy(() =>
+  import("@/features/news/pages/NewsEditPage").then((module) => ({
+    default: module.NewsEditPage,
+  })),
+);
 
 function PageLoading() {
   return (
@@ -166,6 +186,38 @@ export function AppRoutes() {
             element={
               <RequireAuth>
                 <AnnouncementEditPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="news"
+            element={
+              <RequireAuth>
+                <NewsListPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="news/create"
+            element={
+              <RequireAuth>
+                <NewsCreatePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="news/:id"
+            element={
+              <RequireAuth>
+                <NewsDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="news/:id/edit"
+            element={
+              <RequireAuth>
+                <NewsEditPage />
               </RequireAuth>
             }
           />

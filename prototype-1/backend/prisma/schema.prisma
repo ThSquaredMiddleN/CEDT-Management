@@ -57,6 +57,24 @@ enum AnnouncementAudience {
   @@map("announcement_audience")
 }
 
+enum NewsStatus {
+  draft
+  published
+
+  @@map("news_status")
+}
+
+enum NewsTag {
+  competition
+  activities
+  scholarship
+  internship
+  academic
+  other
+
+  @@map("news_tag")
+}
+
 enum EventType {
   created
   approved
@@ -103,6 +121,7 @@ model User {
   events              BookingEvent[]
   notifications       Notification[]
   announcements       Announcement[]
+  newsArticles        NewsArticle[]
 
   @@index([role, isActive])
   @@map("users")
@@ -298,4 +317,39 @@ model Announcement {
   @@index([status, updatedAt(sort: Desc)])
   @@index([authorId])
   @@map("announcements")
+}
+
+model NewsArticle {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String      @db.VarChar(200)
+  content     String      @default("") @db.Text
+  tags        NewsTag[]   @default([])
+  status      NewsStatus  @default(draft)
+  authorId    String      @map("author_id") @db.Uuid
+  publishedAt DateTime?   @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  author User       @relation(fields: [authorId], references: [id])
+  images NewsImage[]
+
+  @@index([status, updatedAt(sort: Desc)])
+  @@index([authorId])
+  @@map("news_articles")
+}
+
+model NewsImage {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  newsId       String   @map("news_id") @db.Uuid
+  storageKey   String   @unique @map("storage_key") @db.VarChar(80)
+  originalName String   @map("original_name") @db.VarChar(255)
+  mimeType     String   @map("mime_type") @db.VarChar(32)
+  sizeBytes    Int      @map("size_bytes")
+  position     Int
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  news NewsArticle @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  @@index([newsId, position])
+  @@map("news_images")
 }

@@ -23,11 +23,12 @@ export interface ConflictDetail {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
   const res = await fetch(`/api/v1${path}`, {
     ...init,
     credentials: "include", // send the httpOnly session cookie
     headers: {
-      "Content-Type": "application/json",
+      ...(!isFormData ? { "Content-Type": "application/json" } : {}),
       "X-Requested-With": "XMLHttpRequest", // required by the backend CSRF check on mutations
       ...init.headers,
     },
