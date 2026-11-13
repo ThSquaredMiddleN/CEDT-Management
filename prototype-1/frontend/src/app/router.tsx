@@ -1,10 +1,12 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import type { Role } from "@/api/types";
 import { AdminHome } from "@/features/admin/pages/AdminHome";
 import { AdminLayout } from "@/features/admin/layout/AdminLayout";
 import { StudentHome } from "@/features/student/pages/StudentHome";
 import { StudentLayout } from "@/features/student/layout/StudentLayout";
-import { useAuth } from "./AuthProvider";
+import { roleLanding, useAuth } from "./AuthProvider";
+import { DeferredPage } from "./DeferredPage";
 
 const AdminDashboard = lazy(() =>
   import("@/features/admin-dashboard/AdminDashboard").then((module) => ({
@@ -29,6 +31,11 @@ const LoginPage = lazy(() =>
 const MasterDataPage = lazy(() =>
   import("@/features/master-data/MasterDataPage").then((module) => ({
     default: module.MasterDataPage,
+  })),
+);
+const CourseChangePage = lazy(() =>
+  import("@/features/course-change/CourseChangePage").then((module) => ({
+    default: module.CourseChangePage,
   })),
 );
 const MyRequests = lazy(() =>
@@ -68,7 +75,8 @@ function PageLoading() {
   );
 }
 
-function RequireAuth({ children }: { children: ReactNode }) {
+/** Staff pages are the default; pass `roles` to open a page to students as well. */
+function RequireAuth({ children, roles = ["staff"] }: { children: ReactNode; roles?: Role[] }) {
   const { user } = useAuth();
   const location = useLocation();
 
@@ -76,7 +84,26 @@ function RequireAuth({ children }: { children: ReactNode }) {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
   }
+  if (!roles.includes(user.role)) return <Navigate to={roleLanding(user.role)} replace />;
   return <>{children}</>;
+}
+
+/**
+ * Course Change lives at /course-change for students and /admin/course-change for staff (same
+ * page, role-specific view). Staff who land on the student URL — e.g. from a notification link —
+ * are forwarded to the admin one with the query string intact.
+ */
+function StudentCourseChange() {
+  const { user } = useAuth();
+  const { search } = useLocation();
+  if (user?.role === "staff") return <Navigate to={`/admin/course-change${search}`} replace />;
+  return (
+    <RequireAuth roles={["student"]}>
+      <DeferredPage>
+        <CourseChangePage />
+      </DeferredPage>
+    </RequireAuth>
+  );
 }
 
 function NotFound() {
@@ -99,7 +126,10 @@ export function AppRoutes() {
           {/* Public: anyone can view the calendar without logging in. */}
           <Route path="calendar" element={<CalendarPage />} />
 
-          {/* Staff-only pages — a single `staff` role, so plain auth gating. */}
+          {/* Course Change (ลด / ถอนรายวิชา) — student view. */}
+          <Route path="course-change" element={<StudentCourseChange />} />
+
+          {/* Staff-only pages. */}
           <Route
             path="requests/new"
             element={
@@ -134,6 +164,16 @@ export function AppRoutes() {
             element={
               <RequireAuth>
                 <MasterDataPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="course-change"
+            element={
+              <RequireAuth>
+                <DeferredPage>
+                  <CourseChangePage />
+                </DeferredPage>
               </RequireAuth>
             }
           />

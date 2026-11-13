@@ -7,6 +7,7 @@ import { authRoutes } from "./modules/auth/routes.js";
 import { announcementRoutes } from "./modules/announcements/routes.js";
 import { bookingRoutes } from "./modules/bookings/routes.js";
 import { calendarRoutes } from "./modules/calendar/routes.js";
+import { courseChangeRoutes } from "./modules/course-change/routes.js";
 import { importRoutes } from "./modules/import/routes.js";
 import { masterDataRoutes } from "./modules/masterdata/routes.js";
 import { notificationRoutes } from "./modules/notifications/routes.js";
@@ -36,6 +37,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await v1.register(masterDataRoutes);
       await v1.register(notificationRoutes);
       await v1.register(importRoutes);
+      await v1.register(courseChangeRoutes);
     },
     { prefix: "/api/v1" },
   );

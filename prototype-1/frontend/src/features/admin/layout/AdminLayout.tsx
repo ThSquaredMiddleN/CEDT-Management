@@ -15,7 +15,7 @@ const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
   { label: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements" },
   { label: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon /> },
   { label: "จัดการห้องเรียน", icon: <CalendarIcon /> },
-  { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon /> },
+  { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon />, to: "/admin/course-change" },
   { label: "ยืมอุปกรณ์", icon: <CpuChipIcon /> },
 ];
 

@@ -1,4 +1,4 @@
-export type Role = "staff";
+export type Role = "staff" | "student";
 export type BookingStatus = "pending" | "approved" | "rejected" | "cancelled";
 export type BookingType = "recurring" | "one_off";
 export type RoomType = "lecture" | "lab" | "hardware" | "meeting";
@@ -9,6 +9,7 @@ export interface User {
   email: string;
   role: Role;
   titlePrefix: string | null;
+  studentNo?: string | null;
 }
 
 export interface CalendarOccurrence {
@@ -173,13 +174,19 @@ export type NotificationType =
   | "request_rejected"
   | "booking_moved"
   | "booking_cancelled_by_instructor"
-  | "request_withdrawn";
+  | "request_withdrawn"
+  | "cc_submitted"
+  | "cc_approved"
+  | "cc_rejected"
+  | "cc_completed"
+  | "cc_cancelled";
 
 export interface AppNotification {
   id: string;
   type: NotificationType;
   message: string;
   bookingId: string | null;
+  courseChangeRequestId?: string | null;
   payload: Record<string, unknown>;
   isRead: boolean;
   createdAt: string;
