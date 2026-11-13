@@ -193,6 +193,23 @@ export interface NotificationsResponse {
   pageSize: number;
 }
 
+export type AnnouncementAudience = "all" | "year1" | "year2" | "year3" | "year4";
+export type AnnouncementStatus = "draft" | "published";
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  audiences: AnnouncementAudience[];
+  status: AnnouncementStatus;
+  authorId: string;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AnnouncementInput = Pick<Announcement, "title" | "content" | "audiences">;
+
 /** Affected-bookings list returned with 409 NEEDS_CONFIRM when deactivating master data. */
 export interface AffectedBooking {
   bookingId: string;

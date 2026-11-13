@@ -12,4 +12,6 @@ export const qk = {
   notifications: ["notifications"] as const,
   receipts: ["receipts"] as const,
   receiptList: (params: Record<string, unknown>) => ["receipts", "list", params] as const,
+  announcements: ["announcements"] as const,
+  announcement: (id: string) => ["announcements", "detail", id] as const,
 };

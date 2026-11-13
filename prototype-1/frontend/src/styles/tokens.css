@@ -2,6 +2,11 @@
   --color-primary: #0e0e0e;
   --color-brand-primary: #2a7ae2;
   --color-brand-primary-hover: #2a7ae280;
+  --color-button-primary-hover: #2467c0;
+  --color-button-primary-pressed: #1e559e;
+  --color-button-primary-pressed-border: #2a7ae266;
+  --color-button-primary-disabled-foreground: #2a7ae261;
+  --color-button-primary-disabled-background: #2a7ae21f;
   --color-white: #ffffff;
   --color-surface: #fafafa;
   --color-black: #000000;
@@ -14,6 +19,10 @@
   --color-background: #f8fafc;
 
   --font-family-body: "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+  --shadow-light-6:
+    0 8px 16px rgba(96, 97, 112, 0.16), 0 2px 4px rgba(40, 41, 61, 0.04);
+  --shadow-button:
+    0 8px 16px rgba(96, 97, 112, 0.08), 0 2px 4px rgba(40, 41, 61, 0.02);
 
   --text-display-md-size: 96px;
   --text-display-md-weight: 500;
