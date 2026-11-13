@@ -2,6 +2,7 @@ import { Barcode, Minus, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { IndexTypeBadge } from "./badges";
+import { ItemImage } from "./ItemImage";
 import type { CartLine } from "./useCart";
 
 interface CartManagerProps {
@@ -34,7 +35,9 @@ export function CartManager({
       {lines.map((l) => (
         <li key={l.itemId} className="rounded-lg border border-neutral-200 bg-white p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-3">
+              <ItemImage itemId={l.itemId} name={l.name} />
+              <div className="min-w-0">
               <p className="flex flex-wrap items-center gap-2 font-body text-body-sm-emphasize text-grey-900">
                 {l.name} <IndexTypeBadge isUnique={l.isUnique} />
               </p>
@@ -43,6 +46,7 @@ export function CartManager({
                 มีในคลัง: <span className="font-semibold text-status-success-fg">{l.maxStock}</span> ชิ้น
                 {!showRequested && <> | บาร์โค้ด: {l.itemId}</>}
               </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-3">

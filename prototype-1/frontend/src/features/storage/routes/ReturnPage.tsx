@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { usePendingReturns, useStudentLookup, useSubmitReturn } from "../api/hooks";
 import { IndexTypeBadge } from "../components/badges";
+import { ItemImage } from "../components/ItemImage";
+import { itemLabel } from "../components/itemLabel";
 import { ResultDialog, StoragePage } from "../components/layout";
 import type { ReturnDecision } from "../types";
 
@@ -87,10 +89,13 @@ export function ReturnPage() {
                 const d = decisions[item.id];
                 return (
                   <div key={item.id} className={cn("rounded-lg border border-neutral-200 p-4", d ? "bg-neutral-100" : "bg-white")}>
-                    <p className="mb-4 flex flex-wrap items-center gap-2 font-body text-body-sm-emphasize text-grey-900">
-                      {item.name} <IndexTypeBadge isUnique={item.isUnique} />
-                    </p>
-                    <div role="radiogroup" aria-label={`สถานะ ${item.name}`} className="flex flex-col gap-2 sm:flex-row">
+                    <div className="mb-4 flex items-center gap-3">
+                      <ItemImage itemId={item.itemId} name={item.name} />
+                      <p className="flex flex-wrap items-center gap-2 font-body text-body-sm-emphasize text-grey-900">
+                        {itemLabel(item)} <IndexTypeBadge isUnique={item.isUnique} />
+                      </p>
+                    </div>
+                    <div role="radiogroup" aria-label={`สถานะ ${itemLabel(item)}`} className="flex flex-col gap-2 sm:flex-row">
                       <button
                         type="button" role="radio" aria-checked={d === "RETURNED"}
                         onClick={() => choose(item.id, "RETURNED")}

@@ -9,6 +9,7 @@ import { useBorrowRequest, useConfirmBorrow, useInventory } from "../api/hooks";
 import { TaskStatusBadge } from "../components/badges";
 import { BarcodeScanner } from "../components/BarcodeScanner";
 import { CartManager } from "../components/CartManager";
+import { ItemImage } from "../components/ItemImage";
 import { ResultDialog, StoragePage } from "../components/layout";
 import { useCart, type CatalogEntry } from "../components/useCart";
 import type { BorrowRequest, InventoryItem, PickupDetails } from "../types";
@@ -107,7 +108,10 @@ function Workspace({ req, inventory }: { req: BorrowRequest; inventory: Inventor
                 <ul className="space-y-3">
                   {readOnlyLines.map((l) => (
                     <li key={l.itemId} className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-4 opacity-80">
-                      <span className="font-body text-body-sm-emphasize text-grey-900">{l.name}</span>
+                      <span className="flex items-center gap-3 font-body text-body-sm-emphasize text-grey-900">
+                        <ItemImage itemId={l.itemId} name={l.name} />
+                        {l.name}
+                      </span>
                       <span className="rounded border border-neutral-200 bg-neutral-100 px-4 py-2 font-body text-body-sm-emphasize text-grey-400">
                         จ่ายแล้ว: {l.qty} / ขอ: {l.reqQty}
                       </span>

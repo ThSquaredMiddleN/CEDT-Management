@@ -57,6 +57,13 @@ export const useConfirmBorrow = () =>
       storageApi.confirmBorrow(v.id, v.lines, v.pickup),
   );
 
+export const useAddInventoryItem = () => useStorageMutation(storageApi.addInventoryItem);
+
+export const useSetItemImage = () =>
+  useStorageMutation((v: { id: string; imageUrl: string | undefined }) =>
+    storageApi.setItemImage(v.id, v.imageUrl),
+  );
+
 export const useWalkInCheckout = () =>
   useStorageMutation((v: { studentId: string; groupId: string; lines: IssuedLine[] }) =>
     storageApi.walkInCheckout(v.studentId, v.groupId, v.lines),

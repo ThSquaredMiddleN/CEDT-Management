@@ -7,6 +7,16 @@ export interface InventoryItem {
   damaged: number;
   lost: number;
   total: number;
+  /** One picture per equipment type; serial-numbered units share it. */
+  imageUrl?: string;
+}
+
+export interface NewInventoryItem {
+  id: string;
+  name: string;
+  isUnique: boolean;
+  total: number;
+  imageUrl?: string;
 }
 
 export type BorrowStatus = "OPEN" | "READY_FOR_PICKUP" | "CLOSED" | "UNFULFILLED";
@@ -52,10 +62,14 @@ export interface Student {
   groups: StudentGroup[];
 }
 
+/** Physical thing being returned/inspected. Unique = one unit with a serial; bulk = qty of a type. */
 export interface PendingReturnItem {
   id: string;
-  name: string;
+  itemId: string; // InventoryItem.id
+  name: string; // type name only; serial/qty are rendered separately
   isUnique: boolean;
+  qty: number; // always 1 for unique items
+  serialNumber?: string;
 }
 
 export type ReturnDecision = "RETURNED" | "NOT_BROUGHT";
@@ -65,7 +79,11 @@ export type QCItemStatus = "PENDING_TEST" | "AVAILABLE" | "DAMAGED" | "LOST";
 
 export interface QCItem {
   id: string;
+  itemId: string; // InventoryItem.id
   name: string;
+  isUnique: boolean;
+  qty: number;
+  serialNumber?: string;
   status: QCItemStatus;
 }
 

@@ -1,11 +1,14 @@
 import { Barcode, ClipboardCheck, PackageOpen, Users } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState, SkeletonRow } from "@/components/states";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { useInventory } from "../api/hooks";
+import { useInventory, useSetItemImage } from "../api/hooks";
+import { AddItemDialog } from "../components/AddItemDialog";
 import { IndexTypeBadge } from "../components/badges";
+import { IMAGE_ACCEPT, readItemImage } from "../components/imageFile";
+import { ItemImage } from "../components/ItemImage";
 import { StoragePage } from "../components/layout";
 
 function ActionCard({ to, icon, title, desc, tone }: { to: string; icon: ReactNode; title: string; desc: string; tone: string }) {
@@ -28,6 +31,47 @@ function ActionCard({ to, icon, title, desc, tone }: { to: string; icon: ReactNo
   );
 }
 
+/** Thumbnail that opens a file picker so staff can set or replace an item's picture. */
+function EditableItemImage({ id, name, imageUrl }: { id: string; name: string; imageUrl?: string }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const setImage = useSetItemImage();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-col items-start">
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={setImage.isPending}
+        aria-label={imageUrl ? `เปลี่ยนรูป ${name}` : `เพิ่มรูป ${name}`}
+        title={imageUrl ? "เปลี่ยนรูป" : "เพิ่มรูป"}
+        className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary disabled:opacity-50"
+      >
+        <ItemImage src={imageUrl} name={name} className="size-10 hover:border-brand-primary" />
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        className="sr-only"
+        aria-label={`เลือกไฟล์รูป ${name}`}
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          try {
+            setError(null);
+            setImage.mutate({ id, imageUrl: await readItemImage(file) });
+          } catch (err) {
+            setError((err as Error).message);
+          }
+        }}
+      />
+      {error && <span role="alert" className="mt-1 max-w-32 whitespace-normal text-xs text-status-danger-fg">{error}</span>}
+    </div>
+  );
+}
+
 export function StorageDashboardPage() {
   const { data, isLoading, isError } = useInventory();
 
@@ -44,10 +88,16 @@ export function StorageDashboardPage() {
         <ActionCard to="/admin/storage/qc" icon={<ClipboardCheck />} title="QC & Liability" desc="รอตรวจสภาพ / ปรับเงิน" tone="bg-brand-primary hover:bg-button-primary-hover" />
       </div>
 
+      <div className="flex items-center justify-between">
+        <h2 className="font-body text-body-md-emphasize text-grey-900">รายการอุปกรณ์ในคลัง</h2>
+        <AddItemDialog />
+      </div>
+
       <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
         <Table className="whitespace-nowrap">
           <TableHeader>
             <TableRow>
+              <TableHead>รูป</TableHead>
               <TableHead>Item ID</TableHead>
               <TableHead>ชื่ออุปกรณ์</TableHead>
               <TableHead className="text-center">ประเภท Index</TableHead>
@@ -63,13 +113,14 @@ export function StorageDashboardPage() {
             {isLoading &&
               Array.from({ length: 4 }, (_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={9}>
+                  <TableCell colSpan={10}>
                     <SkeletonRow />
                   </TableCell>
                 </TableRow>
               ))}
             {data?.map((i) => (
               <TableRow key={i.id} className="hover:bg-neutral-50">
+                <TableCell><EditableItemImage id={i.id} name={i.name} imageUrl={i.imageUrl} /></TableCell>
                 <TableCell className="font-mono text-grey-400">{i.id}</TableCell>
                 <TableCell className="font-semibold text-grey-900">{i.name}</TableCell>
                 <TableCell className="text-center"><IndexTypeBadge isUnique={i.isUnique} /></TableCell>

@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils";
 import { ItemStatusBadge } from "./badges";
+import { ItemImage } from "./ItemImage";
+import { itemLabel } from "./itemLabel";
 import type { QCItem, QCItemStatus } from "../types";
 
 type Decision = Exclude<QCItemStatus, "PENDING_TEST">;
@@ -19,8 +21,11 @@ interface QCItemRowProps {
 export function QCItemRow({ item, readOnly, onChange }: QCItemRowProps) {
   if (readOnly) {
     return (
-      <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-neutral-50 p-4 opacity-80">
-        <p className="font-body text-body-sm-emphasize text-grey-700">{item.name}</p>
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4 opacity-80">
+        <div className="flex min-w-0 items-center gap-3">
+          <ItemImage itemId={item.itemId} name={item.name} />
+          <p className="font-body text-body-sm-emphasize text-grey-700">{itemLabel(item)}</p>
+        </div>
         <ItemStatusBadge status={item.status} />
       </div>
     );
@@ -33,8 +38,11 @@ export function QCItemRow({ item, readOnly, onChange }: QCItemRowProps) {
         item.status === "PENDING_TEST" ? "bg-neutral-50" : "bg-white shadow-sm",
       )}
     >
-      <p className="mb-3 font-body text-body-sm-emphasize text-grey-900">{item.name}</p>
-      <div role="radiogroup" aria-label={`สถานะ ${item.name}`} className="flex flex-col gap-2 sm:flex-row">
+      <div className="mb-3 flex items-center gap-3">
+        <ItemImage itemId={item.itemId} name={item.name} />
+        <p className="font-body text-body-sm-emphasize text-grey-900">{itemLabel(item)}</p>
+      </div>
+      <div role="radiogroup" aria-label={`สถานะ ${itemLabel(item)}`} className="flex flex-col gap-2 sm:flex-row">
         {OPTIONS.map((o) => (
           <button
             key={o.value}

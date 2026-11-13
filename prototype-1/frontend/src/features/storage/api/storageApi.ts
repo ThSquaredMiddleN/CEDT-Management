@@ -2,6 +2,7 @@ import type {
   BorrowRequest,
   InventoryItem,
   IssuedLine,
+  NewInventoryItem,
   PendingReturnItem,
   PickupDetails,
   QCRequest,
@@ -47,6 +48,33 @@ function deductStock(lines: IssuedLine[]) {
 
 export const storageApi = {
   getInventory: (): Promise<InventoryItem[]> => delay(inventory),
+
+  /** Register a new equipment type; all units start as available. */
+  addInventoryItem: async (input: NewInventoryItem): Promise<InventoryItem> => {
+    const id = input.id.trim().toUpperCase();
+    if (inventory.some((i) => i.id === id)) return fail(`รหัสอุปกรณ์ ${id} มีอยู่แล้ว`);
+    const item: InventoryItem = {
+      id,
+      name: input.name.trim(),
+      isUnique: input.isUnique,
+      available: input.total,
+      qc: 0,
+      damaged: 0,
+      lost: 0,
+      total: input.total,
+      imageUrl: input.imageUrl,
+    };
+    inventory.push(item);
+    return delay(item);
+  },
+
+  /** Mock stores the data URL in memory; a real backend would upload the file and keep its URL. */
+  setItemImage: async (id: string, imageUrl: string | undefined): Promise<InventoryItem> => {
+    const item = inventory.find((i) => i.id === id);
+    if (!item) return fail("ไม่พบอุปกรณ์");
+    item!.imageUrl = imageUrl;
+    return delay(item!);
+  },
 
   getBorrowRequests: (): Promise<BorrowRequest[]> => delay(borrowRequests),
 
@@ -109,8 +137,13 @@ export const storageApi = {
         status: "OPEN",
         fineAmount: 0,
         fineRemark: "",
-        items: received.map((i) => ({ id: i.id, name: i.name, status: "PENDING_TEST" as const })),
+        items: received.map((i) => ({ ...i, status: "PENDING_TEST" as const })),
       });
+      // Received units leave "out with student" and wait in the QC bucket.
+      for (const i of received) {
+        const stock = inventory.find((s) => s.id === i.itemId);
+        if (stock) stock.qc += i.qty;
+      }
     }
     pendingReturns[studentId] = [];
     return delay({ queued: received.length });
@@ -130,9 +163,26 @@ export const storageApi = {
     if (req!.status !== "OPEN") return fail("รายการนี้ถูกตรวจแล้ว");
     const hasLiability = sub.items.some((i) => i.status === "DAMAGED" || i.status === "LOST");
     if (hasLiability && !(sub.fineAmount > 0)) return fail("กรุณาระบุยอดค่าปรับ");
-    for (const s of sub.items) {
+    // Validate first so a bad submission never leaves stock half-updated.
+    const moves = sub.items.flatMap((s) => {
       const it = req!.items.find((i) => i.id === s.id);
-      if (it) it.status = s.status;
+      return it && it.status === "PENDING_TEST" ? [{ it, to: s.status }] : [];
+    });
+    if (moves.length !== req!.items.filter((i) => i.status === "PENDING_TEST").length) {
+      return fail("ยังระบุผลตรวจไม่ครบทุกรายการ");
+    }
+    const bucket = { AVAILABLE: "available", DAMAGED: "damaged", LOST: "lost" } as const;
+    for (const { it } of moves) {
+      const stock = inventory.find((s) => s.id === it.itemId);
+      if (stock && stock.qc < it.qty) return fail(`ยอด QC ของ ${stock.name} ไม่ตรงกับรายการ`);
+    }
+    for (const { it, to } of moves) {
+      const stock = inventory.find((s) => s.id === it.itemId);
+      if (stock) {
+        stock.qc -= it.qty;
+        stock[bucket[to]] += it.qty;
+      }
+      it.status = to;
     }
     req!.fineAmount = hasLiability ? sub.fineAmount : 0;
     req!.fineRemark = hasLiability ? sub.fineRemark : "";

@@ -1,8 +1,9 @@
-import { Barcode, Camera, CameraOff, Search } from "lucide-react";
+import { Camera, CameraOff, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IndexTypeBadge } from "./badges";
+import { ItemImage } from "./ItemImage";
 import { useCameraScan } from "./useCameraScan";
 import type { CatalogEntry } from "./useCart";
 
@@ -124,7 +125,7 @@ export function BarcodeScanner({ catalog, onScan, disabled }: BarcodeScannerProp
                 className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white p-3 text-left transition-colors hover:border-brand-primary disabled:opacity-50"
               >
                 <span className="flex min-w-0 items-center gap-2 font-body text-body-sm-emphasize text-grey-900">
-                  <Barcode className="size-4 shrink-0 text-grey-200" aria-hidden="true" />
+                  <ItemImage itemId={c.itemId} name={c.name} className="size-8" />
                   <span className="truncate">{c.name}</span>
                 </span>
                 <IndexTypeBadge isUnique={c.isUnique} />

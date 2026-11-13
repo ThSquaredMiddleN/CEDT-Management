@@ -12,9 +12,10 @@ import type {
  * fetch calls later without touching components or hooks.
  */
 export const inventory: InventoryItem[] = [
-  { id: "EQ-001", name: "Raspberry Pi 5 (8GB)", isUnique: true, available: 6, qc: 2, damaged: 2, lost: 0, total: 10 },
-  { id: "EQ-002", name: "Breadboard 830 Points", isUnique: false, available: 42, qc: 5, damaged: 3, lost: 0, total: 50 },
-  { id: "EQ-003", name: "Jumper Wire (M-M)", isUnique: false, available: 150, qc: 0, damaged: 40, lost: 10, total: 200 },
+  // total = available + qc + damaged + lost + units currently out with students.
+  { id: "EQ-001", name: "Raspberry Pi 5 (8GB)", isUnique: true, available: 5, qc: 2, damaged: 2, lost: 1, total: 11 },
+  { id: "EQ-002", name: "Breadboard 830 Points", isUnique: false, available: 42, qc: 5, damaged: 3, lost: 0, total: 55 },
+  { id: "EQ-003", name: "Jumper Wire (M-M)", isUnique: false, available: 145, qc: 5, damaged: 40, lost: 10, total: 200 },
   { id: "EQ-004", name: "Servo Motor SG90", isUnique: true, available: 20, qc: 0, damaged: 0, lost: 0, total: 20 },
 ];
 
@@ -57,8 +58,8 @@ export const students: Student[] = [
 /** Items a student still owes, keyed by studentId (Face-to-Face return). */
 export const pendingReturns: Record<string, PendingReturnItem[]> = {
   "6632199921": [
-    { id: "f1", name: "Raspberry Pi 5 [SN: EQ-001-451]", isUnique: true },
-    { id: "f2", name: "Breadboard 830 Points (เหมาชนิด 5 ชิ้น)", isUnique: false },
+    { id: "f1", itemId: "EQ-001", name: "Raspberry Pi 5 (8GB)", isUnique: true, qty: 1, serialNumber: "EQ-001-451" },
+    { id: "f2", itemId: "EQ-002", name: "Breadboard 830 Points", isUnique: false, qty: 5 },
   ],
 };
 
@@ -66,23 +67,23 @@ export const qcRequests: QCRequest[] = [
   {
     id: "REQ-R-201", type: "Course - IoT System", group: "Group 09", user: "ภาคภูมิ", status: "OPEN", fineAmount: 0, fineRemark: "",
     items: [
-      { id: "q1", name: "Raspberry Pi 5 [SN: EQ-001-101]", status: "PENDING_TEST" },
-      { id: "q2", name: "Raspberry Pi 5 [SN: EQ-001-102]", status: "PENDING_TEST" },
-      { id: "q3", name: "Breadboard 830 Points (เหมาชนิด)", status: "PENDING_TEST" },
+      { id: "q1", itemId: "EQ-001", name: "Raspberry Pi 5 (8GB)", isUnique: true, qty: 1, serialNumber: "EQ-001-101", status: "PENDING_TEST" },
+      { id: "q2", itemId: "EQ-001", name: "Raspberry Pi 5 (8GB)", isUnique: true, qty: 1, serialNumber: "EQ-001-102", status: "PENDING_TEST" },
+      { id: "q3", itemId: "EQ-002", name: "Breadboard 830 Points", isUnique: false, qty: 5, status: "PENDING_TEST" },
     ],
   },
   {
     id: "REQ-R-202", type: "Course - Hardware", group: "Group 02", user: "สมชาย", status: "PENDING_PAYMENT", fineAmount: 1500,
     fineRemark: "Raspberry Pi สูญหาย 1 เครื่อง",
-    items: [{ id: "q4", name: "Raspberry Pi 5 [SN: EQ-001-205]", status: "LOST" }],
+    items: [{ id: "q4", itemId: "EQ-001", name: "Raspberry Pi 5 (8GB)", isUnique: true, qty: 1, serialNumber: "EQ-001-205", status: "LOST" }],
     slip: { amount: 1500, transferredAt: "28 ต.ค. 2026 14:30", refCode: "REF-889021" },
   },
   {
     id: "REQ-R-203", type: "Personal", group: "โปรเจกต์ส่วนตัว", user: "นพดล", status: "CLOSED", fineAmount: 0, fineRemark: "",
-    items: [{ id: "q5", name: "Servo Motor SG90 [SN: EQ-004-017]", status: "AVAILABLE" }],
+    items: [{ id: "q5", itemId: "EQ-004", name: "Servo Motor SG90", isUnique: true, qty: 1, serialNumber: "EQ-004-017", status: "AVAILABLE" }],
   },
   {
     id: "REQ-R-204", type: "Custom", group: "ชมรมหุ่นยนต์", user: "วิภาดา", status: "OPEN", fineAmount: 0, fineRemark: "",
-    items: [{ id: "q6", name: "Jumper Wire (M-M) (เหมาชนิด)", status: "PENDING_TEST" }],
+    items: [{ id: "q6", itemId: "EQ-003", name: "Jumper Wire (M-M)", isUnique: false, qty: 5, status: "PENDING_TEST" }],
   },
 ];
