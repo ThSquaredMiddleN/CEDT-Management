@@ -26,11 +26,16 @@ export const currentTerm = (): string => termFor(new Date());
 
 /** The newest `count` distinct terms, current term first. Walks back one month at a time. */
 export function recentTerms(count: number): string[] {
-  const now = new Date();
+  // Start from this month in APP_TZ, not UTC: in the first hours of a Bangkok month UTC is still in the previous
+  // one, and the current term (the page's default filter) would be missing from the list.
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: APP_TZ, year: "numeric", month: "numeric" })
+    .formatToParts(new Date());
+  const year = Number(parts.find((p) => p.type === "year")?.value);
+  const month = Number(parts.find((p) => p.type === "month")?.value) - 1;
   const out: string[] = [];
   for (let back = 0; out.length < count && back < 120; back++) {
     // Mid-month noon keeps the calendar month unambiguous in APP_TZ.
-    const probe = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 15, 12));
+    const probe = new Date(Date.UTC(year, month - back, 15, 12));
     const term = termFor(probe);
     if (!out.includes(term)) out.push(term);
   }
