@@ -1,7 +1,9 @@
-import { Barcode, Camera, Search } from "lucide-react";
+import { Barcode, Camera, CameraOff, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IndexTypeBadge } from "./badges";
+import { useCameraScan } from "./useCameraScan";
 import type { CatalogEntry } from "./useCart";
 
 interface BarcodeScannerProps {
@@ -13,7 +15,8 @@ interface BarcodeScannerProps {
 /**
  * Hardware scanners type the barcode and press Enter, so the search box doubles
  * as the scanner input: an exact barcode match on Enter is a scan. The camera
- * area and result buttons stand in for the real scanner during the demo.
+ * uses BarcodeDetector (native or ZXing-WASM fallback); the result buttons
+ * remain as a manual fallback.
  */
 export function BarcodeScanner({ catalog, onScan, disabled }: BarcodeScannerProps) {
   const [query, setQuery] = useState("");
@@ -24,17 +27,64 @@ export function BarcodeScanner({ catalog, onScan, disabled }: BarcodeScannerProp
     return catalog.filter((c) => c.name.toLowerCase().includes(q) || c.barcode.toLowerCase().includes(q));
   }, [catalog, query]);
 
+  const [notice, setNotice] = useState<string | null>(null);
+
   const scan = (entry: CatalogEntry) => {
     if (disabled) return;
+    setNotice(null);
     onScan(entry);
   };
 
+  const handleCode = (code: string) => {
+    const hit = catalog.find((c) => c.barcode.toLowerCase() === code.toLowerCase());
+    if (hit) scan(hit);
+    else setNotice(`ไม่พบบาร์โค้ด "${code}" ในรายการที่จ่ายได้`);
+  };
+
+  const camera = useCameraScan(handleCode);
+  const cameraOn = camera.state === "scanning" || camera.state === "starting";
+
   return (
     <div className="space-y-4">
-      <div className="relative flex aspect-video flex-col items-center justify-center overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400">
-        <Camera className="mb-2 size-9 text-neutral-600" aria-hidden="true" />
-        <span className="font-body text-body-xs text-neutral-500">พื้นที่แสดงภาพกล้องสแกนบาร์โค้ด</span>
-        <div className="absolute top-1/2 h-0.5 w-full bg-brand-primary/50 shadow-[0_0_8px_2px_rgba(42,122,226,0.6)]" />
+      <div className="space-y-2">
+        <div className="relative flex aspect-video flex-col items-center justify-center overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400">
+          <video
+            ref={camera.videoRef}
+            muted
+            playsInline
+            className={cameraOn ? "absolute inset-0 size-full object-cover" : "hidden"}
+          />
+          {!cameraOn && (
+            <>
+              {camera.state === "error" ? (
+                <CameraOff className="mb-2 size-9 text-neutral-600" aria-hidden="true" />
+              ) : (
+                <Camera className="mb-2 size-9 text-neutral-600" aria-hidden="true" />
+              )}
+              <span className="px-4 text-center font-body text-body-xs text-neutral-500">
+                {camera.error ?? "กดเปิดกล้องเพื่อสแกนบาร์โค้ด"}
+              </span>
+            </>
+          )}
+          {camera.state === "scanning" && (
+            <div className="absolute top-1/2 h-0.5 w-full bg-brand-primary/60 shadow-[0_0_8px_2px_rgba(42,122,226,0.6)]" />
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          disabled={disabled || camera.state === "starting"}
+          onClick={cameraOn ? camera.stop : camera.start}
+        >
+          {cameraOn ? "ปิดกล้อง" : "เปิดกล้องสแกน"}
+        </Button>
+        {notice && (
+          <p role="status" className="text-center text-xs text-red-600">
+            {notice}
+          </p>
+        )}
       </div>
 
       <div className="relative">

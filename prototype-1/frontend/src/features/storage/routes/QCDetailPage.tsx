@@ -7,12 +7,13 @@ import { cn } from "@/lib/utils";
 import { useQCRequest, useSubmitQC, useVerifySlip } from "../api/hooks";
 import { ResultDialog, StoragePage } from "../components/layout";
 import { LIABILITY_FORM_ID, LiabilityForm, type LiabilityValues } from "../components/LiabilityForm";
+import { PromptPayQR } from "../components/PromptPayQR";
 import { QCItemRow } from "../components/QCItemRow";
 import type { QCItemStatus, QCRequest } from "../types";
 
 type Decision = Exclude<QCItemStatus, "PENDING_TEST">;
 
-type Outcome = { title: string; message: string };
+type Outcome = { title: string; message: string; qrAmount?: number };
 
 function InspectView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) => void }) {
   const submitQC = useSubmitQC();
@@ -43,6 +44,7 @@ function InspectView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) => 
               : {
                   title: "สร้างบิลสำเร็จ",
                   message: "Task เปลี่ยนสถานะเป็น PENDING_PAYMENT และส่ง QR Code ให้กลุ่มเรียบร้อย (Task ยังไม่ปิด)",
+                  qrAmount: fineAmount,
                 },
           ),
       },
@@ -157,6 +159,11 @@ function SlipVerifyView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) 
               )}
             </dl>
 
+            <div className="mb-4 flex items-center gap-4 rounded-xl border border-neutral-200 p-4">
+              <PromptPayQR amount={req.fineAmount} size={96} />
+              <p className="text-xs text-grey-400">QR PromptPay ที่ส่งให้นิสิต ใช้เทียบยอดกับสลิป</p>
+            </div>
+
             {verify.isError && <p role="alert" className="mb-3 text-sm text-red-600">{(verify.error as Error).message}</p>}
             <div className="space-y-3">
               <Button className="w-full bg-green-600 hover:bg-green-700" size="lg" disabled={verify.isPending} onClick={() => act(true)}>
@@ -195,7 +202,14 @@ export function QCDetailPage() {
         title={outcome?.title ?? ""}
         message={outcome?.message ?? ""}
         onClose={() => navigate("/admin/storage/qc")}
-      />
+      >
+        {outcome?.qrAmount ? (
+          <div className="flex flex-col items-center gap-2">
+            <PromptPayQR amount={outcome.qrAmount} />
+            <p className="text-sm font-bold text-red-600">{outcome.qrAmount.toLocaleString()} บาท</p>
+          </div>
+        ) : null}
+      </ResultDialog>
     </StoragePage>
   );
 }

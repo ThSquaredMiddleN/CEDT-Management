@@ -44,11 +44,13 @@ export function ResultDialog({
   title,
   message,
   onClose,
+  children,
 }: {
   open: boolean;
   title: string;
   message: string;
   onClose: () => void;
+  children?: ReactNode;
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -58,6 +60,7 @@ export function ResultDialog({
         </div>
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription className="whitespace-pre-line">{message}</DialogDescription>
+        {children}
         <DialogFooter className="w-full">
           <Button variant="default" className="w-full" onClick={onClose}>
             ตกลง
