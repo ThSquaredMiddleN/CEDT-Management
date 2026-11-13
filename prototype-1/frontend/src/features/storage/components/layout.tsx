@@ -62,7 +62,7 @@ export function ResultDialog({
         <DialogDescription className="whitespace-pre-line">{message}</DialogDescription>
         {children}
         <DialogFooter className="w-full">
-          <Button variant="default" className="w-full" onClick={onClose}>
+          <Button variant="filled" size="medium" className="w-full" onClick={onClose}>
             ตกลง
           </Button>
         </DialogFooter>

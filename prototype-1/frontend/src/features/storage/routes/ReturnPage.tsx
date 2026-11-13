@@ -47,7 +47,7 @@ export function ReturnPage() {
               }}
             >
               <Input id="ret-sid" value={studentId} onChange={(e) => setStudentId(e.target.value)} className="h-10" />
-              <Button type="submit" variant="default" size="lg" className="px-5" loading={lookup.isPending}>ดึงข้อมูล</Button>
+              <Button type="submit" variant="filled" size="lg" className="px-5" loading={lookup.isPending}>ดึงข้อมูล</Button>
             </form>
             {lookup.isError && <p role="alert" className="mt-2 text-sm text-status-danger-fg">{(lookup.error as Error).message}</p>}
 
@@ -119,7 +119,7 @@ export function ReturnPage() {
 
           {submit.isError && <p role="alert" className="mt-3 text-sm text-status-danger-fg">{(submit.error as Error).message}</p>}
           <Button
-            variant="default" size="lg" className="mt-6 w-full"
+            variant="filled" size="lg" className="mt-6 w-full"
             disabled={!allProcessed || submit.isPending} loading={submit.isPending}
             onClick={() =>
               submit.mutate(

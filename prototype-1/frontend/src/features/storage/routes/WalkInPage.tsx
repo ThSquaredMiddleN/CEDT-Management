@@ -54,7 +54,7 @@ function Workspace({ inventory }: { inventory: InventoryItem[] }) {
               }}
             >
               <Input id="walkin-sid" value={studentId} onChange={(e) => setStudentId(e.target.value)} className="h-10" />
-              <Button type="submit" variant="default" size="lg" className="px-5" loading={lookup.isPending}>
+              <Button type="submit" variant="filled" size="lg" className="px-5" loading={lookup.isPending}>
                 ดึงข้อมูล
               </Button>
             </form>
@@ -106,7 +106,7 @@ function Workspace({ inventory }: { inventory: InventoryItem[] }) {
             <BarcodeScanner catalog={catalog} onScan={cart.scan} />
             {checkout.isError && <p role="alert" className="text-sm text-status-danger-fg">{(checkout.error as Error).message}</p>}
             <Button
-              variant="default"
+              variant="filled"
               size="lg"
               className="w-full"
               disabled={!canSubmit}

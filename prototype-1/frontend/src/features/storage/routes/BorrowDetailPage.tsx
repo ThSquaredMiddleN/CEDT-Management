@@ -171,7 +171,7 @@ function Workspace({ req, inventory }: { req: BorrowRequest; inventory: Inventor
               {confirm.isError && (
                 <p role="alert" className="text-sm text-status-danger-fg">{(confirm.error as Error).message}</p>
               )}
-              <Button variant="default" size="lg" className="w-full" disabled={!canSubmit} loading={confirm.isPending} onClick={submit}>
+              <Button variant="filled" size="lg" className="w-full" disabled={!canSubmit} loading={confirm.isPending} onClick={submit}>
                 ยืนยันการจัดเตรียม (ส่งแจ้งเตือน)
               </Button>
               {cart.totalQty === 0 && (

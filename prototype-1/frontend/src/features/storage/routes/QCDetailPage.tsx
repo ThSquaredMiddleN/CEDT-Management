@@ -52,13 +52,13 @@ function InspectView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) => 
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white md:flex-row">
-        <div className={cn("flex flex-col p-6 text-white md:w-1/3", readOnly ? "bg-grey-400" : "bg-grey-900")}>
-          <h2 className="mb-4 font-body text-header-xs-emphasize text-status-warning-fg">QC & ปรับไหม</h2>
+        <div className={cn("flex flex-col p-6 text-white md:w-1/3", readOnly ? "bg-grey-400" : "bg-brand-primary")}>
+          <h2 className="mb-4 font-body text-header-xs-emphasize text-white">QC & ปรับไหม</h2>
           <div className="rounded-xl border border-white/10 bg-white/10 p-5">
             <p className="mb-1 text-xs uppercase tracking-wider text-grey-200">กลุ่มที่ทำรายการ</p>
-            <p className="mb-4 flex items-center gap-2 font-bold"><Users className="size-4 text-status-warning-fg" /> {req.group}</p>
+            <p className="mb-4 flex items-center gap-2 font-bold"><Users className="size-4 text-white/80" /> {req.group}</p>
             <p className="mb-1 text-xs uppercase tracking-wider text-grey-200">ผู้ส่งคืน</p>
-            <p className="flex items-center gap-2 text-sm font-bold"><User className="size-4 text-status-warning-fg" /> {req.user}</p>
+            <p className="flex items-center gap-2 text-sm font-bold"><User className="size-4 text-white/80" /> {req.user}</p>
           </div>
         </div>
 
@@ -91,9 +91,9 @@ function InspectView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) => 
 
           {!readOnly && (
             <Button
-              variant="default"
+              variant="filled"
               size="lg"
-              className={cn("w-full", hasLiability && "bg-status-danger-solid hover:bg-status-danger-fg")}
+              className="w-full"
               disabled={!allProcessed || submitQC.isPending}
               loading={submitQC.isPending}
               // With liability the form (zod-validated) submits; otherwise close directly.
@@ -129,7 +129,7 @@ function SlipVerifyView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) 
   return (
     <>
       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-        <div className="flex items-center justify-between bg-status-warning-solid p-5 text-white">
+        <div className="flex items-center justify-between bg-brand-primary p-5 text-white">
           <h2 className="font-body text-body-md-emphasize">ตรวจสอบสลิปโอนเงิน (PENDING_PAYMENT)</h2>
           <span className="rounded-lg bg-white/20 px-3 py-1 text-sm font-bold">{req.group}</span>
         </div>

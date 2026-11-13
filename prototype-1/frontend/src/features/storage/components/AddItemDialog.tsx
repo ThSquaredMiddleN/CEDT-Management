@@ -209,7 +209,7 @@ export function AddItemDialog() {
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 ยกเลิก
               </Button>
-              <Button type="submit" variant="default" loading={add.isPending}>
+              <Button type="submit" variant="filled" size="medium" className="px-6" loading={add.isPending}>
                 บันทึก
               </Button>
             </DialogFooter>
