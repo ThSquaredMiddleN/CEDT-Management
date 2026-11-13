@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { config } from "../../config.js";
-import { prisma } from "../../db.js";
+import { prisma, type Tx } from "../../db.js";
 import { AppError, notFound } from "../../lib/errors.js";
 
 /** Receipts are buffered in memory (max 10 MB) and forwarded to the OCR sidecar; nothing is written to disk. */
@@ -67,6 +67,9 @@ async function askSidecar(
 
   if (res.status === 503) throw new OcrUnavailableError();
   if (res.status === 413) throw new AppError("PAYLOAD_TOO_LARGE", "Receipt file is over 10 MB");
+  if (res.status === 422) {
+    throw new AppError("VALIDATION", "Could not read this receipt. Try a clearer screenshot or the PDF.");
+  }
   if (res.status === 415) {
     throw new AppError("UNSUPPORTED_MEDIA_TYPE", "Only PDF, JPEG or PNG receipts are accepted");
   }
@@ -157,29 +160,42 @@ export async function checkReceipt(input: CheckInput) {
   const sidecar = await askSidecar(input.file, input.studentId, term);
 
   const columns = columnsFrom(sidecar.fields);
-  const dup = columns.reference
-    ? await prisma.receiptCheck.findFirst({
-        where: { reference: columns.reference, NOT: { studentId: input.studentId, term } },
-        select: { studentId: true, term: true },
-        orderBy: { createdAt: "desc" },
-      })
-    : null;
+  const reference = columns.reference;
 
-  const checks = applyReferenceCheck(sidecar.checks, columns.reference, dup);
-  const data = {
-    kind: sidecar.kind,
-    ...columns,
-    checks,
-    verdict: verdictOf(checks),
-    checkedById: input.checkedById,
+  // The duplicate lookup and the save. A re-check replaces the earlier row, so it starts a new retention clock.
+  const save = async (db: Tx) => {
+    const dup = reference
+      ? await db.receiptCheck.findFirst({
+          where: { reference, NOT: { studentId: input.studentId, term } },
+          select: { studentId: true, term: true },
+          orderBy: { createdAt: "desc" },
+        })
+      : null;
+
+    const checks = applyReferenceCheck(sidecar.checks, reference, dup);
+    const data = {
+      kind: sidecar.kind,
+      ...columns,
+      checks,
+      verdict: verdictOf(checks),
+      checkedById: input.checkedById,
+    };
+
+    return db.receiptCheck.upsert({
+      where: { studentId_term: { studentId: input.studentId, term } },
+      create: { studentId: input.studentId, term, ...data },
+      update: { ...data, createdAt: new Date() },
+    });
   };
 
-  // A re-check replaces the earlier row, so it starts a new retention clock.
-  const check = await prisma.receiptCheck.upsert({
-    where: { studentId_term: { studentId: input.studentId, term } },
-    create: { studentId: input.studentId, term, ...data },
-    update: { ...data, createdAt: new Date() },
-  });
+  // With a reference, the lookup and the save run in one transaction holding an advisory lock on that reference:
+  // two concurrent checks with the same reference cannot both read "no duplicate" before either one saves.
+  const check = reference
+    ? await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${reference}))`;
+        return save(tx);
+      })
+    : await save(prisma);
 
   return { check, fields: sidecar.fields };
 }

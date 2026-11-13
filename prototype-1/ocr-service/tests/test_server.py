@@ -9,6 +9,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 from urllib.parse import urlencode
 
 import helpers  # noqa: F401  (puts the service folder on sys.path)
@@ -20,6 +21,9 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"synthetic test image, the stub ignores the conten
 
 # Fake paddle worker: same stdin/stdout protocol as paddle_worker.py, without Paddle. It prints a non-@@ line
 # (Paddle logs do this), answers stub words, errors on a body starting with FAIL, exits on EXIT.
+# Warm-up test worker: prints "@@ready", then one "@@[]" per stdin line.
+WARM_WORKER = 'import sys\nprint("@@ready", flush=True)\nfor _ in sys.stdin:\n    print("@@[]", flush=True)\n'
+
 FAKE_WORKER = """
 import json, sys
 sys.path.insert(0, {service!r})
@@ -49,6 +53,10 @@ class ServerCase(unittest.TestCase):
         self.saved = {k: os.environ.get(k) for k in ("OCR_ENGINE", "OCR_TMPDIR", "PADDLE_PYTHON")}
         os.environ["OCR_ENGINE"] = self.engine_name
         os.environ["OCR_TMPDIR"] = self.tmp
+        self.upload_dir = Path(self.tmp) / "cedt-ocr-uploads"  # UPLOAD_DIR is read at import, so patch it
+        patcher = mock.patch.object(server, "UPLOAD_DIR", self.upload_dir)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.httpd = make_server(port=0)
         self.port = self.httpd.server_address[1]
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
@@ -80,12 +88,32 @@ class ServerCase(unittest.TestCase):
         return self.request("POST", path, body=body, headers={"Content-Type": ctype})
 
     def temp_files(self):
-        return os.listdir(self.tmp)
+        return os.listdir(self.upload_dir)
 
 
 class StubServerTest(ServerCase):
     def test_health(self):
-        self.assertEqual(self.request("GET", "/health"), (200, {"ok": True, "engine": "stub"}))
+        self.assertEqual(self.request("GET", "/health"),
+                         (200, {"ok": True, "engine": "stub", "ready": True}))
+
+    def test_undeletable_temp_file_does_not_change_the_response(self):
+        with mock.patch.object(server.os, "remove", side_effect=PermissionError("in use")):
+            with self.assertLogs("ocr", level="ERROR") as cm:
+                status, body = self.post(PNG, "image/png", term="1/2569", student_id="6800000021")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["kind"], "screenshot")
+        self.assertEqual(body["fields"]["amount"]["value"], "21,000.00")
+        joined = "\n".join(cm.output)
+        self.assertIn("temp file not deleted", joined)
+        self.assertNotIn(str(self.upload_dir), joined)  # no path in the log
+
+    def test_stray_file_in_upload_dir_is_swept_by_make_server(self):
+        stray = self.upload_dir / "left-by-a-crash.pdf"
+        stray.write_bytes(b"left behind by an earlier run")
+        second = make_server(port=0)
+        self.addCleanup(second.server_close)
+        self.assertFalse(stray.exists())
+        self.assertTrue(self.upload_dir.is_dir())
 
     def test_unknown_path_is_404(self):
         self.assertEqual(self.request("GET", "/nope")[0], 404)
@@ -219,7 +247,8 @@ class PaddleServerTest(ServerCase):
         self.assertEqual(status, 200)  # "@@ready" and the log line are handled; words come back
         self.assertEqual(body["fields"]["amount"]["value"], "21,000.00")
 
-        self.assertEqual(self.post(b"FAIL", "image/png")[0], 500)  # worker reports an error, stays alive
+        self.assertEqual(self.post(b"FAIL", "image/png"),  # worker reports an error, stays alive
+                         (422, {"error": "could not read this image"}))
         self.assertEqual(self.post(PNG, "image/png")[0], 200)
 
         self.assertEqual(self.post(b"EXIT", "image/png")[0], 503)  # worker dies mid-request
@@ -236,6 +265,33 @@ class PaddleServerTest(ServerCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["fields"]["semester"]["value"], "1/2569")
         self.assertEqual(self.temp_files(), [])
+
+
+class PaddleWarmTest(unittest.TestCase):
+    """warm() starts the worker before any request; a failed start is logged and swallowed (the next request retries)."""
+
+    def setUp(self):
+        worker_dir = tempfile.mkdtemp(prefix="ocr-warm-worker-")  # not OCR_TMPDIR
+        self.addCleanup(shutil.rmtree, worker_dir, ignore_errors=True)
+        self.worker = Path(worker_dir) / "warm_worker.py"
+        self.worker.write_text(WARM_WORKER, encoding="utf-8")
+
+    def test_warm_starts_worker_before_the_first_request(self):
+        engine = PaddleEngine(sys.executable, worker=self.worker, timeout=10)
+        self.addCleanup(engine.close)
+        self.assertFalse(engine.ready)
+        engine.warm()
+        self.assertTrue(engine.ready)
+        self.assertIsNone(engine.proc.poll())  # the worker is running
+        self.assertEqual(engine.words(str(self.worker)), [])
+        self.assertTrue(engine.ready)
+
+    def test_warm_failure_is_logged_not_raised(self):
+        missing = self.worker.parent / "no-such-python.exe"
+        engine = PaddleEngine(str(missing), worker=self.worker, timeout=10)
+        with self.assertLogs("ocr", level="WARNING"):
+            engine.warm()  # must not raise
+        self.assertFalse(engine.ready)
 
 
 if __name__ == "__main__":

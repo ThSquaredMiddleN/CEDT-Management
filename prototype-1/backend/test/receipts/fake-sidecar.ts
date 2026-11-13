@@ -72,6 +72,11 @@ export function sidecarOk(
   };
 }
 
+/** The sidecar's answer when it cannot read the image (its 422 body). */
+export function sidecarUnreadable(): SidecarReply {
+  return { status: 422, body: { error: "could not read this image" } };
+}
+
 /** Local stand-in for the Python OCR sidecar. Listens on a random localhost port. */
 export async function startFakeSidecar(): Promise<FakeSidecar> {
   const calls: SidecarCall[] = [];

@@ -6,8 +6,8 @@ Localhost only by default. Nothing is kept: an upload goes to a temp file that i
 sent. Logs carry method, path, status and time only: no bodies, field values, file names or query strings.
 Do not point this at a cloud OCR API.
 
-Env: OCR_ENGINE (paddle | stub, default paddle), OCR_HOST, OCR_PORT, OCR_TMPDIR (folder for upload temp files),
-PADDLE_PYTHON (interpreter for paddle_worker.py, default this one), PADDLE_DEVICE and PADDLE_PDX_CACHE_HOME
+Env: OCR_ENGINE (paddle | stub, default paddle), OCR_HOST, OCR_PORT, OCR_TMPDIR (parent folder; uploads go to its
+cedt-ocr-uploads subfolder, read once at import), PADDLE_PYTHON (interpreter for paddle_worker.py, default this one), PADDLE_DEVICE and PADDLE_PDX_CACHE_HOME
 (read by paddle_worker.py).
 """
 import json
@@ -27,6 +27,7 @@ from receipt_parse import checks, current_term, parse_pdf, parse_screenshot
 HERE = Path(__file__).resolve().parent
 MAX_BODY = 10 * 1024 * 1024
 SUFFIX = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png"}
+UPLOAD_DIR = Path(os.environ.get("OCR_TMPDIR") or tempfile.gettempdir()) / "cedt-ocr-uploads"
 logger = logging.getLogger("ocr")
 
 
@@ -57,6 +58,10 @@ def stub_words(amount="21,000.00", status="ชำระเงินสำเร�
 class StubEngine:
     """Fixed made-up words for every image. For teammates without Paddle, and for tests."""
     name = "stub"
+    ready = True
+
+    def warm(self):
+        pass
 
     def words(self, path):
         return stub_words()
@@ -77,6 +82,21 @@ class PaddleEngine:
         self.start_timeout = start_timeout or float(os.environ.get("OCR_START_TIMEOUT") or 300)  # model load
         self.lock = threading.Lock()
         self.proc = None
+        self.loaded = False  # True once the worker has printed "@@ready"
+
+    @property
+    def ready(self):
+        return self.loaded and self.proc is not None and self.proc.poll() is None
+
+    def warm(self):
+        """Start the worker now, so the first upload does not wait for the model load. A failed start is
+        swallowed: the next request tries again."""
+        with self.lock:
+            if self.proc is None or self.proc.poll() is not None:
+                try:
+                    self._start()
+                except EngineUnavailable:
+                    logger.warning("engine not ready; the next request retries")
 
     def words(self, path):
         with self.lock:
@@ -107,6 +127,7 @@ class PaddleEngine:
         if self._answer(self.start_timeout) is None:  # wait for "@@ready" (model loaded); EOF = failed to start
             self.close()
             raise EngineUnavailable("worker failed to start")
+        self.loaded = True
 
     def _answer(self, timeout):
         """Next "@@" line, or None on EOF. A hung worker is killed after `timeout` s, which ends the read with
@@ -125,6 +146,7 @@ class PaddleEngine:
 
     def close(self):
         proc, self.proc = self.proc, None
+        self.loaded = False
         if proc is None:
             return
         try:
@@ -146,6 +168,21 @@ def build_engine(name):
 
 def _first(q, key):
     return (q.get(key) or [""])[0].strip() or None
+
+
+def _remove_quietly(path):
+    """Delete a temp file, retrying: on Windows a Paddle child that survived a watchdog kill can hold it open for a
+    moment. Never raises (the response does not depend on the delete). The path is not logged."""
+    for attempt in range(5):
+        try:
+            os.remove(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            if attempt < 4:
+                time.sleep(0.2)
+    logger.error("temp file not deleted")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -180,7 +217,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _get(self, path):
         if path == "/health":
-            self._json(200, {"ok": True, "engine": self.server.engine.name})
+            engine = self.server.engine
+            self._json(200, {"ok": True, "engine": engine.name, "ready": engine.ready})
         else:
             self._json(404, {"error": "not found"})
 
@@ -207,7 +245,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _parse(self, body, suffix, expected):
         """Returns (status, payload). The temp file is deleted before this returns, so before the response."""
-        fd, tmp = tempfile.mkstemp(suffix=suffix, dir=os.environ.get("OCR_TMPDIR") or None)
+        fd, tmp = tempfile.mkstemp(suffix=suffix, dir=str(UPLOAD_DIR))
         try:
             with os.fdopen(fd, "wb") as f:
                 f.write(body)
@@ -224,9 +262,9 @@ class Handler(BaseHTTPRequestHandler):
                 except EngineUnavailable:
                     return 503, {"error": "OCR engine unavailable"}
                 except OCRFailed:
-                    return 500, {"error": "OCR failed on this image"}
+                    return 422, {"error": "could not read this image"}
         finally:
-            os.remove(tmp)
+            _remove_quietly(tmp)
         return 200, {"kind": kind, "fields": fields, "checks": checks(kind, fields, expected, seen_by=None)}
 
     def _json(self, status, obj):
@@ -243,6 +281,10 @@ def make_server(host=None, port=None):
     """Env defaults: OCR_HOST, OCR_PORT, OCR_ENGINE. Pass port=0 for a free port (tests)."""
     host = host or os.environ.get("OCR_HOST", "127.0.0.1")
     port = int(port if port is not None else os.environ.get("OCR_PORT", "8790"))
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    for leftover in UPLOAD_DIR.iterdir():  # files left by an earlier crash
+        if leftover.is_file():
+            _remove_quietly(str(leftover))
     httpd = ThreadingHTTPServer((host, port), Handler)
     httpd.engine = build_engine(os.environ.get("OCR_ENGINE", "paddle"))
     return httpd
@@ -253,6 +295,8 @@ def main():
     httpd = make_server()
     host, port = httpd.server_address[:2]
     logger.info("listening on %s:%s, engine %s", host, port, httpd.engine.name)
+    logger.info("engine warming up")
+    threading.Thread(target=httpd.engine.warm, daemon=True).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

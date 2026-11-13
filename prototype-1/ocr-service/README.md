@@ -20,6 +20,9 @@ Screenshots need PaddleOCR too (`pip install -r requirements-paddle.txt`, CPU bu
 `paddlepaddle-gpu` instead). The worker runs in the interpreter named by `PADDLE_PYTHON`, which defaults to the
 one running `server.py`. Without Paddle, start with `OCR_ENGINE=stub`.
 
+At start the Paddle worker loads in the background (`engine warming up` in the log), so the first screenshot does
+not wait for the model. `/health` shows `"ready": true` once it is loaded.
+
 ## Hosting
 
 On a Linux server, use the Dockerfile. It runs Paddle on CPU with high-performance inference (OpenVINO):
@@ -50,7 +53,7 @@ PDFs take under 0.1 s anywhere (text layer, no OCR). Plan for 4 CPU / 4 GB.
 | `OCR_HOST` | `127.0.0.1` | Bind address. Keep it on localhost. |
 | `OCR_PORT` | `8790` | Port. |
 | `OCR_ENGINE` | `paddle` | `paddle` or `stub`. |
-| `OCR_TMPDIR` | system temp | Folder for upload temp files (deleted after each request). |
+| `OCR_TMPDIR` | system temp | Parent folder; uploads go to its `cedt-ocr-uploads` subfolder (deleted after each request; leftovers are swept at start). |
 | `PADDLE_PYTHON` | this interpreter | Python that runs `paddle_worker.py`. Started on the first image request. |
 | `PADDLE_DEVICE` | `cpu` | Passed to PaddleOCR (`gpu` needs paddlepaddle-gpu). |
 | `PADDLE_PDX_CACHE_HOME` | unset | Model cache folder. Only used if set. |
@@ -59,7 +62,8 @@ PDFs take under 0.1 s anywhere (text layer, no OCR). Plan for 4 CPU / 4 GB.
 
 ## Endpoints
 
-`GET /health` returns `{"ok": true, "engine": "paddle"}` (or `"stub"`).
+`GET /health` returns `{"ok": true, "engine": "paddle", "ready": false}` (`engine` is `"stub"` in stub mode;
+`ready` is always true there).
 
 `POST /parse` takes the raw file as the body.
 - `Content-Type`: `application/pdf`, `image/jpeg` or `image/png`. Anything else gets 415.
@@ -71,7 +75,7 @@ PDFs take under 0.1 s anywhere (text layer, no OCR). Plan for 4 CPU / 4 GB.
 - A PDF with no text layer, or a file that is not a PDF, is still 200 with fewer fields; the checks report
   what is missing.
 - 503 `{"error": "OCR engine unavailable"}` when the Paddle worker cannot start (PDFs still work).
-- 500 when the engine fails on one image.
+- 422 `{"error": "could not read this image"}` when the engine cannot read one image.
 
 ## Stub mode
 

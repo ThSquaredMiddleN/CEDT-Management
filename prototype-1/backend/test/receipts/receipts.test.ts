@@ -8,6 +8,7 @@ import { currentTerm } from "../../src/modules/receipts/service.js";
 import {
   MADE_UP_NAME,
   sidecarOk,
+  sidecarUnreadable,
   startFakeSidecar,
   type FakeSidecar,
   type SidecarCheckRow,
@@ -20,6 +21,7 @@ import {
 
 const TERM = "2/2599"; // made-up terms, so no real rows share them
 const TERM_B = "3/2599";
+const TERM_RACE = "1/2599"; // two concurrent checks, same reference
 const S_A = "6500000001";
 const S_B = "6500000002";
 const S_C = "6500000003";
@@ -292,6 +294,52 @@ describe("POST /receipts/check", () => {
     expect(other.verdict).toBe("ok");
   });
 
+  it("lets only one of two concurrent checks with the same reference pass the duplicate check", async () => {
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-RACE-1" });
+    const where = { studentId: { in: [S_B, S_C] }, term: TERM_RACE };
+    // A SHARE lock blocks writes to receipt_checks but not reads. Both checks read the table (no duplicate yet),
+    // then wait to save; the lock is released only after both have read. The fix takes an advisory lock first, so
+    // the second check waits there and reads the first one's row.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let markLocked!: () => void;
+    const locked = new Promise<void>((resolve) => (markLocked = resolve));
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`LOCK TABLE receipt_checks IN SHARE MODE`;
+        markLocked();
+        await released;
+      },
+      { timeout: 15_000 },
+    );
+    try {
+      await locked;
+      const before = fake.calls.length;
+      const requests = Promise.all([
+        pdf({ studentId: S_B, term: TERM_RACE }),
+        pdf({ studentId: S_C, term: TERM_RACE }),
+      ]);
+      for (let i = 0; i < 500 && fake.calls.length < before + 2; i++) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      await new Promise((r) => setTimeout(r, 300)); // both checks have read the table by now
+      release();
+      const [a, b] = await requests;
+      expect(a.statusCode).toBe(200);
+      expect(b.statusCode).toBe(200);
+      const rows = await prisma.receiptCheck.findMany({ where });
+      expect(rows).toHaveLength(2);
+      const failed = rows.filter((r) =>
+        (r.checks as unknown as SidecarCheckRow[]).some((c) => c.name === "Not submitted before" && c.state === "fail"),
+      );
+      expect(failed).toHaveLength(1);
+    } finally {
+      release();
+      await holder;
+      await prisma.receiptCheck.deleteMany({ where });
+    }
+  });
+
   it("answers warn when the worst check is warn", async () => {
     fake.reply = (call) =>
       sidecarOk(call, {
@@ -328,6 +376,17 @@ describe("POST /receipts/check", () => {
     } finally {
       config.OCR_SERVICE_URL = fake.url;
     }
+  });
+
+  it("answers 422 with a plain message when the sidecar cannot read the image", async () => {
+    fake.reply = () => sidecarUnreadable();
+    const res = await upload({ studentId: S_H, term: TERM }, { type: "image/png", data: PNG_BYTES });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toMatchObject({
+      code: "VALIDATION",
+      message: "Could not read this receipt. Try a clearer screenshot or the PDF.",
+    });
+    expect(await prisma.receiptCheck.count({ where: { studentId: S_H } })).toBe(0);
   });
 
   it("returns 504 when the sidecar is slower than OCR_TIMEOUT_MS", async () => {
