@@ -1,3 +1,5 @@
+@import "./styles/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -13,9 +15,7 @@
 
   body {
     @apply bg-white text-neutral-950 antialiased;
-    font-family:
-      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-      "Noto Sans", sans-serif;
+    font-family: var(--font-family-body);
   }
 }
 
