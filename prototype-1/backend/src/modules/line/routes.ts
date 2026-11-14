@@ -101,7 +101,7 @@ async function offerLink(ctx: Ctx, event: LineEvent, userId: string): Promise<vo
 
   let sent: boolean;
   try {
-    sent = await send(ctx.client, event, userId, [{ type: "text", text: linkPrompt(`${config.APP_ORIGIN}/line/link?token=${raw}`) }]);
+    sent = await send(ctx.client, event, userId, [{ type: "text", text: linkPrompt(`${config.APP_ORIGIN}/line/link?token=${raw}`, config.LINE_LINK_TTL_MINUTES) }]);
   } catch (err) {
     // The user never got this link, so it must not stay usable.
     await prisma.lineLinkToken.deleteMany({ where: { tokenHash } });

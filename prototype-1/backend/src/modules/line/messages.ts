@@ -84,10 +84,10 @@ export function lineTextFor(type: NotificationType, payload: NotifyPayload, appO
 }
 
 /** Sent after a user adds the bot as a friend or messages it while not linked. `url` is the one-time link. */
-export function linkPrompt(url: string): string {
+export function linkPrompt(url: string, minutes: number): string {
   return [
-    "เชื่อมบัญชี LINE เพื่อรับการแจ้งเตือนจากระบบ ลิงก์นี้มีอายุจำกัด",
-    "Link your LINE account to receive notifications. This link expires soon.",
+    `เชื่อมบัญชี LINE เพื่อรับการแจ้งเตือนจากระบบ ลิงก์นี้ใช้ได้ ${minutes} นาที หากหมดอายุ ส่งข้อความใดก็ได้มาที่นี่เพื่อรับลิงก์ใหม่`,
+    `Link your LINE account to receive notifications. This link works for ${minutes} minutes. If it expires, send any message here for a new one.`,
     url,
   ].join("\n\n");
 }

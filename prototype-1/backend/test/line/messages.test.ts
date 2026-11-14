@@ -130,10 +130,13 @@ describe("lineTextFor", () => {
 describe("link and status texts", () => {
   it("linkPrompt has Thai first and includes the link once", () => {
     const url = `${ORIGIN}/line/link?token=fake-token-value`;
-    const text = linkPrompt(url);
+    const text = linkPrompt(url, 15);
     const [th, en, link] = blocks(text);
     expect(th).toMatch(THAI);
     expect(en).not.toMatch(THAI);
+    expect(th).toContain("15 นาที");
+    expect(en).toContain("15 minutes");
+    expect(en).toContain("send any message here");
     expect(link).toBe(url);
     expect(text.split(url)).toHaveLength(2);
   });
