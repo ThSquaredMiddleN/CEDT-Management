@@ -1,0 +1,4 @@
+# Optional: real OCR for screenshots (paddle_worker.py). Without it, use OCR_ENGINE=stub.
+# CPU build. GPU users: install paddlepaddle-gpu instead of paddlepaddle (same import name), not both.
+paddleocr
+paddlepaddle

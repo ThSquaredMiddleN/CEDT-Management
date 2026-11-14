@@ -102,6 +102,7 @@ model User {
   defaultForCourses   Course[]
   events              BookingEvent[]
   notifications       Notification[]
+  receiptChecks       ReceiptCheck[]
   announcements       Announcement[]
 
   @@index([role, isActive])
@@ -280,6 +281,32 @@ model Notification {
 
   @@index([userId, isRead, createdAt(sort: Desc)])
   @@map("notifications")
+}
+
+// Tuition receipt check (once per student per term). Holds the extracted check fields only:
+// never the file, never the student's name (the sidecar's `name` field is returned to staff, not stored).
+model ReceiptCheck {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId     String   @map("student_id")
+  term          String
+  kind          String
+  reference     String?
+  amount        String?
+  paymentStatus String?  @map("payment_status")
+  paidAt        String?  @map("paid_at")
+  funding       String?
+  checks        Json
+  verdict       String
+  checkedById   String   @map("checked_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  checkedBy User @relation(fields: [checkedById], references: [id])
+
+  @@unique([studentId, term])
+  @@index([reference])
+  @@index([term])
+  @@map("receipt_checks")
 }
 
 model Announcement {

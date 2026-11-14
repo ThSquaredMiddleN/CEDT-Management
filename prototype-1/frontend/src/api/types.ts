@@ -221,3 +221,45 @@ export interface AffectedBooking {
   startTime: string;
   endTime: string;
 }
+
+// ------------------------------------------------------------------ receipt checks
+
+export type ReceiptVerdict = "ok" | "warn" | "fail";
+export type ReceiptCheckState = "ok" | "warn" | "fail" | "info";
+
+export interface ReceiptCheckItem {
+  name: string;
+  state: ReceiptCheckState;
+  detail: string;
+}
+
+/** A saved check row. Never carries the student's name (it is not stored). */
+export interface ReceiptCheckRow {
+  id: string;
+  studentId: string;
+  term: string;
+  kind: "pdf" | "screenshot";
+  reference: string | null;
+  amount: string | null;
+  paymentStatus: string | null;
+  paidAt: string | null;
+  funding: string | null;
+  checks: ReceiptCheckItem[];
+  verdict: ReceiptVerdict;
+  checkedById: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Sidecar field: `value` is what the page shows; `pii` marks name, student ID and reference. */
+export interface ReceiptField {
+  value: string | null;
+  box: unknown;
+  pii: boolean;
+}
+
+/** Returned by POST /receipts/check. `fields` is for the staff member's screen only. */
+export interface ReceiptCheckResponse {
+  check: ReceiptCheckRow;
+  fields: Record<string, ReceiptField>;
+}

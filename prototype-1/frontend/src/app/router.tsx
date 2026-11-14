@@ -31,6 +31,11 @@ const MasterDataPage = lazy(() =>
     default: module.MasterDataPage,
   })),
 );
+const ReceiptChecksPage = lazy(() =>
+  import("@/features/receipts/ReceiptChecksPage").then((module) => ({
+    default: module.ReceiptChecksPage,
+  })),
+);
 const MyRequests = lazy(() =>
   import("@/features/my-requests/MyRequests").then((module) => ({
     default: module.MyRequests,
@@ -134,6 +139,14 @@ export function AppRoutes() {
             element={
               <RequireAuth>
                 <MasterDataPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="receipts"
+            element={
+              <RequireAuth>
+                <ReceiptChecksPage />
               </RequireAuth>
             }
           />

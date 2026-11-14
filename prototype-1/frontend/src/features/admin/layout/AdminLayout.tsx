@@ -1,6 +1,7 @@
 import {
   CalendarIcon,
   CpuChipIcon,
+  DocumentMagnifyingGlassIcon,
   DocumentTextIcon,
   HomeIcon,
   MegaphoneIcon,
@@ -10,6 +11,8 @@ import { useLocation } from "react-router-dom";
 import { AppShell } from "@/app/AppShell";
 import type { SidebarItem } from "@/components/Sidebar";
 
+const RECEIPTS_PATH = "/admin/receipts";
+
 const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
   { label: "หน้าหลัก", icon: <HomeIcon />, to: "/admin" },
   { label: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements" },
@@ -17,6 +20,7 @@ const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
   { label: "จัดการห้องเรียน", icon: <CalendarIcon /> },
   { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon /> },
   { label: "ยืมอุปกรณ์", icon: <CpuChipIcon /> },
+  { label: "Receipt checks", icon: <DocumentMagnifyingGlassIcon />, to: RECEIPTS_PATH },
 ];
 
 export function AdminLayout() {

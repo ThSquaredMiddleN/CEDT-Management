@@ -23,11 +23,14 @@ export interface ConflictDetail {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // Only string bodies are JSON. FormData (receipt uploads) needs the browser's multipart boundary,
+  // and a body-less DELETE must not send an empty JSON body (Fastify rejects it).
+  const sendsJson = typeof init.body === "string";
   const res = await fetch(`/api/v1${path}`, {
     ...init,
     credentials: "include", // send the httpOnly session cookie
     headers: {
-      "Content-Type": "application/json",
+      ...(sendsJson ? { "Content-Type": "application/json" } : {}),
       "X-Requested-With": "XMLHttpRequest", // required by the backend CSRF check on mutations
       ...init.headers,
     },
