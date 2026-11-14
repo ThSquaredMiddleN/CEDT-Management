@@ -292,3 +292,13 @@ export function useMarkNotificationsRead() {
     },
   });
 }
+
+// --------------------------------------------------------------------------- line
+
+/** Links the signed-in staff member's LINE account. 400 = invalid, expired or used token. */
+export const linkLineAccount = (token: string) =>
+  post<{ linked: true }>("/line/link", { token });
+
+/** Read-only check run when the link page opens, before login. Only says whether Confirm would work. */
+export const checkLineLinkToken = (token: string) =>
+  post<{ valid: boolean }>("/line/link/check", { token });

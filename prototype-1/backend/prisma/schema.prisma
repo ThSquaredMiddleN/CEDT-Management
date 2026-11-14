@@ -92,6 +92,9 @@ model User {
   isActive         Boolean   @default(true) @map("is_active")
   failedLoginCount Int       @default(0) @map("failed_login_count")
   lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(6)
+  // LINE account linked to this user (one LINE ID belongs to at most one user).
+  lineUserId       String?   @unique @map("line_user_id")
+  lineLinkedAt     DateTime? @map("line_linked_at") @db.Timestamptz(6)
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -280,6 +283,29 @@ model Notification {
 
   @@index([userId, isRead, createdAt(sort: Desc)])
   @@map("notifications")
+}
+
+/** One-time link from a LINE user ID to the app login. Only the sha256 of the raw token is stored. */
+model LineLinkToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  lineUserId String    @map("line_user_id")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt     DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([lineUserId])
+  @@map("line_link_tokens")
+}
+
+/// Dedupe row per LINE webhook event. Written before the handler runs; handledAt is set only after the handler
+/// succeeds. A row with handledAt null means the event has not finished, so a redelivery runs it again.
+model LineWebhookEvent {
+  webhookEventId String    @id @map("webhook_event_id")
+  receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  handledAt      DateTime? @map("handled_at") @db.Timestamptz(6)
+
+  @@map("line_webhook_events")
 }
 
 model Announcement {
