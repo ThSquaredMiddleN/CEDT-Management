@@ -55,7 +55,7 @@ def parse_screenshot(words):
             out["semester"] = fld(f"{m[1]}/{m[2]}", boxof(w))
         if "name" not in out and (m := re.search(r"^(.*?)\s*\(?\s*รหัสนิสิต\s*(\d+)", w["text"])):
             out["name"] = fld(m[1].strip(), boxof(w), pii=True)
-            out["student_id"] = fld(m[2] + "…", boxof(w), pii=True)
+            out["student_id"] = fld(shown_id(m[2]), boxof(w), pii=True)
 
     for key, label in LABELS.items():
         cands = [w for w in words if w["left"] < width * 0.45]
@@ -113,7 +113,7 @@ def _parse_lines(text):
             out["semester"] = fld(f"{m[1]}/{m[2]}")
         if "name" not in out and (m := re.search(r"^(.*?)\s*\(?\s*รหัสนิสิต\s*(\d+)", l)):
             out["name"] = fld(m[1].strip(), pii=True)
-            out["student_id"] = fld(m[2] + "…", pii=True)
+            out["student_id"] = fld(shown_id(m[2]), pii=True)
         for key, label in LABELS.items():
             if key not in out and label in l:
                 rest = l.split(label, 1)[1].strip(" :")
@@ -200,6 +200,14 @@ def parse_pdf(path):
     return out, rect
 
 
+STUDENT_ID_DIGITS = 10
+
+
+def shown_id(digits):
+    """The app cuts the ID short when the name is long; mark a cut-off ID with an ellipsis."""
+    return digits if len(digits) >= STUDENT_ID_DIGITS else digits + "…"
+
+
 # ---------- checks ----------
 
 def current_term(today=None):
@@ -240,10 +248,11 @@ def checks(kind, f, expected, seen_by):
     if sid:
         if not got:
             add("Belongs to this student", "fail", "no student ID found")
-        elif kind == "screenshot":
+        elif kind == "screenshot" and got != sid:
+            # A long name pushes the ID off the screen, so only its first digits are readable.
             add("Belongs to this student", "warn" if sid.startswith(got) else "fail",
                 f"only the first {len(got)} digits are shown; confirm with the name" if sid.startswith(got)
-                else "ID prefix does not match")
+                else "ID does not match")
         else:
             add("Belongs to this student", "ok" if got == sid else "fail",
                 "full ID matches" if got == sid else "ID does not match")

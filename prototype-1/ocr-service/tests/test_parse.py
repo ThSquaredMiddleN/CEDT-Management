@@ -61,6 +61,18 @@ class ScreenshotParseTest(unittest.TestCase):
         f = parse_screenshot(stub_words())
         self.assertEqual(states("screenshot", f, student_id="6900000021")["Belongs to this student"], "fail")
 
+    def full_id_words(self):
+        return [{**w, "text": w["text"].replace("680000)", "6800000021)")} for w in stub_words()]
+
+    def test_full_student_id_on_a_screenshot_passes(self):
+        f = parse_screenshot(self.full_id_words())
+        self.assertEqual(f["student_id"]["value"], "6800000021")
+        self.assertEqual(states("screenshot", f)["Belongs to this student"], "ok")
+
+    def test_full_student_id_of_another_student_fails(self):
+        f = parse_screenshot(self.full_id_words())
+        self.assertEqual(states("screenshot", f, student_id="6800000022")["Belongs to this student"], "fail")
+
     def test_no_words_gives_no_fields(self):
         f = parse_screenshot([])
         self.assertEqual(f, {})
