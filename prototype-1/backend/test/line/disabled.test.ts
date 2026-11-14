@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { loginCookie } from "./fixtures.js";
@@ -51,5 +52,17 @@ describe("LINE disabled", () => {
     const res = await app!.inject({ method: "GET", url: "/api/v1/line/status", headers: { cookie } });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ enabled: false });
+  });
+
+  it("registers the link check route, which answers valid: false for any token", async () => {
+    expect(app!.hasRoute({ method: "POST", url: "/api/v1/line/link/check" })).toBe(true);
+    const res = await app!.inject({
+      method: "POST",
+      url: "/api/v1/line/link/check",
+      headers: { "content-type": "application/json", "x-requested-with": "XMLHttpRequest" },
+      payload: JSON.stringify({ token: randomBytes(32).toString("base64url") }),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ valid: false });
   });
 });

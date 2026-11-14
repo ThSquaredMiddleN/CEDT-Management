@@ -122,15 +122,8 @@ export function AppRoutes() {
             }
           />
           <Route path="schedule/a" element={<MapPage />} />
-          {/* Token comes from the LINE chat link; RequireAuth's `next` keeps the ?token= query. */}
-          <Route
-            path="line/link"
-            element={
-              <RequireAuth>
-                <LineLinkPage />
-              </RequireAuth>
-            }
-          />
+          {/* Token comes from the LINE chat link. Not wrapped in RequireAuth: the page checks the token before login. */}
+          <Route path="line/link" element={<LineLinkPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
         <Route path="admin" element={<AdminLayout />}>

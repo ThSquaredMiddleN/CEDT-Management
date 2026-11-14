@@ -126,8 +126,8 @@ console in full, link included. No LINE account, phone or tunnel is needed.
    create a pending request. `npm run line:pending` makes one on the seed data (options: `--as <email>`, `--date`,
    `--start`, `--end`; see `scripts/line-pending.ts`). Every staff member gets "New request", the linked one by LINE,
    with a link to `/admin/dashboard`. Use `--as` with the linked account to get a request you can then reject.
-6. `npm run line:sim -- message` replies "already linked to <name>". Opening a used or older link and pressing
-   **Confirm** shows "invalid or expired" (the page checks the token only on Confirm, so a reload before it is safe).
+6. `npm run line:sim -- message` replies "already linked to <name>". Opening a used or older link shows "invalid or expired"
+   straight away, before login (the page checks the token when it opens, read-only, and again on **Confirm**).
 7. `npm run line:sim -- unfollow` removes the link, so no more pushes reach that LINE ID. Run `follow` again for a new link.
 8. For a second person, give the simulator another ID: `npm run line:sim -- follow --user U` + 32 lowercase hex
    digits. Each LINE ID links to one account.

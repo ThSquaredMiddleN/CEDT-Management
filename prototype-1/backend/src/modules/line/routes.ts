@@ -295,6 +295,17 @@ export const lineRoutes: FastifyPluginAsync<LineRouteOptions> = async (app: Fast
     return { linked: true, linkedAt: now.toISOString() };
   });
 
+  // Read-only pre-check for the link page, run before login. Only answers valid or not; it never consumes the
+  // token. No rate limit: tokens are 256-bit random values and the app has no rate-limit plugin.
+  app.post("/line/link/check", { config: { auth: "public" } }, async (req) => {
+    const { token } = linkBody.parse(req.body);
+    const row = await prisma.lineLinkToken.findUnique({
+      where: { tokenHash: hashToken(token) },
+      select: { usedAt: true, expiresAt: true },
+    });
+    return { valid: row !== null && row.usedAt === null && row.expiresAt > new Date() };
+  });
+
   app.get("/line/status", { config: { auth: "any" } }, async (req) => {
     const me = requireUser(req);
     const user = await prisma.user.findUniqueOrThrow({

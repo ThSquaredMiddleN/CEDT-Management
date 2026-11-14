@@ -1,16 +1,16 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Home, Link2, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { ApiError } from "@/api/client";
-import { linkLineAccount } from "@/api/endpoints";
-import { useAuth } from "@/app/AuthProvider";
+import { checkLineLinkToken, linkLineAccount } from "@/api/endpoints";
+import { roleLanding, useAuth } from "@/app/AuthProvider";
 import { Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
-type View = "confirm" | "success" | "invalid" | "error";
+type View = "checking" | "login" | "confirm" | "success" | "invalid" | "error";
 
 /** Thai line first, English line second (muted). */
 function Bilingual({ th, en }: { th: string; en: string }) {
@@ -32,7 +32,7 @@ function StatusCard({
   children?: ReactNode;
 }) {
   return (
-    <Card className="flex w-full max-w-md flex-col items-center gap-6 p-8 text-center">
+    <Card className="flex w-full max-w-md flex-col items-center gap-6 p-6 text-center break-words sm:p-8">
       <div className="flex size-12 items-center justify-center rounded-xl bg-neutral-900 text-neutral-50">
         {icon}
       </div>
@@ -44,23 +44,44 @@ function StatusCard({
 
 export function LineLinkPage() {
   const [params] = useSearchParams();
+  const location = useLocation();
   const { user } = useAuth();
+  // Staff land on the calendar (roleLanding), not the student home at "/".
+  const home = roleLanding(user?.role);
 
   // Read the token once and keep it in state. Nothing is sent until the user confirms.
   const [token] = useState(() => params.get("token")?.trim() ?? "");
 
+  // Checked as soon as the page opens, before login. Read-only on the server. A failed check does not block
+  // the page: it falls back to login and Confirm, and Confirm still checks the token on the server.
+  const check = useQuery({
+    queryKey: ["line-link-check", token],
+    queryFn: () => checkLineLinkToken(token),
+    enabled: token !== "",
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
   const link = useMutation({ mutationFn: linkLineAccount });
   const { mutate } = link;
 
-  const view: View = !token
-    ? "invalid"
-    : link.isSuccess
-      ? "success"
-      : link.isError
-        ? link.error instanceof ApiError && link.error.status === 400
-          ? "invalid"
-          : "error"
-        : "confirm";
+  const checking = token !== "" && check.isPending;
+  const checkedInvalid = !token || check.data?.valid === false;
+
+  // A successful Confirm wins over the check: the token is used up by then, so a refetched check says invalid.
+  const view: View = link.isSuccess
+    ? "success"
+    : checking
+      ? "checking"
+      : checkedInvalid
+        ? "invalid"
+        : link.isError
+          ? link.error instanceof ApiError && link.error.status === 400
+            ? "invalid"
+            : "error"
+          : user
+            ? "confirm"
+            : "login";
 
   // Drop only the token param from the address bar, once the attempt has settled as success or invalid.
   // Until then the token stays in the URL, so a reload before Confirm still shows the confirm view. "error"
@@ -74,8 +95,20 @@ export function LineLinkPage() {
     window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
   }, [view]);
 
+  // Same redirect as RequireAuth: `next` keeps the ?token= query, so login brings the user back here.
+  if (view === "login") {
+    const next = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?next=${next}`} replace />;
+  }
+
   return (
-    <main className="flex flex-col items-center px-12 py-16">
+    <main className="flex min-w-0 flex-col items-center px-4 py-8 sm:px-12 sm:py-16">
+      {view === "checking" && (
+        <div role="status" aria-label="Checking LINE link">
+          <Spinner className="size-6" />
+        </div>
+      )}
+
       {view === "confirm" && (
         <StatusCard
           icon={<Link2 className="size-5" />}
@@ -97,7 +130,7 @@ export function LineLinkPage() {
               {link.isPending && <Spinner className="size-4" />}
               ยืนยัน · Confirm
             </Button>
-            <Link to="/" className="text-sm text-neutral-500 underline-offset-4 hover:underline">
+            <Link to={home} className="text-sm text-neutral-500 underline-offset-4 hover:underline">
               ยกเลิก · Cancel
             </Link>
           </div>
@@ -119,7 +152,7 @@ export function LineLinkPage() {
             en="Notifications will now arrive in your LINE chat."
           />
           <Button asChild>
-            <Link to="/">
+            <Link to={home}>
               <Home className="size-4" />
               กลับหน้าหลัก · Back to home
             </Link>
