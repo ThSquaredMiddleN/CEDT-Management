@@ -23,9 +23,11 @@ import { useAuth } from "./AuthProvider";
 export function AppShell({
   sidebarItems,
   showGuestProfile = false,
+  hideHeader = false,
 }: {
   sidebarItems: SidebarItem[];
   showGuestProfile?: boolean;
+  hideHeader?: boolean;
 }) {
   const { user } = useAuth();
   const { pathname } = useLocation();
@@ -70,7 +72,7 @@ export function AppShell({
         }
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        {pathname !== "/admin" && (
+        {!hideHeader && pathname !== "/admin" && (
           <header className="flex h-[63px] shrink-0 items-center justify-end gap-2 border-b border-neutral-200 bg-white px-6">
           {!user && (
             <Button asChild size="sm">

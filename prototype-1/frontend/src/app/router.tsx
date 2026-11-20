@@ -39,6 +39,26 @@ const MyRequests = lazy(() =>
 const MapPage = lazy(() =>
   import("./MapPage").then((module) => ({ default: module.MapPage })),
 );
+const AnnouncementListPage = lazy(() =>
+  import("@/features/announcements/pages/AnnouncementListPage").then((module) => ({
+    default: module.AnnouncementListPage,
+  })),
+);
+const AnnouncementCreatePage = lazy(() =>
+  import("@/features/announcements/pages/AnnouncementCreatePage").then((module) => ({
+    default: module.AnnouncementCreatePage,
+  })),
+);
+const AnnouncementDetailPage = lazy(() =>
+  import("@/features/announcements/pages/AnnouncementDetailPage").then((module) => ({
+    default: module.AnnouncementDetailPage,
+  })),
+);
+const AnnouncementEditPage = lazy(() =>
+  import("@/features/announcements/pages/AnnouncementEditPage").then((module) => ({
+    default: module.AnnouncementEditPage,
+  })),
+);
 
 function PageLoading() {
   return (
@@ -114,6 +134,38 @@ export function AppRoutes() {
             element={
               <RequireAuth>
                 <MasterDataPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="announcements"
+            element={
+              <RequireAuth>
+                <AnnouncementListPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="announcements/create"
+            element={
+              <RequireAuth>
+                <AnnouncementCreatePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="announcements/:id"
+            element={
+              <RequireAuth>
+                <AnnouncementDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="announcements/:id/edit"
+            element={
+              <RequireAuth>
+                <AnnouncementEditPage />
               </RequireAuth>
             }
           />

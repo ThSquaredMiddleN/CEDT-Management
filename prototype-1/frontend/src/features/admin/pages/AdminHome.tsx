@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   CalendarIcon,
   CpuChipIcon,
@@ -7,14 +8,26 @@ import {
 } from "@heroicons/react/24/outline";
 import { MenuItem } from "@/features/admin/components/AdminMenuItem";
 
-const MENU_GROUPS = [
+interface AdminMenuEntry {
+  text: string;
+  icon: ReactNode;
+  to?: string;
+}
+
+interface MenuGroup {
+  title: string;
+  rowGap: string;
+  items: AdminMenuEntry[];
+}
+
+const MENU_GROUPS: MenuGroup[] = [
   {
     title: "ทั่วไป",
     rowGap: "gap-y-4",
     items: [
-      { text: "จัดการประกาศ", icon: <MegaphoneIcon /> },
+      { text: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements" },
       { text: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon /> },
-      { text: "จัดการห้องเรียน", icon: <CalendarIcon /> },
+      { text: "จัดการห้องเรียน", icon: <CalendarIcon />, to: "/admin/data" },
     ],
   },
   {
@@ -41,8 +54,8 @@ export function AdminHome() {
               <div
                 className={`grid grid-cols-1 gap-x-6 ${rowGap} md:grid-cols-2 lg:grid-cols-3`}
               >
-                {items.map(({ text, icon }) => (
-                  <MenuItem key={text} text={text} icon={icon} />
+                {items.map(({ text, icon, to }) => (
+                  <MenuItem key={text} text={text} icon={icon} to={to} />
                 ))}
               </div>
             </section>

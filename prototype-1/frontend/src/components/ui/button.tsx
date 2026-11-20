@@ -1,5 +1,6 @@
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+import { LoaderCircle } from "lucide-react";
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
@@ -14,11 +15,11 @@ const buttonVariants = cva(
         ghost: "hover:bg-neutral-100 text-neutral-950",
         link: "text-neutral-950 underline underline-offset-4 hover:text-neutral-700",
         filled:
-          "rounded-lg border border-transparent bg-brand-primary font-body text-white shadow-light-6 hover:bg-button-primary-hover active:border-button-primary-pressed-border active:bg-button-primary-pressed disabled:bg-button-primary-disabled-background disabled:text-button-primary-disabled-foreground disabled:opacity-100 disabled:shadow-none",
+          "rounded-lg bg-brand-primary font-body text-white shadow-button hover:bg-button-primary-hover active:border active:border-button-primary-pressed-border active:bg-button-primary-pressed disabled:bg-button-primary-disabled-background disabled:text-button-primary-disabled-foreground disabled:opacity-100 disabled:shadow-none",
         outlined:
-          "rounded-lg border border-brand-primary bg-transparent font-body text-brand-primary shadow-light-6 hover:border-button-primary-hover hover:text-button-primary-hover active:border-button-primary-pressed active:text-button-primary-pressed disabled:border-button-primary-disabled-foreground disabled:text-button-primary-disabled-foreground disabled:opacity-100 disabled:shadow-none",
+          "rounded-lg border border-brand-primary bg-transparent font-body text-brand-primary shadow-button hover:border-button-primary-hover hover:text-button-primary-hover active:border-button-primary-pressed active:text-button-primary-pressed disabled:border-button-primary-disabled-foreground disabled:text-button-primary-disabled-foreground disabled:opacity-100 disabled:shadow-none",
         "ghost-primary":
-          "rounded-lg border border-transparent bg-transparent font-body text-brand-primary shadow-none hover:text-button-primary-hover active:text-button-primary-pressed disabled:text-button-primary-disabled-foreground disabled:opacity-100",
+          "rounded-lg bg-transparent font-body text-brand-primary shadow-none hover:text-button-primary-hover active:text-button-primary-pressed disabled:text-button-primary-disabled-foreground disabled:opacity-100",
       },
       size: {
         default: "h-9 px-4 py-2",
@@ -67,45 +68,45 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : "button";
     const isFigmaVariant =
       variant === "filled" || variant === "outlined" || variant === "ghost-primary";
+    const resolvedSize = isFigmaVariant ? size ?? "large" : size;
     const iconPadding =
       isFigmaVariant && icon
-        ? size === "large"
+        ? resolvedSize === "large"
           ? "px-[52px]"
-          : size === "medium"
+          : resolvedSize === "medium"
             ? "px-[47px]"
-            : size === "small"
+            : resolvedSize === "small"
               ? "px-[39px]"
               : undefined
         : undefined;
     const figmaTypography = isFigmaVariant
-      ? size === "medium"
-        ? "text-body-sm-emphasize"
-        : size === "small"
-          ? "text-body-xs-emphasize"
-          : size === "large" || size === "default"
-            ? "text-body-md-emphasize"
+      ? resolvedSize === "medium"
+        ? "text-[length:var(--text-body-sm-emphasize-size)] font-[var(--text-body-sm-emphasize-weight)] leading-[var(--text-body-sm-emphasize-line-height)] tracking-[var(--text-body-sm-emphasize-letter-spacing)]"
+        : resolvedSize === "small"
+          ? "text-[length:var(--text-body-xs-emphasize-size)] font-[var(--text-body-xs-emphasize-weight)] leading-[var(--text-body-xs-emphasize-line-height)] tracking-[var(--text-body-xs-emphasize-letter-spacing)]"
+          : resolvedSize === "large" || resolvedSize === "default"
+            ? "text-[length:var(--text-body-md-emphasize-size)] font-[var(--text-body-md-emphasize-weight)] leading-[var(--text-body-md-emphasize-line-height)] tracking-[var(--text-body-md-emphasize-letter-spacing)]"
             : undefined
       : undefined;
     const iconSize =
-      size === "small" ? "size-3" : size === "medium" ? "size-[14px]" : "size-4";
+      resolvedSize === "small"
+        ? "size-3"
+        : resolvedSize === "medium"
+          ? "size-[14px]"
+          : "size-4";
     const isDisabled = disabled || loading;
-    const content = loading ? (
-      <>
-        <span className="sr-only">{children}</span>
-        <span className="flex items-center gap-1.5" aria-hidden="true">
-          <span className="size-2 rounded-full bg-current" />
-          <span className="size-3 rounded-full border-2 border-current bg-transparent" />
-          <span className="size-2 rounded-full bg-current" />
-        </span>
-      </>
-    ) : (
+    const childElement = React.isValidElement<{ children?: React.ReactNode }>(children)
+      ? children
+      : null;
+    const contentChildren = asChild && childElement ? childElement.props.children : children;
+    const visualContent = (
       <>
         {icon && iconPosition === "start" && (
           <span className={cn("shrink-0 [&>svg]:size-full", iconSize)} aria-hidden="true">
             {icon}
           </span>
         )}
-        {children}
+        {contentChildren}
         {icon && iconPosition === "end" && (
           <span className={cn("shrink-0 [&>svg]:size-full", iconSize)} aria-hidden="true">
             {icon}
@@ -113,12 +114,26 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         )}
       </>
     );
+    const content = loading ? (
+      <>
+        <span className="invisible inline-flex items-center gap-1.5" aria-hidden="true">
+          {visualContent}
+        </span>
+        <span className="sr-only">{contentChildren}</span>
+        <span
+          className="absolute inset-0 flex items-center justify-center"
+          aria-hidden="true"
+        >
+          <LoaderCircle className="size-4 animate-spin" />
+        </span>
+      </>
+    ) : visualContent;
     let renderedChildren: React.ReactNode = content;
     if (asChild) {
       if (!icon && !loading) {
         renderedChildren = children;
-      } else if (React.isValidElement(children)) {
-        renderedChildren = React.cloneElement(children, undefined, content);
+      } else if (childElement) {
+        renderedChildren = React.cloneElement(childElement, undefined, content);
       } else {
         throw new Error("Button with asChild, icon, or loading requires a single React element child.");
       }
@@ -136,10 +151,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <Comp
         className={cn(
-          buttonVariants({ variant, size }),
+          buttonVariants({ variant, size: resolvedSize }),
           isFigmaVariant && "gap-1.5",
           figmaTypography,
           iconPadding,
+          loading && "relative",
           asChild && isDisabled && "pointer-events-none",
           className,
         )}

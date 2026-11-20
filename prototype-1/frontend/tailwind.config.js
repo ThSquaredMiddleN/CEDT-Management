@@ -175,6 +175,7 @@ export default {
       boxShadow: {
         "light-6": "var(--shadow-light-6)",
         topbar: "var(--shadow-topbar)",
+        button: "var(--shadow-button)",
       },
       keyframes: {
         "accordion-down": {
