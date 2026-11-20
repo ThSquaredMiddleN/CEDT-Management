@@ -200,3 +200,18 @@ describe("stock invariant", () => {
     expect(pi.total).toBe(pi.available + pi.reserved + pi.qc + pi.damaged + pi.lost + out);
   });
 });
+
+describe("group-owned items", () => {
+  it("shows the group's owed items to every member of the group", async () => {
+    const owed = await storageApi.getPendingReturns("6632199925"); // second member of Group 09
+    expect(owed.map((i) => [i.id, i.requestId, i.groupId])).toEqual([
+      ["f1", "REQ-B-100", "group09"],
+      ["f2", "REQ-B-100", "group09"],
+    ]);
+  });
+
+  it("lets another member of the group return the items", async () => {
+    await storageApi.submitReturn("6632199925", { f1: rc(1, 0, 0), f2: rc(5, 0, 0) }, "");
+    expect(await storageApi.getPendingReturns("6632199921")).toHaveLength(0);
+  });
+});

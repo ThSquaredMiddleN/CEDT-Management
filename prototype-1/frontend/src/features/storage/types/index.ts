@@ -46,7 +46,9 @@ export interface Reservation {
   expiresAt: number;
 }
 
-export type BorrowStatus = "OPEN" | "READY_FOR_PICKUP" | "CLOSED" | "UNFULFILLED";
+export type BorrowStatus = "OPEN" | "READY_FOR_PICKUP" | "CLOSED" | "UNFULFILLED" | "CANCELLED";
+
+export type CancelReason = "BY_STUDENT" | "RESTOCK_EXPIRED";
 
 export interface BorrowRequestItem {
   itemId: string;
@@ -57,12 +59,18 @@ export interface BorrowRequestItem {
   /** Filled by the API: units this request could be issued right now (pool + its own reservation). */
   available?: number;
   availableSerials?: string[];
+  /** Filled by the API: serials of the units handed out against this request. */
+  issuedSerials?: string[];
 }
 
 export interface BorrowRequest {
   id: string;
   type: string;
+  /** Owning group. Any member may act on the request. */
+  groupId: string;
+  /** Group label, for display. */
   group: string;
+  /** Who submitted it. */
   user: string;
   studentId: string;
   status: BorrowStatus;
@@ -70,7 +78,21 @@ export interface BorrowRequest {
   createdAt: number;
   /** Set on UNFULFILLED requests when stock came back; units are held until `expiresAt`. */
   restock?: { flaggedAt: number; expiresAt: number };
+  /** Set when status is CANCELLED. */
+  cancelReason?: CancelReason;
+  /** Set by staff when the request is issued. */
+  pickup?: PickupDetails;
+  /** Epoch ms when a group member (or staff) confirmed pickup. */
+  pickedUpAt?: number;
+  /** Epoch ms the items are due back. Copied from the default at pickup; staff may edit it. */
+  dueAt?: number;
   items: BorrowRequestItem[];
+}
+
+/** What a student sends to create a request. */
+export interface NewBorrowRequest {
+  groupId: string;
+  items: { itemId: string; qty: number }[];
 }
 
 export interface PickupDetails {
@@ -88,6 +110,8 @@ export interface IssuedLine {
 export interface StudentGroup {
   id: string;
   label: string;
+  /** Becomes BorrowRequest.type, e.g. "Course - IoT System", "Custom", "Personal". */
+  type: string;
 }
 
 export interface Student {
@@ -96,7 +120,7 @@ export interface Student {
   groups: StudentGroup[];
 }
 
-/** Physical thing a student owes. Unique = one unit with a serial; bulk = qty of a type. */
+/** Physical thing a group owes. Unique = one unit with a serial; bulk = qty of a type. */
 export interface PendingReturnItem {
   id: string;
   itemId: string; // InventoryItem.id
@@ -107,6 +131,12 @@ export interface PendingReturnItem {
   owedStatus: "OWED" | "NOT_BROUGHT";
   /** Epoch ms when the student first said they did not bring it. */
   notBroughtAt?: number;
+  requestId: string;
+  groupId: string;
+  /** Group label, for display. */
+  group: string;
+  /** Epoch ms; follows the request's dueAt. */
+  dueAt: number;
 }
 
 /** LOST is only valid for items already marked NOT_BROUGHT. */

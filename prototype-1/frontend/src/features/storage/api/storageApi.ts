@@ -49,6 +49,22 @@ const fail = (message: string): never => {
 const availableSerials = (itemId: string) =>
   units.filter((u) => u.itemId === itemId && u.status === "AVAILABLE").map((u) => u.serial);
 
+/** Group ids the student belongs to (empty when the student is unknown). */
+const groupIdsOf = (studentId: string): Set<string> =>
+  new Set(students.find((s) => s.studentId === studentId)?.groups.map((g) => g.id) ?? []);
+
+/** Owed items of every group the student belongs to. */
+const owedFor = (studentId: string): PendingReturnItem[] => {
+  const ids = groupIdsOf(studentId);
+  return pendingReturns.filter((i) => ids.has(i.groupId));
+};
+
+/** Not brought first, then overdue, then soonest due. */
+export function sortOwed(items: PendingReturnItem[], now: number): PendingReturnItem[] {
+  const rank = (i: PendingReturnItem) => (i.owedStatus === "NOT_BROUGHT" ? 0 : i.dueAt < now ? 1 : 2);
+  return [...items].sort((a, b) => rank(a) - rank(b) || a.dueAt - b.dueAt);
+}
+
 /** UI view of an item: `available` is the general pool, reserved units shown separately. */
 function itemView(item: InventoryItem): InventoryItem {
   const reserved = totalReserved(item.id);
@@ -173,13 +189,9 @@ export const storageApi = {
     return delay({ swept: sweepRequests() });
   },
 
-  /** Overdue ("not brought") items first. */
+  /** Staff: owed items of all the student's groups. Not brought first, then overdue, then soonest due. */
   getPendingReturns: (studentId: string): Promise<PendingReturnItem[]> =>
-    delay(
-      [...(pendingReturns[studentId] ?? [])].sort(
-        (a, b) => Number(b.owedStatus === "NOT_BROUGHT") - Number(a.owedStatus === "NOT_BROUGHT"),
-      ),
-    ),
+    delay(sortOwed(owedFor(studentId), clock.now())),
 
   /**
    * Face-to-face return. Each owed line is split by counts that must add up to its qty:
@@ -193,7 +205,7 @@ export const storageApi = {
     _remark: string,
     fine?: ReturnFine,
   ): Promise<{ queued: number; lost: number }> => {
-    const owed = pendingReturns[studentId] ?? [];
+    const owed = owedFor(studentId);
     const plan = owed.map((i) => {
       const r = results[i.id];
       if (!r) return fail("ยังระบุสถานะไม่ครบทุกรายการ");
@@ -251,9 +263,15 @@ export const storageApi = {
     }
 
     const now = clock.now();
-    pendingReturns[studentId] = plan
-      .filter(({ r }) => r.NOT_BROUGHT > 0)
-      .map(({ i, r }) => ({ ...i, qty: r.NOT_BROUGHT, owedStatus: "NOT_BROUGHT" as const, notBroughtAt: i.notBroughtAt ?? now }));
+    const handled = new Set(owed.map((i) => i.id));
+    for (let k = pendingReturns.length - 1; k >= 0; k--) {
+      if (handled.has(pendingReturns[k].id)) pendingReturns.splice(k, 1);
+    }
+    pendingReturns.push(
+      ...plan
+        .filter(({ r }) => r.NOT_BROUGHT > 0)
+        .map(({ i, r }) => ({ ...i, qty: r.NOT_BROUGHT, owedStatus: "NOT_BROUGHT" as const, notBroughtAt: i.notBroughtAt ?? now })),
+    );
     return delay({
       queued: received.reduce((n, q) => n + q.qty, 0),
       lost: lost.reduce((n, q) => n + q.qty, 0),
