@@ -9,11 +9,11 @@ import { EmptyState, ErrorCard, Spinner } from "@/components/states";
 import {
   NEWS_TAGS,
   newsDate,
-  newsImageUrl,
   newsPlainText,
   newsTagClassName,
   newsTagLabel,
 } from "../news-utils";
+import { NewsImageView } from "../components/NewsImageView";
 
 type NewsFilter = NewsTag | "all";
 
@@ -29,8 +29,9 @@ function NewsCard({ news, draft = false }: { news: NewsArticle; draft?: boolean 
       {cover && (
         <div className="w-16 shrink-0 overflow-hidden rounded border border-grey-200 bg-grey-100 sm:w-20">
           <div className="aspect-[210/297]">
-            <img
-              src={newsImageUrl(news.id, cover.id)}
+            <NewsImageView
+              newsId={news.id}
+              imageId={cover.id}
               alt={`โปสเตอร์: ${cover.originalName}`}
               className="size-full object-contain"
             />

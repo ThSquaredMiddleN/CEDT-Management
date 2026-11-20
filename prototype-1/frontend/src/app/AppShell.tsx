@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { UserCircleIcon } from "@heroicons/react/24/outline";
 import { LogOut, Settings } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { logout } from "@/api/endpoints";
@@ -24,10 +24,12 @@ export function AppShell({
   sidebarItems,
   showGuestProfile = false,
   hideHeader = false,
+  banner,
 }: {
   sidebarItems: SidebarItem[];
   showGuestProfile?: boolean;
   hideHeader?: boolean;
+  banner?: ReactNode;
 }) {
   const { user } = useAuth();
   const { pathname } = useLocation();
@@ -72,6 +74,7 @@ export function AppShell({
         }
       />
       <div className="flex min-w-0 flex-1 flex-col">
+        {banner}
         {!hideHeader && pathname !== "/admin" && (
           <header className="flex h-[63px] shrink-0 items-center justify-end gap-2 border-b border-neutral-200 bg-white px-6">
           {!user && (

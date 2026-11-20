@@ -3,18 +3,40 @@ import { ArrowUpTrayIcon, PhotoIcon, XMarkIcon } from "@heroicons/react/24/outli
 import type { NewsImage } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { NewsImageView } from "./NewsImageView";
 import {
   MAX_NEWS_IMAGE_BYTES,
   MAX_NEWS_IMAGES,
-  newsImageUrl,
 } from "../news-utils";
 
 interface PosterItem {
   key: string;
   name: string;
-  src: string;
+  src?: string;
   imageId?: string;
   fileIndex?: number;
+}
+
+function PosterImage({
+  item,
+  newsId,
+  alt,
+}: {
+  item: PosterItem;
+  newsId?: string;
+  alt: string;
+}) {
+  if (item.imageId && newsId) {
+    return (
+      <NewsImageView
+        newsId={newsId}
+        imageId={item.imageId}
+        alt={alt}
+        className="size-full object-contain"
+      />
+    );
+  }
+  return <img src={item.src} alt={alt} className="size-full object-contain" />;
 }
 
 export function NewsPosterField({
@@ -49,7 +71,6 @@ export function NewsPosterField({
       key: image.id,
       imageId: image.id,
       name: image.originalName,
-      src: newsImageUrl(newsId ?? "", image.id),
     })),
     ...pendingFiles.map((file, fileIndex) => ({
       key: `pending-${fileIndex}-${file.name}`,
@@ -145,11 +166,13 @@ export function NewsPosterField({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             <div className="relative w-36 shrink-0 overflow-hidden rounded-md border border-grey-200 bg-grey-100 sm:w-44">
               <div className="aspect-[210/297]">
-                <img
-                  src={items[0]?.src}
-                  alt={`โปสเตอร์ปก: ${items[0]?.name ?? ""}`}
-                  className="size-full object-contain"
-                />
+                {items[0] && (
+                  <PosterImage
+                    item={items[0]}
+                    newsId={newsId}
+                    alt={`โปสเตอร์ปก: ${items[0].name}`}
+                  />
+                )}
               </div>
               <span className="absolute left-2 top-2 rounded bg-white/90 px-2 py-1 font-body text-body-xs text-grey-700">
                 รูปปก
@@ -174,10 +197,10 @@ export function NewsPosterField({
                     className="relative w-14 shrink-0 overflow-hidden rounded border border-grey-200 bg-white"
                   >
                     <div className="aspect-[210/297]">
-                      <img
-                        src={item.src}
+                      <PosterImage
+                        item={item}
+                        newsId={newsId}
                         alt={`โปสเตอร์ ${index + 1}: ${item.name}`}
-                        className="size-full object-contain"
                       />
                     </div>
                     <button

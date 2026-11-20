@@ -26,5 +26,11 @@ export const newsPlainText = announcementPlainText;
 
 export const newsDate = (value: string): string => formatAnnouncementDate(value);
 
-export const newsImageUrl = (newsId: string, imageId: string): string =>
-  `/api/v1/news/${newsId}/images/${imageId}`;
+export const newsImageUrl = (newsId: string, imageId: string): string => {
+  const path = `/api/v1/news/${newsId}/images/${imageId}`;
+  const isDevelopmentAdminPage =
+    import.meta.env.DEV &&
+    typeof window !== "undefined" &&
+    (window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/"));
+  return isDevelopmentAdminPage ? `${path}?devAdminBypass=true` : path;
+};

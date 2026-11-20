@@ -12,11 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { ErrorCard, Spinner } from "@/components/states";
 import {
   newsDate,
-  newsImageUrl,
   newsTagClassName,
   newsTagLabel,
 } from "../news-utils";
 import { sanitizeAnnouncementHtml } from "@/features/announcements/announcement-utils";
+import { NewsImageView } from "../components/NewsImageView";
 
 function NewsArticleView({ news }: { news: NewsArticle }) {
   const [selectedImageId, setSelectedImageId] = useState(news.images[0]?.id ?? null);
@@ -56,8 +56,9 @@ function NewsArticleView({ news }: { news: NewsArticle }) {
         <section className="mt-6" aria-label="โปสเตอร์ข่าว">
           <div className="mx-auto max-w-[min(100%,32rem)] overflow-hidden rounded-lg border border-grey-200 bg-grey-100">
             <div className="aspect-[210/297]">
-              <img
-                src={newsImageUrl(news.id, selectedImage.id)}
+              <NewsImageView
+                newsId={news.id}
+                imageId={selectedImage.id}
                 alt={`โปสเตอร์ข่าว: ${selectedImage.originalName}`}
                 className="size-full object-contain"
               />
@@ -83,10 +84,10 @@ function NewsArticleView({ news }: { news: NewsArticle }) {
                   }`}
                 >
                   <span className="aspect-[210/297] block">
-                    <img
-                      src={newsImageUrl(news.id, image.id)}
+                    <NewsImageView
+                      newsId={news.id}
+                      imageId={image.id}
                       alt=""
-                      aria-hidden="true"
                       className="size-full object-contain"
                     />
                   </span>

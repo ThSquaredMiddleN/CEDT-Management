@@ -8,6 +8,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useLocation } from "react-router-dom";
 import { AppShell } from "@/app/AppShell";
+import { DemoModeNotice } from "@/app/DemoModeNotice";
 import type { SidebarItem } from "@/components/Sidebar";
 
 const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
@@ -35,6 +36,7 @@ export function AdminLayout() {
     <AppShell
       sidebarItems={items}
       showGuestProfile
+      banner={<DemoModeNotice />}
       hideHeader={
         pathname.startsWith("/admin/announcements") ||
         pathname.startsWith("/admin/news")

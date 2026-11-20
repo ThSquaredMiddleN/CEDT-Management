@@ -1,3 +1,6 @@
+import { demoApi } from "@/demo/demoApi";
+import { isDemoMode } from "@/demo/demoMode";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -23,13 +26,20 @@ export interface ConflictDetail {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (isDemoMode) return demoApi<T>(path, init);
+
   const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
+  const isDevelopmentAdminPage =
+    import.meta.env.DEV &&
+    typeof window !== "undefined" &&
+    (window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/"));
   const res = await fetch(`/api/v1${path}`, {
     ...init,
     credentials: "include", // send the httpOnly session cookie
     headers: {
       ...(!isFormData ? { "Content-Type": "application/json" } : {}),
       "X-Requested-With": "XMLHttpRequest", // required by the backend CSRF check on mutations
+      ...(isDevelopmentAdminPage ? { "X-Dev-Admin-Bypass": "true" } : {}),
       ...init.headers,
     },
   });
