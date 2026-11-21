@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { apiConfig, clock, resetMockStore, units } from "./mockStore";
+import { apiConfig, clock, pendingReturns, resetMockStore, units } from "./mockStore";
 import { storageApi } from "./storageApi";
 import type { IssuedLine, QCResults } from "../types";
 
 const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
 const ok: QCResults = { AVAILABLE: 1, DAMAGED: 0, LOST: 0 };
 
 beforeEach(() => {
@@ -287,5 +288,64 @@ describe("cancel and restock expiry", () => {
     expect(req).toMatchObject({ status: "CANCELLED", cancelReason: "RESTOCK_EXPIRED" });
     expect(req.restock).toBeUndefined();
     await expect(storageApi.reopenBorrow("REQ-B-101")).rejects.toThrow(/หมดเวลาเปิดคำขอแล้ว/);
+  });
+});
+
+describe("pickup and due dates", () => {
+  const DUE = Date.now() + 120 * DAY;
+  const issueB103 = () =>
+    storageApi.confirmBorrow("REQ-B-103", [{ itemId: "EQ-004", qty: 2, sns: ["EQ-004-001", "EQ-004-002"] }], pickup);
+
+  it("stores the pickup details staff set", async () => {
+    await issueB103();
+    const req = await storageApi.getBorrowRequest("REQ-B-103");
+    expect(req.status).toBe("READY_FOR_PICKUP");
+    expect(req.pickup).toEqual(pickup);
+  });
+
+  it("closes on pickup, copies the default due date and makes the items owed by the group", async () => {
+    await issueB103();
+    await storageApi.setDefaultDueAt(DUE);
+    const req = await storageApi.confirmPickup("REQ-B-103");
+    expect(req).toMatchObject({ status: "CLOSED", dueAt: DUE });
+    expect(req.pickedUpAt).toBeTypeOf("number");
+
+    await storageApi.setCurrentStudent("6632199923"); // วิภาดา, robotics club
+    const owed = await storageApi.getMyPendingReturns();
+    expect(owed.map((i) => [i.serialNumber, i.requestId, i.groupId, i.dueAt])).toEqual([
+      ["EQ-004-001", "REQ-B-103", "robotics-club", DUE],
+      ["EQ-004-002", "REQ-B-103", "robotics-club", DUE],
+    ]);
+    await expect(storageApi.confirmPickup("REQ-B-103")).rejects.toThrow(/ยังไม่พร้อม/);
+  });
+
+  it("rejects a default due date in the past", async () => {
+    await expect(storageApi.setDefaultDueAt(Date.now() - DAY)).rejects.toThrow(/อนาคต/);
+  });
+
+  it("moves the due date of one request and of its owed items", async () => {
+    await issueB103();
+    await storageApi.confirmPickup("REQ-B-103");
+    const later = DUE + 7 * DAY;
+    const req = await storageApi.setRequestDueAt("REQ-B-103", later);
+    expect(req.dueAt).toBe(later);
+    expect(pendingReturns.filter((i) => i.requestId === "REQ-B-103").map((i) => i.dueAt)).toEqual([later, later]);
+
+    await expect(storageApi.setRequestDueAt("REQ-B-103", 0)).rejects.toThrow(/ไม่ก่อนวันที่รับของ/);
+    await expect(storageApi.setRequestDueAt("REQ-B-101", later)).rejects.toThrow(/เฉพาะคำขอที่รับของแล้ว/);
+  });
+
+  it("sorts my owed items: not brought, then overdue, then soonest due", async () => {
+    const start = Date.now();
+    clock.now = () => start;
+    const req = await storageApi.createBorrowRequest({ groupId: "group09", items: [{ itemId: "EQ-002", qty: 2 }] });
+    await storageApi.confirmBorrow(req.id, [bulk("EQ-002", 2)], pickup);
+    await storageApi.confirmPickup(req.id);
+    await storageApi.setRequestDueAt(req.id, start + HOUR);
+    clock.now = () => start + 2 * HOUR; // the new request is now overdue
+    pendingReturns.find((i) => i.id === "f1")!.owedStatus = "NOT_BROUGHT";
+
+    const owed = await storageApi.getMyPendingReturns();
+    expect(owed.map((i) => i.id)).toEqual(["f1", `${req.id}-EQ-002`, "f2"]);
   });
 });

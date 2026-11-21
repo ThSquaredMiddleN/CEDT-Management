@@ -24,6 +24,7 @@ import {
   pendingReturns,
   qcRequests,
   session,
+  settings,
   students,
   syncAllCounts,
   syncCounts,
@@ -169,7 +170,7 @@ export const storageApi = {
   confirmBorrow: async (
     id: string,
     lines: IssuedLine[],
-    _pickup: PickupDetails,
+    pickup: PickupDetails,
   ): Promise<{ swept: string[] }> => {
     expireReservations();
     const req = borrowRequests.find((r) => r.id === id);
@@ -183,6 +184,7 @@ export const storageApi = {
       const it = req!.items.find((i) => i.itemId === l.itemId);
       if (it) it.issuedQty = l.qty;
     }
+    req!.pickup = { ...pickup };
     req!.status = "READY_FOR_PICKUP";
     return delay({ swept: sweepRequests() });
   },
@@ -206,6 +208,65 @@ export const storageApi = {
     req!.cancelReason = "BY_STUDENT";
     delete req!.restock;
     releaseReservations(req!.id);
+    return delay(req!);
+  },
+
+  /**
+   * A group member (or staff) confirms the items were collected. The request closes, gets
+   * the default due date, and every issued unit / bulk line becomes owed by the group.
+   */
+  confirmPickup: async (id: string): Promise<BorrowRequest> => {
+    const req = borrowRequests.find((r) => r.id === id);
+    if (!req) return fail("ไม่พบคำขอ");
+    if (req!.status !== "READY_FOR_PICKUP") return fail("คำขอนี้ยังไม่พร้อมให้รับของ");
+    req!.status = "CLOSED";
+    req!.pickedUpAt = clock.now();
+    req!.dueAt = settings.defaultDueAt;
+    const base = {
+      requestId: req!.id,
+      groupId: req!.groupId,
+      group: req!.group,
+      dueAt: req!.dueAt,
+      owedStatus: "OWED" as const,
+    };
+    for (const line of req!.items) {
+      if (line.issuedQty <= 0) continue;
+      if (line.isUnique) {
+        for (const u of units.filter((x) => x.requestId === req!.id && x.itemId === line.itemId && x.status === "OUT")) {
+          pendingReturns.push({
+            ...base, id: `${req!.id}-${u.serial}`, itemId: line.itemId, name: line.name, isUnique: true, qty: 1, serialNumber: u.serial,
+          });
+        }
+      } else {
+        pendingReturns.push({
+          ...base, id: `${req!.id}-${line.itemId}`, itemId: line.itemId, name: line.name, isUnique: false, qty: line.issuedQty,
+        });
+      }
+    }
+    return delay(req!);
+  },
+
+  /** Owed items of all the current student's groups. */
+  getMyPendingReturns: async (): Promise<PendingReturnItem[]> =>
+    delay(sortOwed(owedFor(session.studentId), clock.now())),
+
+  getDefaultDueAt: async (): Promise<number> => delay(settings.defaultDueAt),
+
+  /** Applies to future pickups only. */
+  setDefaultDueAt: async (at: number): Promise<number> => {
+    if (!Number.isFinite(at) || at <= clock.now()) return fail("กำหนดคืนต้องเป็นเวลาในอนาคต");
+    settings.defaultDueAt = at;
+    return delay(at);
+  },
+
+  /** Staff extends (or shortens) one request's due date; its owed items follow. */
+  setRequestDueAt: async (id: string, at: number): Promise<BorrowRequest> => {
+    const req = borrowRequests.find((r) => r.id === id);
+    if (!req) return fail("ไม่พบคำขอ");
+    if (req!.status !== "CLOSED") return fail("แก้กำหนดคืนได้เฉพาะคำขอที่รับของแล้ว");
+    if (!Number.isFinite(at) || at < (req!.pickedUpAt ?? 0)) return fail("กำหนดคืนต้องไม่ก่อนวันที่รับของ");
+    req!.dueAt = at;
+    for (const i of pendingReturns) if (i.requestId === id) i.dueAt = at;
     return delay(req!);
   },
 
