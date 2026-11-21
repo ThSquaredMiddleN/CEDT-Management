@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { storageApi } from "./storageApi";
 import type {
   IssuedLine,
+  NewBorrowRequest,
   PickupDetails,
   QCSubmission,
   ReturnCounts,
@@ -16,6 +17,11 @@ export const storageKeys = {
   pendingReturns: (studentId: string) => ["storage", "returns", studentId] as const,
   qc: ["storage", "qc"] as const,
   qcOne: (id: string) => ["storage", "qc", id] as const,
+  me: ["storage", "me"] as const,
+  students: ["storage", "students"] as const,
+  myRequests: ["storage", "my-requests"] as const,
+  myReturns: ["storage", "my-returns"] as const,
+  defaultDueAt: ["storage", "default-due-at"] as const,
 };
 
 export const useInventory = () =>
@@ -85,3 +91,33 @@ export const useSubmitQC = () =>
 
 export const useVerifySlip = () =>
   useStorageMutation((v: { id: string; valid: boolean }) => storageApi.verifySlip(v.id, v.valid));
+
+export const useCurrentStudent = () =>
+  useQuery({ queryKey: storageKeys.me, queryFn: storageApi.getCurrentStudent });
+
+export const useStudents = () =>
+  useQuery({ queryKey: storageKeys.students, queryFn: storageApi.listStudents });
+
+export const useMyRequests = () =>
+  useQuery({ queryKey: storageKeys.myRequests, queryFn: storageApi.getMyRequests });
+
+export const useMyPendingReturns = () =>
+  useQuery({ queryKey: storageKeys.myReturns, queryFn: storageApi.getMyPendingReturns });
+
+export const useDefaultDueAt = () =>
+  useQuery({ queryKey: storageKeys.defaultDueAt, queryFn: storageApi.getDefaultDueAt });
+
+export const useSetCurrentStudent = () =>
+  useStorageMutation((studentId: string) => storageApi.setCurrentStudent(studentId));
+
+export const useCreateBorrowRequest = () =>
+  useStorageMutation((input: NewBorrowRequest) => storageApi.createBorrowRequest(input));
+
+export const useCancelBorrow = () => useStorageMutation((id: string) => storageApi.cancelBorrow(id));
+
+export const useConfirmPickup = () => useStorageMutation((id: string) => storageApi.confirmPickup(id));
+
+export const useSetDefaultDueAt = () => useStorageMutation((at: number) => storageApi.setDefaultDueAt(at));
+
+export const useSetRequestDueAt = () =>
+  useStorageMutation((v: { id: string; at: number }) => storageApi.setRequestDueAt(v.id, v.at));
