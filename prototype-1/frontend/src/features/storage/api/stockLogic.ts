@@ -3,14 +3,30 @@ import { RESERVATION_MS, borrowRequests, clock, inventory, reservations, syncCou
 
 export const findItem = (itemId: string): InventoryItem | undefined => inventory.find((i) => i.id === itemId);
 
-/** Drop expired reservations, and clear restock flags that no longer hold any units. */
+/** Remove every reservation held for a request (units go back to the general pool). */
+export function releaseReservations(requestId: string): void {
+  for (let i = reservations.length - 1; i >= 0; i--) {
+    if (reservations[i].requestId === requestId) reservations.splice(i, 1);
+  }
+}
+
+/**
+ * Drop expired reservations. A flagged UNFULFILLED request whose hold window has passed
+ * is cancelled (RESTOCK_EXPIRED); a flag that no longer holds any units is cleared.
+ */
 export function expireReservations(): void {
   const now = clock.now();
   for (let i = reservations.length - 1; i >= 0; i--) {
     if (reservations[i].expiresAt <= now) reservations.splice(i, 1);
   }
   for (const req of borrowRequests) {
-    if (req.restock && req.status === "UNFULFILLED" && !reservations.some((r) => r.requestId === req.id)) {
+    if (!req.restock || req.status !== "UNFULFILLED") continue;
+    if (req.restock.expiresAt <= now) {
+      req.status = "CANCELLED";
+      req.cancelReason = "RESTOCK_EXPIRED";
+      delete req.restock;
+      releaseReservations(req.id);
+    } else if (!reservations.some((r) => r.requestId === req.id)) {
       delete req.restock;
     }
   }
@@ -127,6 +143,7 @@ export function applyIssue(lines: IssuedLine[], requestId?: string): void {
 }
 
 export function reopenRequest(req: BorrowRequest): void {
+  if (req.status === "CANCELLED" && req.cancelReason === "RESTOCK_EXPIRED") throw new Error("หมดเวลาเปิดคำขอแล้ว");
   if (req.status !== "UNFULFILLED") throw new Error("คำขอนี้ไม่ได้อยู่ในสถานะ UNFULFILLED");
   if (!req.restock) throw new Error("คำขอนี้ยังไม่มีการแจ้งสต็อกกลับมา");
   if (req.items.every((it) => issuableQty(it.itemId, req.id) === 0)) {

@@ -34,6 +34,7 @@ import {
   expireReservations,
   findItem,
   issuableQty,
+  releaseReservations,
   reopenRequest,
   restockItem,
   sweepRequests,
@@ -192,6 +193,19 @@ export const storageApi = {
     const req = borrowRequests.find((r) => r.id === id);
     if (!req) return fail("ไม่พบคำขอ");
     reopenRequest(req!);
+    return delay(req!);
+  },
+
+  /** Student cancels before anything was issued. Reserved units go back to the pool. */
+  cancelBorrow: async (id: string): Promise<BorrowRequest> => {
+    expireReservations();
+    const req = borrowRequests.find((r) => r.id === id);
+    if (!req) return fail("ไม่พบคำขอ");
+    if (req!.status !== "OPEN" && req!.status !== "UNFULFILLED") return fail("ยกเลิกได้เฉพาะคำขอที่ยังไม่ได้จ่ายของ");
+    req!.status = "CANCELLED";
+    req!.cancelReason = "BY_STUDENT";
+    delete req!.restock;
+    releaseReservations(req!.id);
     return delay(req!);
   },
 

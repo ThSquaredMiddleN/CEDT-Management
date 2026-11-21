@@ -27,6 +27,19 @@ async function sellOutB101() {
   await storageApi.walkInCheckout("x", "g", [bulk("EQ-002", 42)]);
 }
 
+async function restock() {
+  await sellOutB101();
+  await storageApi.submitQC("REQ-R-201", {
+    items: [
+      { id: "q1", results: ok },
+      { id: "q2", results: ok },
+      { id: "q3", results: { AVAILABLE: 5, DAMAGED: 0, LOST: 0 } },
+    ],
+    fineAmount: 0,
+    fineRemark: "",
+  });
+}
+
 describe("unit records", () => {
   it("generates numbered serials for a new Unique item", async () => {
     await storageApi.addInventoryItem({ id: "eq-005", name: "Arduino", isUnique: true, total: 3 });
@@ -63,19 +76,6 @@ describe("sweep rule", () => {
 });
 
 describe("restock flag and reservation", () => {
-  async function restock() {
-    await sellOutB101();
-    await storageApi.submitQC("REQ-R-201", {
-      items: [
-        { id: "q1", results: ok },
-        { id: "q2", results: ok },
-        { id: "q3", results: { AVAILABLE: 5, DAMAGED: 0, LOST: 0 } },
-      ],
-      fineAmount: 0,
-      fineRemark: "",
-    });
-  }
-
   it("flags the UNFULFILLED request and reserves restocked units for it", async () => {
     await restock();
     const req = (await storageApi.getBorrowRequests()).find((r) => r.id === "REQ-B-101")!;
@@ -256,5 +256,36 @@ describe("student requests", () => {
   it("decorates my requests with the serials issued against them", async () => {
     const [, closed] = await storageApi.getMyRequests();
     expect(closed.items.find((i) => i.itemId === "EQ-001")!.issuedSerials).toEqual(["EQ-001-011"]);
+  });
+});
+
+describe("cancel and restock expiry", () => {
+  it("cancels an OPEN request", async () => {
+    const req = await storageApi.cancelBorrow("REQ-B-101");
+    expect(req).toMatchObject({ status: "CANCELLED", cancelReason: "BY_STUDENT" });
+  });
+
+  it("frees reserved units when a restock-flagged request is cancelled", async () => {
+    await restock();
+    expect((await inv("EQ-001")).reserved).toBe(2);
+    await storageApi.cancelBorrow("REQ-B-101");
+    const pi = await inv("EQ-001");
+    expect(pi.reserved).toBe(0);
+    expect(pi.available).toBe(2);
+  });
+
+  it("rejects cancelling a request that was already issued", async () => {
+    await storageApi.confirmBorrow("REQ-B-103", [{ itemId: "EQ-004", qty: 1, sns: ["EQ-004-001"] }], pickup);
+    await expect(storageApi.cancelBorrow("REQ-B-103")).rejects.toThrow(/ยกเลิกได้เฉพาะ/);
+  });
+
+  it("auto-cancels a flagged request that is not reopened within 24 hours", async () => {
+    await restock();
+    const start = Date.now();
+    clock.now = () => start + 25 * HOUR;
+    const req = (await storageApi.getBorrowRequests()).find((r) => r.id === "REQ-B-101")!;
+    expect(req).toMatchObject({ status: "CANCELLED", cancelReason: "RESTOCK_EXPIRED" });
+    expect(req.restock).toBeUndefined();
+    await expect(storageApi.reopenBorrow("REQ-B-101")).rejects.toThrow(/หมดเวลาเปิดคำขอแล้ว/);
   });
 });
