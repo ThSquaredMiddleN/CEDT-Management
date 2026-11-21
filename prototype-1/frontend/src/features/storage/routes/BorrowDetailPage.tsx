@@ -5,12 +5,14 @@ import { EmptyState, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useBorrowRequest, useConfirmBorrow, useReopenBorrow } from "../api/hooks";
+import { useBorrowRequest, useConfirmBorrow, useConfirmPickup, useReopenBorrow } from "../api/hooks";
 import { TaskStatusBadge } from "../components/badges";
 import { BarcodeScanner } from "../components/BarcodeScanner";
 import { CartManager } from "../components/CartManager";
+import { DueDateEditor } from "../components/DueDateEditor";
 import { ItemImage } from "../components/ItemImage";
 import { ResultDialog, StoragePage } from "../components/layout";
+import { PickupCard } from "../components/PickupCard";
 import { useCart, type CatalogEntry } from "../components/useCart";
 import type { BorrowRequest, PickupDetails } from "../types";
 
@@ -21,6 +23,7 @@ function Workspace({ req }: { req: BorrowRequest }) {
   const navigate = useNavigate();
   const confirm = useConfirmBorrow();
   const reopen = useReopenBorrow();
+  const confirmPickup = useConfirmPickup();
   const [pickupAt, setPickupAt] = useState("");
   const [location, setLocation] = useState<PickupDetails["location"]>("locker");
   const [remark, setRemark] = useState("");
@@ -49,7 +52,7 @@ function Workspace({ req }: { req: BorrowRequest }) {
     itemId: it.itemId,
     name: it.name,
     isUnique: it.isUnique,
-    qty: req.status === "UNFULFILLED" ? 0 : it.issuedQty,
+    qty: req.status === "UNFULFILLED" || req.status === "CANCELLED" ? 0 : it.issuedQty,
     sns: [],
     maxStock: it.available ?? 0,
     reqQty: it.reqQty,
@@ -104,10 +107,12 @@ function Workspace({ req }: { req: BorrowRequest }) {
               {readOnly ? (
                 <div className="flex gap-3 rounded-lg border border-neutral-300 bg-neutral-100 p-3 font-body text-body-sm text-grey-700">
                   <Lock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                  <p className={req.status === "UNFULFILLED" ? "font-bold text-status-danger-fg" : ""}>
+                  <p className={req.status === "UNFULFILLED" || req.status === "CANCELLED" ? "font-bold text-status-danger-fg" : ""}>
                     {req.status === "UNFULFILLED"
                       ? "คำขอนี้ถูกยกเลิกเนื่องจากอุปกรณ์ในคลังไม่เพียงพอ (UNFULFILLED) - Read-only View"
-                      : "รายการนี้ถูกจัดการเรียบร้อยแล้ว (Read-only View)"}
+                      : req.status === "CANCELLED"
+                        ? `คำขอนี้ถูกยกเลิก (${req.cancelReason === "RESTOCK_EXPIRED" ? "หมดเวลาเปิดคำขอ" : "ผู้ขอยกเลิก"}) - Read-only View`
+                        : "รายการนี้ถูกจัดการเรียบร้อยแล้ว (Read-only View)"}
                   </p>
                 </div>
               ) : (
@@ -122,6 +127,19 @@ function Workspace({ req }: { req: BorrowRequest }) {
                   </p>
                 </div>
               )}
+
+              {(req.status === "READY_FOR_PICKUP" || req.status === "CLOSED") && req.pickup && <PickupCard pickup={req.pickup} />}
+              {req.status === "READY_FOR_PICKUP" && (
+                <div className="space-y-2">
+                  <Button variant="filled" size="lg" loading={confirmPickup.isPending} onClick={() => confirmPickup.mutate(req.id)}>
+                    ยืนยันรับของแล้ว
+                  </Button>
+                  {confirmPickup.isError && (
+                    <p role="alert" className="text-sm text-status-danger-fg">{(confirmPickup.error as Error).message}</p>
+                  )}
+                </div>
+              )}
+              {req.status === "CLOSED" && <DueDateEditor req={req} />}
 
               {readOnly ? (
                 <ul className="space-y-3">
