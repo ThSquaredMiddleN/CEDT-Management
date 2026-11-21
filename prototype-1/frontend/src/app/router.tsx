@@ -94,6 +94,11 @@ const QCDetailPage = lazy(() =>
     default: module.QCDetailPage,
   })),
 );
+const StudentStoragePage = lazy(() =>
+  import("@/features/storage/routes/StudentStoragePage").then((module) => ({
+    default: module.StudentStoragePage,
+  })),
+);
 
 function PageLoading() {
   return (
@@ -152,6 +157,8 @@ export function AppRoutes() {
             }
           />
           <Route path="schedule/a" element={<MapPage />} />
+          {/* Student storage. No RequireAuth yet: student auth is not decided (mock identity). */}
+          <Route path="student/storage" element={<StudentStoragePage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
         <Route path="admin" element={<AdminLayout />}>
