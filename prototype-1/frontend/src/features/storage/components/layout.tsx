@@ -89,12 +89,12 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
+    <Dialog open={open} onOpenChange={(o) => !o && !loading && onCancel()}>
       <DialogContent>
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription className="whitespace-pre-line">{message}</DialogDescription>
         <DialogFooter className="gap-2">
-          <Button variant="outlined" size="lg" onClick={onCancel}>
+          <Button variant="outlined" size="lg" disabled={loading} onClick={onCancel}>
             ย้อนกลับ
           </Button>
           <Button variant="filled" size="lg" loading={loading} onClick={onConfirm}>
