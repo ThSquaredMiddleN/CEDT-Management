@@ -293,6 +293,19 @@ describe("cancel and restock expiry", () => {
     expect(pi.available).toBe(2);
   });
 
+  it("offers units freed by a cancelled hold to the next UNFULFILLED request", async () => {
+    await restock();
+    await storageApi.setCurrentStudent("6632199925");
+    const waiting = await storageApi.createBorrowRequest({ groupId: "group09", items: [{ itemId: "EQ-001", qty: 2 }] });
+    expect(waiting.status).toBe("UNFULFILLED");
+    expect(waiting.restock).toBeUndefined();
+
+    await storageApi.cancelBorrow("REQ-B-101");
+    const after = await storageApi.getBorrowRequest(waiting.id);
+    expect(after.restock).toBeDefined();
+    expect((await inv("EQ-001")).reserved).toBe(2);
+  });
+
   it("rejects cancelling a request that was already issued", async () => {
     await storageApi.confirmBorrow("REQ-B-103", [{ itemId: "EQ-004", qty: 1, sns: ["EQ-004-001"] }], pickup);
     await expect(storageApi.cancelBorrow("REQ-B-103")).rejects.toThrow(/ยกเลิกได้เฉพาะ/);

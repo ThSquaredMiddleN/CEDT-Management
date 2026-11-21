@@ -13,14 +13,26 @@ import type { BorrowRequest } from "../types";
 function RestockAction({ req }: { req: BorrowRequest }) {
   const now = useNow();
   const reopen = useReopenBorrow();
+  const expired = req.restock!.expiresAt <= now;
   return (
     <div className="w-full space-y-2 rounded-lg border border-status-warning-border bg-status-warning-bg p-3 font-body text-body-sm text-status-warning-fg">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <span>
           มีของแล้ว · เปิดคำขอภายใน{" "}
-          <span className="font-mono font-bold">{formatCountdown(req.restock!.expiresAt - now)}</span>
+          {expired ? (
+            <span className="font-bold">หมดเวลาแล้ว</span>
+          ) : (
+            <span className="font-mono font-bold">{formatCountdown(req.restock!.expiresAt - now)}</span>
+          )}
         </span>
-        <Button variant="filled" size="small" className="px-4" loading={reopen.isPending} onClick={() => reopen.mutate(req.id)}>
+        <Button
+          variant="filled"
+          size="small"
+          className="px-4"
+          disabled={expired}
+          loading={reopen.isPending}
+          onClick={() => reopen.mutate(req.id)}
+        >
           เปิดคำขอ
         </Button>
       </div>
@@ -51,7 +63,7 @@ function RequestDetail({ req }: { req: BorrowRequest }) {
         <RequestStatusPill req={req} />
       </div>
 
-      {req.status === "READY_FOR_PICKUP" && req.pickup && <PickupCard pickup={req.pickup} />}
+      {(req.status === "READY_FOR_PICKUP" || req.status === "CLOSED") && req.pickup && <PickupCard pickup={req.pickup} />}
 
       {req.status === "CLOSED" && (
         <p className="flex flex-wrap items-center gap-2 text-sm text-grey-700">

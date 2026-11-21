@@ -3,11 +3,20 @@ import { RESERVATION_MS, borrowRequests, clock, inventory, reservations, syncCou
 
 export const findItem = (itemId: string): InventoryItem | undefined => inventory.find((i) => i.id === itemId);
 
-/** Remove every reservation held for a request (units go back to the general pool). */
+/**
+ * Remove every reservation held for a request (units go back to the general pool),
+ * then offer the freed units to UNFULFILLED requests waiting in the queue.
+ * The caller must already have set the request's status to CANCELLED.
+ */
 export function releaseReservations(requestId: string): void {
+  const freed: { itemId: string; qty: number }[] = [];
   for (let i = reservations.length - 1; i >= 0; i--) {
-    if (reservations[i].requestId === requestId) reservations.splice(i, 1);
+    if (reservations[i].requestId === requestId) {
+      freed.push({ itemId: reservations[i].itemId, qty: reservations[i].qty });
+      reservations.splice(i, 1);
+    }
   }
+  for (const { itemId, qty } of freed) restockItem(itemId, qty);
 }
 
 /**

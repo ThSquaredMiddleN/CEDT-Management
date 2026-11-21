@@ -25,7 +25,7 @@ export function StudentStoragePage() {
 
   const go = (next: TabValue, id?: string) => setParams(id ? { tab: next, id } : { tab: next });
   const needsAttention = (requests.data ?? []).filter(
-    (r) => r.status === "READY_FOR_PICKUP" || (r.status === "UNFULFILLED" && !!r.restock),
+    (r) => r.status === "READY_FOR_PICKUP" || (r.status === "UNFULFILLED" && !!r.restock && r.restock.expiresAt > Date.now()),
   ).length;
 
   return (
