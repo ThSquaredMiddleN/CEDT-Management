@@ -14,7 +14,8 @@ export function OwedPage() {
   const now = useNow(60_000);
   const [groupId, setGroupId] = useState("all");
 
-  const rows = (owed.data ?? []).filter((i) => groupId === "all" || i.groupId === groupId);
+  const effectiveGroupId = me.data?.groups.some((g) => g.id === groupId) ? groupId : "all";
+  const rows = (owed.data ?? []).filter((i) => effectiveGroupId === "all" || i.groupId === effectiveGroupId);
 
   return (
     <div className="space-y-4">
@@ -22,7 +23,7 @@ export function OwedPage() {
         <label htmlFor="owed-group" className="text-sm font-semibold text-grey-700">กลุ่ม</label>
         <select
           id="owed-group"
-          value={groupId}
+          value={effectiveGroupId}
           onChange={(e) => setGroupId(e.target.value)}
           className="h-9 rounded-md border border-neutral-200 bg-white px-3 text-sm shadow-sm"
         >

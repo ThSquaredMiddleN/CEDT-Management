@@ -53,9 +53,14 @@ function RequestDetail({ req }: { req: BorrowRequest }) {
 
       {req.status === "READY_FOR_PICKUP" && req.pickup && <PickupCard pickup={req.pickup} />}
 
-      {req.status === "CLOSED" && req.dueAt && (
+      {req.status === "CLOSED" && (
         <p className="flex flex-wrap items-center gap-2 text-sm text-grey-700">
-          รับของเมื่อ {req.pickedUpAt ? formatDate(req.pickedUpAt) : "-"} · กำหนดคืน <DueBadge dueAt={req.dueAt} now={now} />
+          รับของเมื่อ {req.pickedUpAt ? formatDate(req.pickedUpAt) : "-"}
+          {req.dueAt && (
+            <>
+              {" "}· กำหนดคืน <DueBadge dueAt={req.dueAt} now={now} />
+            </>
+          )}
         </p>
       )}
 
