@@ -1,4 +1,5 @@
 import { ChevronRight, User } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState, SkeletonRow } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,8 @@ import { StoragePage } from "../components/layout";
 
 export function BorrowListPage() {
   const { data, isLoading, isError } = useBorrowRequests();
+  const [showCancelled, setShowCancelled] = useState(false);
+  const rows = data?.filter((r) => showCancelled || r.status !== "CANCELLED");
 
   return (
     <StoragePage
@@ -16,7 +19,16 @@ export function BorrowListPage() {
       backTo="/admin/storage"
       backLabel="กลับหน้า Dashboard"
     >
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 font-body text-body-sm text-grey-700">
+          <input
+            type="checkbox"
+            checked={showCancelled}
+            onChange={(e) => setShowCancelled(e.target.checked)}
+            className="size-4 accent-brand-primary"
+          />
+          แสดงที่ยกเลิก
+        </label>
         <Button asChild variant="outlined" size="medium">
           <Link to="/admin/storage/borrow/walk-in">จ่ายหน้าเคาน์เตอร์ (Walk-in)</Link>
         </Button>
@@ -25,8 +37,8 @@ export function BorrowListPage() {
       <div className="space-y-3">
         {isLoading && Array.from({ length: 3 }, (_, i) => <SkeletonRow key={i} className="h-20" />)}
         {isError && <EmptyState title="โหลดรายการไม่สำเร็จ" />}
-        {data?.length === 0 && <EmptyState title="ไม่มีคำขอ" />}
-        {data?.map((r) => (
+        {rows?.length === 0 && <EmptyState title="ไม่มีคำขอ" />}
+        {rows?.map((r) => (
           <Link
             key={r.id}
             to={`/admin/storage/borrow/${r.id}`}
@@ -39,6 +51,11 @@ export function BorrowListPage() {
               <div className="mb-2 flex items-center gap-3">
                 <span className="font-body text-body-md-emphasize text-grey-900">{r.id}</span>
                 <TaskStatusBadge status={r.status} />
+                {r.status === "CANCELLED" && (
+                  <span className="text-xs text-grey-400">
+                    {r.cancelReason === "RESTOCK_EXPIRED" ? "หมดเวลาเปิดคำขอ" : "ผู้ขอยกเลิก"}
+                  </span>
+                )}
                 {r.restock && (
                   <span className="rounded-full border border-status-info-border bg-status-info-bg px-2 py-0.5 text-[10px] font-bold text-status-info-fg">
                     สต็อกกลับมาแล้ว

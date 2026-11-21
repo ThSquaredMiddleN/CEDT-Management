@@ -2,6 +2,7 @@ import { CircleAlert, PackageOpen, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IndexTypeBadge } from "./badges";
 import { ItemImage } from "./ItemImage";
+import { formatDate } from "./dates";
 import { itemLabel } from "./itemLabel";
 import type { PendingReturnItem, ReturnCounts, ReturnDecision } from "../types";
 
@@ -41,6 +42,9 @@ export function ReturnItemRow({ item, counts = emptyCounts(), onChange }: Return
         <div>
           <p className="flex flex-wrap items-center gap-2 font-body text-body-sm-emphasize text-grey-900">
             {itemLabel(item)} <IndexTypeBadge isUnique={item.isUnique} />
+          </p>
+          <p className="mt-1 font-body text-body-xs text-grey-400">
+            {item.requestId} · {item.group} · กำหนดคืน {formatDate(item.dueAt)}
           </p>
           {overdue && item.notBroughtAt && (
             <p className="mt-1 flex items-center gap-1 font-body text-body-xs text-status-warning-fg">
