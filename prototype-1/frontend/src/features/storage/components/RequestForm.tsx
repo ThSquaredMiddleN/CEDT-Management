@@ -60,7 +60,10 @@ export function RequestForm({
   const groups = me.data?.groups ?? [];
   const group = groups.find((g) => g.id === groupId) ?? groups[0];
   const lines = Object.entries(cart)
-    .map(([itemId, qty]) => ({ item: inventory.find((i) => i.id === itemId), qty }))
+    .map(([itemId, qty]) => {
+      const item = inventory.find((i) => i.id === itemId);
+      return { item, qty: item ? Math.min(qty, item.total) : qty };
+    })
     .filter((l): l is { item: InventoryItem; qty: number } => !!l.item);
   const canSubmit = !!group && lines.length > 0 && !create.isPending;
 
@@ -72,7 +75,7 @@ export function RequestForm({
 
   return (
     <div className="space-y-4 rounded-xl border border-neutral-200 bg-white p-5 lg:sticky lg:top-6">
-      <h2 className="border-b pb-2 font-body text-body-md-emphasize text-grey-900">ตะกร้า</h2>
+      <h2 className="border-b border-neutral-200 pb-2 font-body text-body-md-emphasize text-grey-900">ตะกร้า</h2>
 
       <div>
         <label htmlFor="req-group" className="mb-1 block text-xs font-bold text-grey-700">กลุ่ม</label>

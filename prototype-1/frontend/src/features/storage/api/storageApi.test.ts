@@ -215,6 +215,24 @@ describe("group-owned items", () => {
     await storageApi.submitReturn("6632199925", { f1: rc(1, 0, 0), f2: rc(5, 0, 0) }, "");
     expect(await storageApi.getPendingReturns("6632199921")).toHaveLength(0);
   });
+
+  it("labels the QC request with the group of the returned items", async () => {
+    await storageApi.submitReturn("6632199925", { f1: rc(1, 0, 0), f2: rc(5, 0, 0) }, "");
+    expect((await storageApi.getQCRequests())[0].group).toBe("Group 09");
+  });
+
+  it("labels the QC request with every group the returned items belong to", async () => {
+    await storageApi.setCurrentStudent("6632199925"); // Group 09, ชมรมหุ่นยนต์, personal
+    const { id } = await storageApi.createBorrowRequest({ groupId: "robotics-club", items: [{ itemId: "EQ-002", qty: 1 }] });
+    await storageApi.confirmBorrow(id, [bulk("EQ-002", 1)], pickup);
+    await storageApi.confirmPickup(id);
+    await storageApi.submitReturn(
+      "6632199925",
+      { f1: rc(1, 0, 0), f2: rc(5, 0, 0), [`${id}-EQ-002`]: rc(1, 0, 0) },
+      "",
+    );
+    expect((await storageApi.getQCRequests())[0].group).toBe("Group 09, ชมรมหุ่นยนต์");
+  });
 });
 
 describe("student requests", () => {

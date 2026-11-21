@@ -12,7 +12,7 @@ export function DueDateEditor({ req }: { req: BorrowRequest }) {
 
   const value = draft ?? (req.dueAt ? toLocalInput(req.dueAt) : "");
   const parsed = value ? fromLocalInput(value) : NaN;
-  const dirty = draft !== null && Number.isFinite(parsed) && parsed !== req.dueAt;
+  const dirty = draft !== null && Number.isFinite(parsed) && parsed !== req.dueAt && parsed >= (req.pickedUpAt ?? 0);
 
   return (
     <div className="space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
@@ -23,10 +23,13 @@ export function DueDateEditor({ req }: { req: BorrowRequest }) {
           type="datetime-local"
           value={value}
           min={req.pickedUpAt ? toLocalInput(req.pickedUpAt) : undefined}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            save.reset();
+            setDraft(e.target.value);
+          }}
           className="max-w-xs"
         />
-        {req.pickedUpAt && Number.isFinite(parsed) && (
+        {req.pickedUpAt && Number.isFinite(parsed) && parsed >= req.pickedUpAt && (
           <span className="text-sm text-grey-400">
             ยืม {daysBetween(req.pickedUpAt, parsed)} วัน (รับของ {formatDate(req.pickedUpAt)})
           </span>

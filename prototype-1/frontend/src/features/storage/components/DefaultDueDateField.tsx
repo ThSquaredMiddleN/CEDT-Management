@@ -13,7 +13,7 @@ export function DefaultDueDateField() {
 
   const value = draft ?? (due.data !== undefined ? toLocalInput(due.data) : "");
   const parsed = value ? fromLocalInput(value) : NaN;
-  const dirty = draft !== null && Number.isFinite(parsed) && parsed !== due.data;
+  const dirty = draft !== null && Number.isFinite(parsed) && parsed !== due.data && parsed > now;
 
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5 sm:flex-row sm:items-end">
@@ -25,7 +25,11 @@ export function DefaultDueDateField() {
           id="default-due"
           type="datetime-local"
           value={value}
-          onChange={(e) => setDraft(e.target.value)}
+          min={toLocalInput(now)}
+          onChange={(e) => {
+            save.reset();
+            setDraft(e.target.value);
+          }}
           className="max-w-xs"
         />
         <p className="mt-1 text-xs text-grey-400">

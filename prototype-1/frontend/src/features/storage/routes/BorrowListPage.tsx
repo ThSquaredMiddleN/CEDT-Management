@@ -37,7 +37,13 @@ export function BorrowListPage() {
       <div className="space-y-3">
         {isLoading && Array.from({ length: 3 }, (_, i) => <SkeletonRow key={i} className="h-20" />)}
         {isError && <EmptyState title="โหลดรายการไม่สำเร็จ" />}
-        {rows?.length === 0 && <EmptyState title="ไม่มีคำขอ" />}
+        {rows?.length === 0 && <EmptyState
+            title={
+              !showCancelled && data?.some((r) => r.status === "CANCELLED")
+                ? "ไม่มีคำขอ (ซ่อนคำขอที่ยกเลิกไว้)"
+                : "ไม่มีคำขอ"
+            }
+          />}
         {rows?.map((r) => (
           <Link
             key={r.id}

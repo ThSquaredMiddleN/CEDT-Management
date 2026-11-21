@@ -408,7 +408,7 @@ export const storageApi = {
     }
 
     const student = students.find((s) => s.studentId === studentId);
-    const base = { type: "Face-to-Face Return", group: student?.groups[0]?.label ?? "-", user: student?.name ?? studentId };
+    const base = { type: "Face-to-Face Return", group: [...new Set(owed.map((i) => i.group))].join(", ") || "-", user: student?.name ?? studentId };
     if (received.length > 0) {
       qcRequests.unshift({ id: nextQcId(), ...base, status: "OPEN", fineAmount: 0, fineRemark: "", items: received });
     }

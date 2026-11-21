@@ -12,7 +12,7 @@ function CatalogCard({ item, qty, onChange }: { item: InventoryItem; qty: number
   const soldOut = item.available === 0;
   return (
     <div className="flex h-full flex-col gap-2 rounded-xl border border-neutral-200 bg-white p-3">
-      <ItemImage src={item.imageUrl} name={item.name} className="h-28 w-full" />
+      <ItemImage src={item.imageUrl} name={item.name} className="size-auto h-28 w-full" />
       <div className="flex-1">
         <p className="font-body text-body-sm-emphasize text-grey-900">{item.name}</p>
         <p className="font-mono text-xs text-grey-400">{item.id}</p>
