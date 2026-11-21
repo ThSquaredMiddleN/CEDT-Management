@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { apiConfig, clock, pendingReturns, resetMockStore, units } from "./mockStore";
+import { SEMESTER_END, apiConfig, clock, pendingReturns, resetMockStore, units } from "./mockStore";
 import { storageApi } from "./storageApi";
 import type { IssuedLine, QCResults } from "../types";
 
@@ -336,7 +336,7 @@ describe("pickup and due dates", () => {
   });
 
   it("sorts my owed items: not brought, then overdue, then soonest due", async () => {
-    const start = Date.now();
+    const start = SEMESTER_END - 30 * DAY;
     clock.now = () => start;
     const req = await storageApi.createBorrowRequest({ groupId: "group09", items: [{ itemId: "EQ-002", qty: 2 }] });
     await storageApi.confirmBorrow(req.id, [bulk("EQ-002", 2)], pickup);
