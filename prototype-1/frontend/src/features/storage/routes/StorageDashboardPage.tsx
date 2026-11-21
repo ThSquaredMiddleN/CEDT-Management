@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useInventory, useSetItemImage } from "../api/hooks";
 import { AddItemDialog } from "../components/AddItemDialog";
 import { IndexTypeBadge } from "../components/badges";
+import { DefaultDueDateField } from "../components/DefaultDueDateField";
 import { IMAGE_ACCEPT, readItemImage } from "../components/imageFile";
 import { ItemImage } from "../components/ItemImage";
 import { StoragePage } from "../components/layout";
@@ -87,6 +88,8 @@ export function StorageDashboardPage() {
         <ActionCard to="/admin/storage/return" icon={<Users />} title="Face-to-Face" desc="รับคืนหน้าเคาน์เตอร์" tone="bg-brand-primary hover:bg-button-primary-hover" />
         <ActionCard to="/admin/storage/qc" icon={<ClipboardCheck />} title="QC & Liability" desc="รอตรวจสภาพ / ปรับเงิน" tone="bg-brand-primary hover:bg-button-primary-hover" />
       </div>
+
+      <DefaultDueDateField />
 
       <div className="flex items-center justify-between">
         <h2 className="font-body text-body-md-emphasize text-grey-900">รายการอุปกรณ์ในคลัง</h2>
