@@ -215,3 +215,46 @@ describe("group-owned items", () => {
     expect(await storageApi.getPendingReturns("6632199921")).toHaveLength(0);
   });
 });
+
+describe("student requests", () => {
+  it("creates an OPEN request for one of my groups, with the type taken from the group", async () => {
+    const req = await storageApi.createBorrowRequest({ groupId: "group09", items: [{ itemId: "EQ-004", qty: 2 }] });
+    expect(req).toMatchObject({
+      id: "REQ-B-105",
+      status: "OPEN",
+      groupId: "group09",
+      group: "Group 09",
+      type: "Course - IoT System",
+      studentId: "6632199921",
+    });
+    expect(req.items).toEqual([{ itemId: "EQ-004", name: "Servo Motor SG90", isUnique: true, reqQty: 2, issuedQty: 0 }]);
+  });
+
+  it("accepts more than is available, queueing the request", async () => {
+    await storageApi.walkInCheckout("x", "g", [pis(5)]); // shelf now has no Pis
+    const req = await storageApi.createBorrowRequest({ groupId: "group09", items: [{ itemId: "EQ-001", qty: 3 }] });
+    expect(req.status).toBe("UNFULFILLED"); // nothing issuable, so the sweep rule applies at once
+  });
+
+  it("rejects an empty cart, bad quantities and groups I'm not in", async () => {
+    const create = (groupId: string, items: { itemId: string; qty: number }[]) =>
+      storageApi.createBorrowRequest({ groupId, items });
+    await expect(create("group09", [])).rejects.toThrow(/ยังไม่ได้เลือก/);
+    await expect(create("group09", [{ itemId: "EQ-001", qty: 0 }])).rejects.toThrow(/ระหว่าง/);
+    await expect(create("group09", [{ itemId: "EQ-001", qty: 12 }])).rejects.toThrow(/ระหว่าง/); // total is 11
+    await expect(create("robotics-club", [{ itemId: "EQ-001", qty: 1 }])).rejects.toThrow(/ไม่ได้อยู่ในกลุ่ม/);
+  });
+
+  it("lists only my groups' requests, newest first, and follows the current student", async () => {
+    expect((await storageApi.getCurrentStudent()).studentId).toBe("6632199921");
+    expect((await storageApi.getMyRequests()).map((r) => r.id)).toEqual(["REQ-B-101", "REQ-B-100"]);
+
+    await storageApi.setCurrentStudent("6632199925"); // Group 09 + robotics club
+    expect((await storageApi.getMyRequests()).map((r) => r.id)).toEqual(["REQ-B-103", "REQ-B-101", "REQ-B-100"]);
+  });
+
+  it("decorates my requests with the serials issued against them", async () => {
+    const [, closed] = await storageApi.getMyRequests();
+    expect(closed.items.find((i) => i.itemId === "EQ-001")!.issuedSerials).toEqual(["EQ-001-011"]);
+  });
+});

@@ -2,6 +2,7 @@ import type {
   BorrowRequest,
   InventoryItem,
   IssuedLine,
+  NewBorrowRequest,
   NewInventoryItem,
   PendingReturnItem,
   PickupDetails,
@@ -22,6 +23,7 @@ import {
   inventory,
   pendingReturns,
   qcRequests,
+  session,
   students,
   syncAllCounts,
   syncCounts,
@@ -85,6 +87,32 @@ function nextQcId(): string {
   return `REQ-R-${Math.max(max, 299) + 1}`;
 }
 
+function nextBorrowId(): string {
+  const max = borrowRequests.reduce((m, r) => Math.max(m, Number(r.id.split("-").pop()) || 0), 0);
+  return `REQ-B-${max + 1}`;
+}
+
+function currentStudent(): Student {
+  const s = students.find((x) => x.studentId === session.studentId);
+  if (!s) throw new Error("ไม่พบข้อมูลนิสิต");
+  return s;
+}
+
+/** Request as the UI sees it: what each line could be issued now, and which serials it holds. */
+function decorate(req: BorrowRequest): BorrowRequest {
+  return {
+    ...req,
+    items: req.items.map((it) => ({
+      ...it,
+      available: issuableQty(it.itemId, req.id),
+      availableSerials: it.isUnique ? availableSerials(it.itemId) : undefined,
+      issuedSerials: it.isUnique
+        ? units.filter((u) => u.itemId === it.itemId && u.requestId === req.id).map((u) => u.serial)
+        : undefined,
+    })),
+  };
+}
+
 export const storageApi = {
   getInventory: async (): Promise<InventoryItem[]> => {
     expireReservations();
@@ -133,15 +161,7 @@ export const storageApi = {
     expireReservations();
     const req = borrowRequests.find((r) => r.id === id);
     if (!req) return fail("ไม่พบคำขอ");
-    const decorated: BorrowRequest = {
-      ...req!,
-      items: req!.items.map((it) => ({
-        ...it,
-        available: issuableQty(it.itemId, req!.id),
-        availableSerials: it.isUnique ? availableSerials(it.itemId) : undefined,
-      })),
-    };
-    return delay(decorated);
+    return delay(decorate(req!));
   },
 
   /** Click & Collect: partial fulfilment allowed; task becomes READY_FOR_PICKUP. */
@@ -178,6 +198,67 @@ export const storageApi = {
   lookupStudent: (studentId: string): Promise<Student> => {
     const s = students.find((x) => x.studentId === studentId.trim());
     return s ? delay(s) : Promise.reject(new Error("ไม่พบรหัสนิสิตนี้"));
+  },
+
+  // ---- Student side (mock identity until real student auth exists) ----
+
+  getCurrentStudent: async (): Promise<Student> => delay(currentStudent()),
+
+  /** Dev switcher: every seeded student. */
+  listStudents: async (): Promise<Student[]> => delay(students),
+
+  setCurrentStudent: async (studentId: string): Promise<{ studentId: string }> => {
+    if (!students.some((s) => s.studentId === studentId)) return fail("ไม่พบรหัสนิสิตนี้");
+    session.studentId = studentId;
+    return delay({ studentId });
+  },
+
+  /**
+   * A line may ask for more than is available (it waits in the queue) but never more
+   * than the item's total. A request with nothing issuable is swept to UNFULFILLED at once.
+   */
+  createBorrowRequest: async (input: NewBorrowRequest): Promise<BorrowRequest> => {
+    expireReservations();
+    syncAllCounts();
+    const student = currentStudent();
+    const group = student.groups.find((g) => g.id === input.groupId);
+    if (!group) return fail("คุณไม่ได้อยู่ในกลุ่มนี้");
+    if (input.items.length === 0) return fail("ยังไม่ได้เลือกอุปกรณ์");
+    if (new Set(input.items.map((l) => l.itemId)).size !== input.items.length) return fail("รายการอุปกรณ์ซ้ำกัน");
+    const lines = input.items.map((l) => {
+      const item = findItem(l.itemId);
+      if (!item) return fail(`ไม่พบอุปกรณ์ ${l.itemId}`);
+      if (!Number.isInteger(l.qty) || l.qty < 1 || l.qty > item!.total) {
+        return fail(`จำนวน ${item!.name} ต้องอยู่ระหว่าง 1–${item!.total}`);
+      }
+      return { itemId: item!.id, name: item!.name, isUnique: item!.isUnique, reqQty: l.qty, issuedQty: 0 };
+    });
+    const req: BorrowRequest = {
+      id: nextBorrowId(),
+      type: group!.type,
+      groupId: group!.id,
+      group: group!.label,
+      user: student.name,
+      studentId: student.studentId,
+      status: "OPEN",
+      createdAt: clock.now(),
+      items: lines,
+    };
+    borrowRequests.push(req);
+    sweepRequests();
+    return delay(req);
+  },
+
+  /** Requests of all the current student's groups, newest first. */
+  getMyRequests: async (): Promise<BorrowRequest[]> => {
+    expireReservations();
+    const ids = groupIdsOf(session.studentId);
+    return delay(
+      borrowRequests
+        .filter((r) => ids.has(r.groupId))
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map(decorate),
+    );
   },
 
   /** Walk-in POS checkout: takes from the general pool (reserved units are off limits). */
