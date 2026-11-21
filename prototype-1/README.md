@@ -38,16 +38,6 @@ News poster files are stored on the backend filesystem at `NEWS_UPLOAD_DIR` (def
 
 Then open **http://localhost:5173**. The **calendar is public** — you can browse it without logging in (approved bookings only). Booking and management require a staff login.
 
-### Frontend Demo Mode
-
-To try announcement and news management without starting the backend or PostgreSQL, create `frontend/.env.local` with:
-
-```env
-VITE_DEMO_MODE=true
-```
-
-Restart Vite after changing this setting. Demo Mode is enabled only by the Vite development server; it uses `sessionStorage` for announcement/news metadata and IndexedDB for news image files. The data is scoped to the current tab and is not saved to the server or database. Remove the setting or change it to `false` to disable Demo Mode. Production builds always use the real API and auth flow, even if this variable is set.
-
 ### Test accounts (from the seed)
 
 | Role | Email | Password |
@@ -59,8 +49,6 @@ Restart Vite after changing this setting. Demo Mode is enabled only by the Vite 
 | Staff | `krit@cedt.edu` | `instr1234` |
 
 There is a single **staff** role: every account can book, approve and manage master data. Accounts are provisioned in the seed; there is no signup screen, by design. Anyone can view the calendar with no account at all.
-
-For local development only, `/admin/*` pages and their protected API calls can run without a session. The API uses the first active staff account as the development actor. This bypass is enabled only when the backend `NODE_ENV` is exactly `development` and the frontend explicitly marks requests from an admin page; it is disabled in tests and production. Do not deploy the backend with `NODE_ENV=development`.
 
 ### Seeded state
 

@@ -3,7 +3,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config, isProd } from "../config.js";
 import { prisma } from "../db.js";
 import { forbidden, unauthenticated } from "../lib/errors.js";
-import { isDevelopmentAdminBypassEnabled } from "../lib/auth-policy.js";
 
 // "admin" is retained as an alias for "any": there is now a single `staff` role, so any
 // authenticated user has full access. Kept so route configs don't all have to change.
@@ -69,23 +68,6 @@ async function resolveUser(req: FastifyRequest): Promise<SessionUser | undefined
   };
 }
 
-async function resolveDevelopmentStaff(): Promise<SessionUser> {
-  const user = await prisma.user.findFirst({
-    where: { role: "staff", isActive: true },
-    orderBy: { createdAt: "asc" },
-  });
-  if (!user) {
-    throw unauthenticated("Development admin access requires an active staff account");
-  }
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    titlePrefix: user.titlePrefix,
-  };
-}
-
 export function registerAuth(app: FastifyInstance): void {
   // Every route must declare its auth level; an undeclared route is a startup error (§6.2).
   app.addHook("onRoute", (route) => {
@@ -113,22 +95,8 @@ export function registerAuth(app: FastifyInstance): void {
     req.user = await resolveUser(req);
 
     if (level === "public") return;
-    if (req.user) return;
-
-    const query = new URLSearchParams(req.url.split("?")[1] ?? "");
-    const isNewsImageRequest =
-      req.method === "GET" &&
-      req.routeOptions.url?.endsWith("/news/:id/images/:imageId") === true &&
-      query.get("devAdminBypass") === "true";
-    const explicitlyRequested =
-      req.headers["x-dev-admin-bypass"] === "true" || isNewsImageRequest;
-    if (isDevelopmentAdminBypassEnabled(config.NODE_ENV, explicitlyRequested)) {
-      req.user = await resolveDevelopmentStaff();
-      return;
-    }
-
-    // Both "any" and "admin" require a session except for explicit development-only requests.
-    throw unauthenticated();
+    // Both "any" and "admin" now just require an authenticated staff user.
+    if (!req.user) throw unauthenticated();
   });
 }
 

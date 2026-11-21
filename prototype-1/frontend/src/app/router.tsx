@@ -93,12 +93,6 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   if (!user) {
-    if (
-      import.meta.env.DEV &&
-      (location.pathname === "/admin" || location.pathname.startsWith("/admin/"))
-    ) {
-      return <>{children}</>;
-    }
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
   }
@@ -145,88 +139,25 @@ export function AppRoutes() {
           <Route path="schedule/a" element={<MapPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
-        <Route path="admin" element={<AdminLayout />}>
+        <Route
+          path="admin"
+          element={
+            <RequireAuth>
+              <AdminLayout />
+            </RequireAuth>
+          }
+        >
           <Route index element={<AdminHome />} />
-          <Route
-            path="dashboard"
-            element={
-              <RequireAuth>
-                <AdminDashboard />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="data"
-            element={
-              <RequireAuth>
-                <MasterDataPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="announcements"
-            element={
-              <RequireAuth>
-                <AnnouncementListPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="announcements/create"
-            element={
-              <RequireAuth>
-                <AnnouncementCreatePage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="announcements/:id"
-            element={
-              <RequireAuth>
-                <AnnouncementDetailPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="announcements/:id/edit"
-            element={
-              <RequireAuth>
-                <AnnouncementEditPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="news"
-            element={
-              <RequireAuth>
-                <NewsListPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="news/create"
-            element={
-              <RequireAuth>
-                <NewsCreatePage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="news/:id"
-            element={
-              <RequireAuth>
-                <NewsDetailPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="news/:id/edit"
-            element={
-              <RequireAuth>
-                <NewsEditPage />
-              </RequireAuth>
-            }
-          />
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="data" element={<MasterDataPage />} />
+          <Route path="announcements" element={<AnnouncementListPage />} />
+          <Route path="announcements/create" element={<AnnouncementCreatePage />} />
+          <Route path="announcements/:id" element={<AnnouncementDetailPage />} />
+          <Route path="announcements/:id/edit" element={<AnnouncementEditPage />} />
+          <Route path="news" element={<NewsListPage />} />
+          <Route path="news/create" element={<NewsCreatePage />} />
+          <Route path="news/:id" element={<NewsDetailPage />} />
+          <Route path="news/:id/edit" element={<NewsEditPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
