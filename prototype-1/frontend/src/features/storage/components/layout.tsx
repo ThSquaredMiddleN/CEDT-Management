@@ -70,3 +70,38 @@ export function ResultDialog({
     </Dialog>
   );
 }
+
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel,
+  loading,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  loading?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription className="whitespace-pre-line">{message}</DialogDescription>
+        <DialogFooter className="gap-2">
+          <Button variant="outlined" size="lg" onClick={onCancel}>
+            ย้อนกลับ
+          </Button>
+          <Button variant="filled" size="lg" loading={loading} onClick={onConfirm}>
+            {confirmLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
