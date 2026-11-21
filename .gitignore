@@ -32,3 +32,9 @@ roles/
 
 # Copilot instructions
 .github/copilot-instructions.md
+
+# Brainstorming visual companion mockups
+.superpowers/
+
+# Local design specs and implementation plans
+docs/
