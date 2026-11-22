@@ -64,6 +64,16 @@ const AnnouncementEditPage = lazy(() =>
     default: module.AnnouncementEditPage,
   })),
 );
+const StudentAnnouncementListPage = lazy(() =>
+  import("@/features/announcements/pages/StudentAnnouncementListPage").then((module) => ({
+    default: module.StudentAnnouncementListPage,
+  })),
+);
+const StudentAnnouncementDetailPage = lazy(() =>
+  import("@/features/announcements/pages/StudentAnnouncementDetailPage").then((module) => ({
+    default: module.StudentAnnouncementDetailPage,
+  })),
+);
 const NewsListPage = lazy(() =>
   import("@/features/news/pages/NewsListPage").then((module) => ({
     default: module.NewsListPage,
@@ -143,6 +153,8 @@ export function AppRoutes() {
           />
           <Route path="schedule/a" element={<MapPage />} />
           <Route path="links" element={<CuLinksPage />} />
+          <Route path="announcements" element={<StudentAnnouncementListPage />} />
+          <Route path="announcements/:id" element={<StudentAnnouncementDetailPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
         <Route
