@@ -39,6 +39,11 @@ const MyRequests = lazy(() =>
 const MapPage = lazy(() =>
   import("./MapPage").then((module) => ({ default: module.MapPage })),
 );
+const CuLinksPage = lazy(() =>
+  import("@/features/cu-links/pages/CuLinksPage").then((module) => ({
+    default: module.CuLinksPage,
+  })),
+);
 const AnnouncementListPage = lazy(() =>
   import("@/features/announcements/pages/AnnouncementListPage").then((module) => ({
     default: module.AnnouncementListPage,
@@ -137,6 +142,7 @@ export function AppRoutes() {
             }
           />
           <Route path="schedule/a" element={<MapPage />} />
+          <Route path="links" element={<CuLinksPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
         <Route

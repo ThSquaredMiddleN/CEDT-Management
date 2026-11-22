@@ -24,7 +24,7 @@ const STUDENT_TOPBAR_ITEMS: TopbarItem[] = [
   { label: "ตารางเรียน - สอบ", to: "/calendar" },
   { label: "ลด - ถอนรายวิชา" },
   { label: "ยืมอุปกรณ์" },
-  { label: "CU Links" },
+  { label: "CU Links", to: "/links" },
 ];
 
 export function StudentLayout() {
