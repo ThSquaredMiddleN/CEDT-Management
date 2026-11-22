@@ -40,20 +40,25 @@ function sanitizedFields<T extends NewsFields | NewsUpdate>(fields: T): T {
   };
 }
 
-export async function listNews() {
+export async function listNews(options: { publishedOnly?: boolean } = {}) {
   const items = await prisma.newsArticle.findMany({
+    where: options.publishedOnly ? { status: "published" } : undefined,
     select: newsSelection,
-    orderBy: { updatedAt: "desc" },
+    orderBy: options.publishedOnly
+      ? [{ publishedAt: "desc" }, { updatedAt: "desc" }]
+      : { updatedAt: "desc" },
   });
   return { items };
 }
 
-export async function getNews(id: string) {
+export async function getNews(id: string, options: { publishedOnly?: boolean } = {}) {
   const news = await prisma.newsArticle.findUnique({
     where: { id },
     select: newsSelection,
   });
-  if (!news) throw notFound("News not found");
+  if (!news || (options.publishedOnly && news.status !== "published")) {
+    throw notFound("News not found");
+  }
   return { news };
 }
 
@@ -170,9 +175,17 @@ export async function removeNewsImageRecord(id: string, imageId: string) {
   });
 }
 
-export async function getNewsImageRecord(id: string, imageId: string) {
+export async function getNewsImageRecord(
+  id: string,
+  imageId: string,
+  options: { publishedOnly?: boolean } = {},
+) {
   const image = await prisma.newsImage.findFirst({
-    where: { id: imageId, newsId: id },
+    where: {
+      id: imageId,
+      newsId: id,
+      ...(options.publishedOnly ? { news: { status: "published" } } : {}),
+    },
     select: { storageKey: true, mimeType: true, originalName: true },
   });
   if (!image) throw notFound("News image not found");

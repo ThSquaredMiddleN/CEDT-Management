@@ -98,11 +98,13 @@ async function readMultipart(
 }
 
 export async function newsRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/news", { config: { auth: "admin" } }, async () => listNews());
+  app.get("/news", { config: { auth: "public" } }, async (req) =>
+    listNews({ publishedOnly: !req.user }),
+  );
 
-  app.get("/news/:id", { config: { auth: "admin" } }, async (req) => {
+  app.get("/news/:id", { config: { auth: "public" } }, async (req) => {
     const { id } = newsIdSchema.parse(req.params);
-    return getNews(id);
+    return getNews(id, { publishedOnly: !req.user });
   });
 
   app.post("/news", { config: { auth: "admin" } }, async (req, reply) => {
@@ -135,15 +137,15 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
-  app.get("/news/:id/images/:imageId", { config: { auth: "admin" } }, async (req, reply) => {
+  app.get("/news/:id/images/:imageId", { config: { auth: "public" } }, async (req, reply) => {
     const { id, imageId } = newsImageIdSchema.parse(req.params);
-    const image = await getNewsImageRecord(id, imageId);
+    const image = await getNewsImageRecord(id, imageId, { publishedOnly: !req.user });
     const bytes = await readNewsImage(image.storageKey);
     return reply
       .type(image.mimeType)
       .header("Content-Disposition", `inline; filename="${encodeURIComponent(image.originalName)}"`)
       .header("X-Content-Type-Options", "nosniff")
-      .header("Cache-Control", "private, max-age=3600")
+      .header("Cache-Control", req.user ? "private, max-age=3600" : "public, max-age=3600")
       .send(bytes);
   });
 

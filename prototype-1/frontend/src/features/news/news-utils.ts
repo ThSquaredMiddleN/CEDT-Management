@@ -22,6 +22,17 @@ export const newsTagLabel = (tag: NewsTag): string =>
 export const newsTagClassName = (_tag: NewsTag): string =>
   "border-transparent bg-grey-100 text-grey-700";
 
+const SIDEBAR_TAG_CLASSES: Record<NewsTag, string> = {
+  competition: "bg-brand-primary/10 text-brand-primary",
+  activities: "bg-emerald-500/10 text-emerald-600",
+  scholarship: "bg-amber-500/10 text-amber-700",
+  internship: "bg-violet-500/10 text-violet-700",
+  academic: "bg-sky-500/10 text-sky-700",
+  other: "bg-grey-100 text-grey-700",
+};
+
+export const newsSidebarTagClassName = (tag: NewsTag): string => SIDEBAR_TAG_CLASSES[tag];
+
 export const newsPlainText = announcementPlainText;
 
 export const newsDate = (value: string): string => formatAnnouncementDate(value);

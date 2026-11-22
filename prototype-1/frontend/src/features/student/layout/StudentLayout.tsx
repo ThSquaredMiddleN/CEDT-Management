@@ -20,7 +20,7 @@ import { initials } from "@/lib/formatters";
 
 const STUDENT_TOPBAR_ITEMS: TopbarItem[] = [
   { label: "หน้าแรก", to: "/" },
-  { label: "ข่าวสาร" },
+  { label: "ข่าวสาร", to: "/news" },
   { label: "ตารางเรียน - สอบ", to: "/calendar" },
   { label: "ลด - ถอนรายวิชา" },
   { label: "ยืมอุปกรณ์" },

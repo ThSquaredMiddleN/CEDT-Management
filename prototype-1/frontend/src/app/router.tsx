@@ -94,6 +94,16 @@ const NewsEditPage = lazy(() =>
     default: module.NewsEditPage,
   })),
 );
+const StudentNewsListPage = lazy(() =>
+  import("@/features/news/pages/StudentNewsListPage").then((module) => ({
+    default: module.StudentNewsListPage,
+  })),
+);
+const StudentNewsDetailPage = lazy(() =>
+  import("@/features/news/pages/StudentNewsDetailPage").then((module) => ({
+    default: module.StudentNewsDetailPage,
+  })),
+);
 
 function PageLoading() {
   return (
@@ -155,6 +165,8 @@ export function AppRoutes() {
           <Route path="links" element={<CuLinksPage />} />
           <Route path="announcements" element={<StudentAnnouncementListPage />} />
           <Route path="announcements/:id" element={<StudentAnnouncementDetailPage />} />
+          <Route path="news" element={<StudentNewsListPage />} />
+          <Route path="news/:id" element={<StudentNewsDetailPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
         <Route

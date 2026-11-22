@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeftIcon } from "@heroicons/react/20/solid";
 import {
@@ -12,16 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { ErrorCard, Spinner } from "@/components/states";
 import {
   newsDate,
-  newsImageUrl,
   newsTagClassName,
   newsTagLabel,
 } from "../news-utils";
+import { NewsPosterViewer } from "../components/NewsPosterViewer";
 import { sanitizeAnnouncementHtml } from "@/features/announcements/announcement-utils";
 
 function NewsArticleView({ news }: { news: NewsArticle }) {
-  const [selectedImageId, setSelectedImageId] = useState(news.images[0]?.id ?? null);
-  const selectedImage =
-    news.images.find((image) => image.id === selectedImageId) ?? news.images[0];
   const date = news.publishedAt ?? news.updatedAt;
 
   return (
@@ -52,50 +48,7 @@ function NewsArticleView({ news }: { news: NewsArticle }) {
         ))}
       </div>
 
-      {selectedImage && (
-        <section className="mt-6" aria-label="โปสเตอร์ข่าว">
-          <div className="mx-auto max-w-[min(100%,32rem)] overflow-hidden rounded-lg border border-grey-200 bg-grey-100">
-            <div className="aspect-[210/297]">
-              <img
-                src={newsImageUrl(news.id, selectedImage.id)}
-                alt={`โปสเตอร์ข่าว: ${selectedImage.originalName}`}
-                className="size-full object-contain"
-              />
-            </div>
-          </div>
-          {news.images.length > 1 && (
-            <div
-              className="mx-auto mt-3 flex max-w-full gap-2 overflow-x-auto py-1"
-              role="group"
-              aria-label="เลือกโปสเตอร์"
-            >
-              {news.images.map((image, index) => (
-                <button
-                  key={image.id}
-                  type="button"
-                  aria-label={`แสดงโปสเตอร์ ${index + 1}: ${image.originalName}`}
-                  aria-pressed={selectedImage.id === image.id}
-                  onClick={() => setSelectedImageId(image.id)}
-                  className={`w-14 shrink-0 overflow-hidden rounded border bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary ${
-                    selectedImage.id === image.id
-                      ? "border-brand-primary"
-                      : "border-grey-200"
-                  }`}
-                >
-                  <span className="aspect-[210/297] block">
-                    <img
-                      src={newsImageUrl(news.id, image.id)}
-                      alt=""
-                      aria-hidden="true"
-                      className="size-full object-contain"
-                    />
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+      <NewsPosterViewer newsId={news.id} images={news.images} className="mt-6" />
 
       <hr className="my-6 border-neutral-200" />
       <div
