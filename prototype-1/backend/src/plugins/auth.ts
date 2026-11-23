@@ -22,6 +22,8 @@ declare module "fastify" {
   }
   interface FastifyContextConfig {
     auth?: AuthLevel;
+    /** Set `csrf: false` only on routes with their own request authentication (the LINE webhook). */
+    csrf?: boolean;
   }
 }
 
@@ -82,7 +84,7 @@ export function registerAuth(app: FastifyInstance): void {
     const level: AuthLevel = req.routeOptions.config?.auth ?? "any";
 
     // CSRF (§6.3): custom header required on every mutation; Origin must match when sent.
-    if (req.method !== "GET" && req.method !== "HEAD") {
+    if (req.method !== "GET" && req.method !== "HEAD" && req.routeOptions.config?.csrf !== false) {
       if (req.headers["x-requested-with"] !== "XMLHttpRequest") {
         throw forbidden("Missing X-Requested-With header");
       }

@@ -26,6 +26,11 @@ const LoginPage = lazy(() =>
     default: module.LoginPage,
   })),
 );
+const LineLinkPage = lazy(() =>
+  import("@/features/line-link/LineLinkPage").then((module) => ({
+    default: module.LineLinkPage,
+  })),
+);
 const MasterDataPage = lazy(() =>
   import("@/features/master-data/MasterDataPage").then((module) => ({
     default: module.MasterDataPage,
@@ -167,6 +172,8 @@ export function AppRoutes() {
           <Route path="announcements/:id" element={<StudentAnnouncementDetailPage />} />
           <Route path="news" element={<StudentNewsListPage />} />
           <Route path="news/:id" element={<StudentNewsDetailPage />} />
+          {/* Token comes from the LINE chat link. Not wrapped in RequireAuth: the page checks the token before login. */}
+          <Route path="line/link" element={<LineLinkPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
         <Route
