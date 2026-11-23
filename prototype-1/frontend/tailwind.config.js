@@ -18,6 +18,32 @@ export default {
         background: "var(--color-background)",
         "white-50": "var(--color-white-50)",
         black: "var(--color-black)",
+        status: {
+          success: {
+            solid: "var(--color-status-success-solid)",
+            fg: "var(--color-status-success-fg)",
+            bg: "var(--color-status-success-bg)",
+            border: "var(--color-status-success-border)",
+          },
+          warning: {
+            solid: "var(--color-status-warning-solid)",
+            fg: "var(--color-status-warning-fg)",
+            bg: "var(--color-status-warning-bg)",
+            border: "var(--color-status-warning-border)",
+          },
+          danger: {
+            solid: "var(--color-status-danger-solid)",
+            fg: "var(--color-status-danger-fg)",
+            bg: "var(--color-status-danger-bg)",
+            border: "var(--color-status-danger-border)",
+          },
+          info: {
+            solid: "var(--color-status-info-solid)",
+            fg: "var(--color-status-info-fg)",
+            bg: "var(--color-status-info-bg)",
+            border: "var(--color-status-info-border)",
+          },
+        },
         grey: {
           100: "var(--color-grey-100)",
           200: "var(--color-grey-200)",

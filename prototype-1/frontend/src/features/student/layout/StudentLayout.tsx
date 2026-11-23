@@ -23,7 +23,7 @@ const STUDENT_TOPBAR_ITEMS: TopbarItem[] = [
   { label: "ข่าวสาร", to: "/news" },
   { label: "ตารางเรียน - สอบ", to: "/calendar" },
   { label: "ลด - ถอนรายวิชา", to: "/course-change" },
-  { label: "ยืมอุปกรณ์" },
+  { label: "ยืมอุปกรณ์", to: "/student/storage" },
   { label: "CU Links", to: "/links" },
 ];
 

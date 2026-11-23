@@ -81,6 +81,46 @@ const AnnouncementEditPage = lazy(() =>
     default: module.AnnouncementEditPage,
   })),
 );
+const StorageDashboardPage = lazy(() =>
+  import("@/features/storage/routes/StorageDashboardPage").then((module) => ({
+    default: module.StorageDashboardPage,
+  })),
+);
+const BorrowListPage = lazy(() =>
+  import("@/features/storage/routes/BorrowListPage").then((module) => ({
+    default: module.BorrowListPage,
+  })),
+);
+const BorrowDetailPage = lazy(() =>
+  import("@/features/storage/routes/BorrowDetailPage").then((module) => ({
+    default: module.BorrowDetailPage,
+  })),
+);
+const WalkInPage = lazy(() =>
+  import("@/features/storage/routes/WalkInPage").then((module) => ({
+    default: module.WalkInPage,
+  })),
+);
+const ReturnPage = lazy(() =>
+  import("@/features/storage/routes/ReturnPage").then((module) => ({
+    default: module.ReturnPage,
+  })),
+);
+const QCListPage = lazy(() =>
+  import("@/features/storage/routes/QCListPage").then((module) => ({
+    default: module.QCListPage,
+  })),
+);
+const QCDetailPage = lazy(() =>
+  import("@/features/storage/routes/QCDetailPage").then((module) => ({
+    default: module.QCDetailPage,
+  })),
+);
+const StudentStoragePage = lazy(() =>
+  import("@/features/storage/routes/StudentStoragePage").then((module) => ({
+    default: module.StudentStoragePage,
+  })),
+);
 const StudentAnnouncementListPage = lazy(() =>
   import("@/features/announcements/pages/StudentAnnouncementListPage").then((module) => ({
     default: module.StudentAnnouncementListPage,
@@ -209,6 +249,8 @@ export function AppRoutes() {
           <Route path="news/:id" element={<StudentNewsDetailPage />} />
           {/* Token comes from the LINE chat link. Not wrapped in RequireAuth: the page checks the token before login. */}
           <Route path="line/link" element={<LineLinkPage />} />
+          {/* Student storage. No RequireAuth yet: student auth is not decided (mock identity). */}
+          <Route path="student/storage" element={<StudentStoragePage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
         <Route
@@ -239,6 +281,48 @@ export function AppRoutes() {
           <Route path="news/create" element={<NewsCreatePage />} />
           <Route path="news/:id" element={<NewsDetailPage />} />
           <Route path="news/:id/edit" element={<NewsEditPage />} />
+          <Route
+            path="storage"
+            element={
+              <StorageDashboardPage />
+            }
+          />
+          <Route
+            path="storage/borrow"
+            element={
+              <BorrowListPage />
+            }
+          />
+          <Route
+            path="storage/borrow/walk-in"
+            element={
+              <WalkInPage />
+            }
+          />
+          <Route
+            path="storage/borrow/:id"
+            element={
+              <BorrowDetailPage />
+            }
+          />
+          <Route
+            path="storage/return"
+            element={
+              <ReturnPage />
+            }
+          />
+          <Route
+            path="storage/qc"
+            element={
+              <QCListPage />
+            }
+          />
+          <Route
+            path="storage/qc/:id"
+            element={
+              <QCDetailPage />
+            }
+          />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

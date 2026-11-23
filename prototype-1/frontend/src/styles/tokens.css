@@ -18,6 +18,28 @@
   --color-white-50: #f1f5f9;
   --color-background: #f8fafc;
 
+  /* Status colors: solid = fills/buttons, fg = text/icons, bg = tinted surface, border = tinted outline. */
+  --color-status-success-solid: #16a34a;
+  --color-status-success-fg: #15803d;
+  --color-status-success-bg: #f0fdf4;
+  --color-status-success-border: #bbf7d0;
+
+  --color-status-warning-solid: #ea580c;
+  --color-status-warning-fg: #c2410c;
+  --color-status-warning-bg: #fff7ed;
+  --color-status-warning-border: #fed7aa;
+
+  --color-status-danger-solid: #dc2626;
+  --color-status-danger-fg: #b91c1c;
+  --color-status-danger-bg: #fef2f2;
+  --color-status-danger-border: #fecaca;
+
+  /* Info reuses the brand blue so informational states stay on-theme. */
+  --color-status-info-solid: var(--color-brand-primary);
+  --color-status-info-fg: var(--color-button-primary-hover);
+  --color-status-info-bg: #2a7ae214;
+  --color-status-info-border: #2a7ae240;
+
   --font-family-body: "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
   --shadow-light-6:
     0 8px 16px rgba(96, 97, 112, 0.16), 0 2px 4px rgba(40, 41, 61, 0.04);

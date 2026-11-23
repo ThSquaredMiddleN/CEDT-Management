@@ -38,3 +38,6 @@ vite.local.config.mts
 # Local-only data: DB dumps and generated demo files
 prototype-1/backend/labsync-data.sql
 prototype-1/artifacts/
+
+# Brainstorming visual companion mockups
+.superpowers/
