@@ -1,9 +1,8 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { UserCircleIcon } from "@heroicons/react/24/outline";
 import { LogOut, Settings } from "lucide-react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { logout } from "@/api/endpoints";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/AuthProvider";
+import { signOut } from "@/app/signOut";
 import { Topbar, type TopbarItem } from "@/components/Topbar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -30,8 +29,6 @@ const STUDENT_TOPBAR_ITEMS: TopbarItem[] = [
 export function StudentLayout() {
   const { user } = useAuth();
   const { pathname } = useLocation();
-  const navigate = useNavigate();
-  const qc = useQueryClient();
 
   const items = STUDENT_TOPBAR_ITEMS.map((item) => ({
     ...item,
@@ -40,12 +37,6 @@ export function StudentLayout() {
         ? pathname === "/"
         : Boolean(item.to && (pathname === item.to || pathname.startsWith(`${item.to}/`))),
   }));
-
-  const signOut = async () => {
-    await logout().catch(() => undefined);
-    qc.clear();
-    navigate("/login", { replace: true });
-  };
 
   const displayName = [user?.titlePrefix, user?.name].filter(Boolean).join(" ");
 
