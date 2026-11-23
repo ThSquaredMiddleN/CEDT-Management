@@ -22,6 +22,16 @@ const schema = z.object({
   LINE_DRY_RUN: flag.transform((v) => v === "true" || v === "1"),
   LINE_LINK_TTL_MINUTES: positiveNumber(15),
   LINE_DISPATCH_INTERVAL_MS: positiveNumber(5000),
+  // Receipts carry names and student IDs (PDPA): the OCR sidecar must run on this machine.
+  OCR_SERVICE_URL: z
+    .string()
+    .url()
+    .refine((u) => ["127.0.0.1", "localhost", "[::1]"].includes(new URL(u).hostname), {
+      message: "OCR_SERVICE_URL must point at localhost (receipts must not leave this machine)",
+    })
+    .default("http://127.0.0.1:8790"),
+  OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
+  RECEIPT_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
 });
 
 export const config = schema.parse(process.env);

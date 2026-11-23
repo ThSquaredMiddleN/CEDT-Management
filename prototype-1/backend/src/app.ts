@@ -15,6 +15,7 @@ import { startLineDispatcher } from "./modules/line/dispatcher.js";
 import { lineRoutes } from "./modules/line/routes.js";
 import { masterDataRoutes } from "./modules/masterdata/routes.js";
 import { notificationRoutes } from "./modules/notifications/routes.js";
+import { receiptRoutes } from "./modules/receipts/routes.js";
 import { registerAuth } from "./plugins/auth.js";
 import { registerErrorHandler } from "./plugins/errors.js";
 
@@ -52,6 +53,7 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
       await v1.register(notificationRoutes);
       await v1.register(importRoutes);
       await v1.register(lineRoutes, { client: opts.lineClient ?? dryRunClient });
+      await v1.register(receiptRoutes);
     },
     { prefix: "/api/v1" },
   );

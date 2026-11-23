@@ -36,6 +36,11 @@ const MasterDataPage = lazy(() =>
     default: module.MasterDataPage,
   })),
 );
+const ReceiptChecksPage = lazy(() =>
+  import("@/features/receipts/ReceiptChecksPage").then((module) => ({
+    default: module.ReceiptChecksPage,
+  })),
+);
 const MyRequests = lazy(() =>
   import("@/features/my-requests/MyRequests").then((module) => ({
     default: module.MyRequests,
@@ -187,6 +192,7 @@ export function AppRoutes() {
           <Route index element={<AdminHome />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="data" element={<MasterDataPage />} />
+          <Route path="receipts" element={<ReceiptChecksPage />} />
           <Route path="announcements" element={<AnnouncementListPage />} />
           <Route path="announcements/create" element={<AnnouncementCreatePage />} />
           <Route path="announcements/:id" element={<AnnouncementDetailPage />} />

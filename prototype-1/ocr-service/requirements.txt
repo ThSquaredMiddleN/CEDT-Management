@@ -1,0 +1,2 @@
+# OCR sidecar (server.py). Tested with pymupdf 1.28.2.
+pymupdf
