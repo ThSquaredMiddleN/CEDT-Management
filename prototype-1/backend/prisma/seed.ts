@@ -6,6 +6,7 @@ import { approveBooking, createBooking, rejectBooking } from "../src/modules/boo
 import type { BookingInput } from "../src/modules/bookings/schemas.js";
 import { addNewsImages } from "../src/modules/news/service.js";
 import { dateFromISO } from "../src/lib/time.js";
+import { seedCourseChange } from "./seed-course-change.js";
 
 /**
  * Seeds the dataset the wireframes were designed against (§9). Idempotent: every write is
@@ -90,7 +91,7 @@ async function main() {
     { name: "Krit W.", titlePrefix: "Dr.", email: "krit@cedt.edu", password: "instr1234", role: "staff" as const },
   ];
 
-  const userByEmail: Record<string, { id: string; name: string; email: string; role: "staff"; titlePrefix: string | null }> = {};
+  const userByEmail: Record<string, SessionUser> = {};
   for (const u of users) {
     const row = await prisma.user.upsert({
       where: { email: u.email },
@@ -109,6 +110,7 @@ async function main() {
       email: row.email,
       role: row.role,
       titlePrefix: row.titlePrefix,
+      studentNo: row.studentNo,
     };
   }
 
@@ -372,6 +374,13 @@ async function main() {
     }
     console.log(`Seeded news poster placeholders: ${totalSeededImages} images.`);
   }
+
+  // ----------------------------------------------------------- course change
+  await seedCourseChange({
+    termId: term1.id,
+    staff: { admin, anucha, pimchanok },
+    hash,
+  });
 
   // ---------------------------------------------------------------- bookings
   // Bookings go through the real service so occurrences, snapshots, request numbers and

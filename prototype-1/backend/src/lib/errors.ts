@@ -9,6 +9,7 @@ export type ErrorCode =
   | "NEEDS_CONFIRM"
   | "VALIDATION"
   | "LOCKED"
+  | "WINDOW_CLOSED"
   | "PAYLOAD_TOO_LARGE"
   | "UNSUPPORTED_MEDIA_TYPE"
   | "BAD_GATEWAY"
@@ -29,6 +30,7 @@ const STATUS: Record<ErrorCode, number> = {
   UNSUPPORTED_MEDIA_TYPE: 415,
   VALIDATION: 422,
   LOCKED: 423,
+  WINDOW_CLOSED: 422,
   INTERNAL: 500,
   BAD_GATEWAY: 502,
   SERVICE_UNAVAILABLE: 503,
@@ -57,6 +59,7 @@ export const duplicate = (m: string, d: unknown[] = []) => new AppError("DUPLICA
 export const needsConfirm = (m: string, d: unknown[] = []) => new AppError("NEEDS_CONFIRM", m, d);
 export const validation = (m: string, d: unknown[] = []) => new AppError("VALIDATION", m, d);
 export const locked = (m: string) => new AppError("LOCKED", m);
+export const windowClosed = (m: string) => new AppError("WINDOW_CLOSED", m);
 
 /**
  * Postgres exclusion-constraint violation (BR-7): the no_double_booking backstop fired.

@@ -33,7 +33,7 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     title: "ทะเบียน",
     rowGap: "gap-y-6",
-    items: [{ text: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon /> }],
+    items: [{ text: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon />, to: "/admin/course-change" }],
   },
   {
     title: "อื่น ๆ",

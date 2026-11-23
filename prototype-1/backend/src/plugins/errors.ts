@@ -42,6 +42,10 @@ export function registerErrorHandler(app: FastifyInstance): void {
         .send({ error: { code: "DUPLICATE", message: "That record already exists.", details: [] } });
     }
 
+    if ((err as { statusCode?: number }).statusCode === 413) {
+      return reply.code(413).send({ error: { code: "VALIDATION", message: "ไฟล์หรือข้อมูลใหญ่เกินขนาดที่รองรับ กรุณาตรวจสอบขนาดแล้วลองใหม่", details: [] } });
+    }
+
     if ((err as { statusCode?: number }).statusCode === 400) {
       return reply
         .code(400)

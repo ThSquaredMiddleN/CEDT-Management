@@ -32,6 +32,13 @@ const schema = z.object({
     .default("http://127.0.0.1:8790"),
   OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
   RECEIPT_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
+  // Course Change demo/test hook: pretend "today" is this date (YYYY-MM-DD) so any week of
+  // the term — and therefore any of flows A/B/C — can be shown on demand. Unset = real date.
+  COURSE_CHANGE_TODAY: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
 });
 
 export const config = schema.parse(process.env);
