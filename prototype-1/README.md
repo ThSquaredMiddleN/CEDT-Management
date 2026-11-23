@@ -34,6 +34,8 @@ npm run dev                   # http://localhost:5173
 
 `DATABASE_URL` points at your local Postgres, e.g. `postgresql://$USER@localhost:5432/labsync?schema=public` (Homebrew installs use your OS user with trust auth — no password). The migrations create the `citext`, `btree_gist` and `pgcrypto` extensions themselves. If you're starting from a dirty DB, `npx prisma migrate reset --force` drops, recreates, migrates and re-seeds in one step.
 
+News poster files are stored on the backend filesystem at `NEWS_UPLOAD_DIR` (default: `backend/var/news-uploads` when started from `backend/`). For deployments, mount persistent storage at this path; the database stores poster metadata and file ordering, not the image bytes.
+
 Then open **http://localhost:5173**. The **calendar is public** — you can browse it without logging in (approved bookings only). Booking and management require a staff login.
 
 ### Test accounts (from the seed)
@@ -68,11 +70,11 @@ npm run db:seed   # idempotent; only seeds bookings when the booking table is em
 
 ## What's implemented
 
-**Backend** — a single **staff** role (session-cookie auth: argon2id, 5-strike/15-minute lockout, CSRF via `X-Requested-With`) plus an **anonymous public calendar** (no login → approved bookings only), booking create (auto-approved for staff) / approve / reject / cancel / withdraw / move, the conflict engine (recurrence expansion, one `findConflicts` behind all four call sites, alternative-room suggestions, non-blocking capacity warnings), master-data CRUD with soft delete and warn-and-confirm, announcement draft/create/update/publish endpoints with server-side rich-text sanitization, transactional in-app notifications, and CSV import (dry-run + commit) for courses and rooms.
+**Backend** — a single **staff** role (session-cookie auth: argon2id, 5-strike/15-minute lockout, CSRF via `X-Requested-With`) plus an **anonymous public calendar** (no login → approved bookings only), booking create (auto-approved for staff) / approve / reject / cancel / withdraw / move, the conflict engine (recurrence expansion, one `findConflicts` behind all four call sites, alternative-room suggestions, non-blocking capacity warnings), master-data CRUD with soft delete and warn-and-confirm, announcement and news draft/create/update/publish endpoints with server-side rich-text sanitization, authenticated poster upload and serving for news, transactional in-app notifications, and CSV import (dry-run + commit) for courses and rooms.
 
 **The G1 guarantee is enforced by the database**, not just by application code: `booking_occurrences` carries a generated `tstzrange` column plus a partial GiST exclusion constraint (`no_double_booking`) that makes two overlapping *approved* bookings in one room physically unrepresentable. Half-open `[)` ranges mean back-to-back bookings (10:00–12:00 / 12:00–14:00) never collide.
 
-**Frontend** — the screens (public read-only Calendar, Login, Dashboard + pending queue, Master Calendar weekly + daily, New Booking, My Requests, Master Data, and announcement list/create/detail/edit with a TipTap rich-text editor), the monochrome design system (status is texture — solid / striped-dashed / heavy-outline — with no red, green or amber anywhere), the hand-built calendar grid with side-by-side overlap layout, the real-time conflict check with debounce + request cancellation + out-of-order-response discard, URL-driven calendar state, and the 45-second-polling notification bell.
+**Frontend** — the screens (public read-only Calendar, Login, Dashboard + pending queue, Master Calendar weekly + daily, New Booking, My Requests, Master Data, announcement and news list/create/detail/edit with a TipTap rich-text editor), the monochrome design system (status is texture — solid / striped-dashed / heavy-outline — with no red, green or amber anywhere), the hand-built calendar grid with side-by-side overlap layout, the real-time conflict check with debounce + request cancellation + out-of-order-response discard, URL-driven calendar state, and the 45-second-polling notification bell.
 
 ---
 

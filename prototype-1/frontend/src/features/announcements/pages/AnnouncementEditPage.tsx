@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useAnnouncement, useUpdateAnnouncement } from "@/api/endpoints";
+import { useToast } from "@/app/toast";
 import { Button } from "@/components/ui/button";
 import { ErrorCard, Spinner } from "@/components/states";
 import { AnnouncementForm } from "../components/AnnouncementForm";
@@ -7,6 +8,7 @@ import { AnnouncementForm } from "../components/AnnouncementForm";
 export function AnnouncementEditPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const query = useAnnouncement(id ?? null);
   const updateAnnouncement = useUpdateAnnouncement(id ?? "");
 
@@ -43,7 +45,8 @@ export function AnnouncementEditPage() {
       announcement={query.data.announcement}
       onSave={async (value) => {
         await updateAnnouncement.mutateAsync(value);
-        navigate(`/admin/announcements/${id}`, { state: "announcement-updated" });
+        toast("แก้ไขประกาศเรียบร้อยแล้ว");
+        navigate(`/admin/announcements/${id}`);
       }}
       onCancel={() => navigate(`/admin/announcements/${id}`)}
       saving={updateAnnouncement.isPending}

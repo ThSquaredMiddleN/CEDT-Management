@@ -8,6 +8,7 @@ const schema = z.object({
   SESSION_COOKIE_NAME: z.string().default("labsync_session"),
   SESSION_TTL_HOURS: z.coerce.number().default(168),
   APP_TZ: z.string().default("Asia/Bangkok"),
+  NEWS_UPLOAD_DIR: z.string().default("var/news-uploads"),
 });
 
 export const config = schema.parse(process.env);

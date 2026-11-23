@@ -14,11 +14,13 @@ import {
 } from "./service.js";
 
 export async function announcementRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/announcements", { config: { auth: "admin" } }, async () => listAnnouncements());
+  app.get("/announcements", { config: { auth: "public" } }, async (req) =>
+    listAnnouncements({ publishedOnly: !req.user }),
+  );
 
-  app.get("/announcements/:id", { config: { auth: "admin" } }, async (req) => {
+  app.get("/announcements/:id", { config: { auth: "public" } }, async (req) => {
     const { id } = announcementIdSchema.parse(req.params);
-    return getAnnouncement(id);
+    return getAnnouncement(id, { publishedOnly: !req.user });
   });
 
   app.post("/announcements", { config: { auth: "admin" } }, async (req, reply) => {

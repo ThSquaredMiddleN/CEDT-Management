@@ -7,7 +7,7 @@ import Underline from "@tiptap/extension-underline";
 import Color from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
 import Placeholder from "@tiptap/extension-placeholder";
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { sanitizeAnnouncementHtml } from "../announcement-utils";
 
 const toolbarGroups = [
@@ -43,7 +43,6 @@ const extensions = [
   TextStyle,
   Color.configure({ types: ["textStyle"] }),
   Image.configure({ allowBase64: false }),
-  Placeholder.configure({ placeholder: "รายละเอียดประกาศ" }),
 ];
 
 const iconPath = (name: string) => `/announcement-editor/${name}.svg`;
@@ -86,19 +85,27 @@ export function AnnouncementEditor({
   onChange,
   readOnly = false,
   id,
+  placeholder = "รายละเอียดประกาศ",
+  ariaLabel = "รายละเอียดประกาศ",
 }: {
   initialContent: string;
   onChange?: (content: string) => void;
   readOnly?: boolean;
   id?: string;
+  placeholder?: string;
+  ariaLabel?: string;
 }) {
   const handleUpdate = useCallback(
     ({ editor }: { editor: Editor }) => onChange?.(editor.getHTML()),
     [onChange],
   );
   const savedSelection = useRef<{ from: number; to: number } | null>(null);
+  const editorExtensions = useMemo(
+    () => [...extensions, Placeholder.configure({ placeholder })],
+    [placeholder],
+  );
   const editor = useEditor({
-    extensions,
+    extensions: editorExtensions,
     content: sanitizeAnnouncementHtml(initialContent),
     editable: !readOnly,
     immediatelyRender: false,
@@ -107,7 +114,7 @@ export function AnnouncementEditor({
     editorProps: {
       attributes: {
         ...(id ? { id } : {}),
-        "aria-label": "รายละเอียดประกาศ",
+        "aria-label": ariaLabel,
         class: "announcement-editor-content",
       },
     },
