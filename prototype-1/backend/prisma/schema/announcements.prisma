@@ -1,0 +1,34 @@
+enum AnnouncementStatus {
+  draft
+  published
+
+  @@map("announcement_status")
+}
+
+enum AnnouncementAudience {
+  all
+  year1
+  year2
+  year3
+  year4
+
+  @@map("announcement_audience")
+}
+
+model Announcement {
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String                 @db.VarChar(200)
+  content     String                 @default("") @db.Text
+  audiences   AnnouncementAudience[] @default([])
+  status      AnnouncementStatus     @default(draft)
+  authorId    String                 @map("author_id") @db.Uuid
+  publishedAt DateTime?              @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([status, updatedAt(sort: Desc)])
+  @@index([authorId])
+  @@map("announcements")
+}

@@ -1,0 +1,164 @@
+enum UserRole {
+  staff
+  student
+
+  @@map("user_role")
+}
+
+enum NotificationType {
+  request_submitted
+  request_approved
+  request_rejected
+  booking_moved
+  booking_cancelled_by_instructor
+  request_withdrawn
+  cc_submitted
+  cc_approved
+  cc_rejected
+  cc_completed
+  cc_cancelled
+
+  @@map("notification_type")
+}
+
+model User {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email            String    @unique @db.Citext
+  passwordHash     String    @map("password_hash")
+  name             String
+  titlePrefix      String?   @map("title_prefix")
+  role             UserRole
+  isActive         Boolean   @default(true) @map("is_active")
+  failedLoginCount Int       @default(0) @map("failed_login_count")
+  lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(6)
+  studentNo        String?   @unique @map("student_no")
+  advisorId        String?   @map("advisor_id") @db.Uuid
+  // LINE account linked to this user (one LINE ID belongs to at most one user).
+  lineUserId       String?   @unique @map("line_user_id")
+  lineLinkedAt     DateTime? @map("line_linked_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sessions            Session[]
+  bookingsInstructing Booking[]      @relation("instructor")
+  bookingsRequested   Booking[]      @relation("requestedBy")
+  bookingsDecided     Booking[]      @relation("decidedBy")
+  defaultForCourses   Course[]
+  events              BookingEvent[]
+  notifications       Notification[]
+  receiptChecks       ReceiptCheck[]
+  announcements       Announcement[]
+  newsArticles        NewsArticle[]
+
+  advisor                      User?                        @relation("advisor", fields: [advisorId], references: [id])
+  advisees                     User[]                       @relation("advisor")
+  enrollments                  Enrollment[]
+  courseChangeRequests         CourseChangeRequest[]        @relation("ccStudent")
+  courseChangeDecided          CourseChangeRequest[]        @relation("ccDecidedBy")
+  courseChangeEvents           CourseChangeEvent[]
+  courseChangeSettingsEvents   CourseChangeSettingsEvent[]
+  courseChangeFilesUploaded    CourseChangeFile[]
+  courseChangeSignatureBatches CourseChangeSignatureBatch[]
+
+  @@index([role, isActive])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Course {
+  id                  String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                String  @unique
+  name                String
+  defaultInstructorId String? @map("default_instructor_id") @db.Uuid
+  isActive            Boolean @default(true) @map("is_active")
+  /// Where the course record comes from. "cedt-google-forms" = the CEDT drop/withdraw form
+  /// catalog (docs/course-change/DATABASE.md). Null = LabSync booking course (e.g. legacy
+  /// CEDT101 placeholders), which Course Change ignores.
+  catalogSource       String? @map("catalog_source")
+
+  defaultInstructor            User?                        @relation(fields: [defaultInstructorId], references: [id])
+  bookings                     Booking[]
+  enrollments                  Enrollment[]
+  allowedCourses               AllowedCourse[]
+  courseChangeRequests         CourseChangeRequest[]
+  courseChangeSchedules        CourseChangeSchedule[]
+  courseChangeSignatureBatches CourseChangeSignatureBatch[]
+
+  @@map("courses")
+}
+
+model Term {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYear Int      @map("academic_year")
+  termNumber   Int      @map("term_number") @db.SmallInt
+  startDate    DateTime @map("start_date") @db.Date
+  endDate      DateTime @map("end_date") @db.Date
+  isActive     Boolean  @default(false) @map("is_active")
+
+  bookings                     Booking[]
+  courseChangeWindows          CourseChangeWindow[]
+  enrollments                  Enrollment[]
+  allowedCourses               AllowedCourse[]
+  courseChangeRequests         CourseChangeRequest[]
+  courseChangeSettingsEvents   CourseChangeSettingsEvent[]
+  courseChangeSchedules        CourseChangeSchedule[]
+  courseChangeSignatureBatches CourseChangeSignatureBatch[]
+
+  @@unique([academicYear, termNumber])
+  @@map("terms")
+}
+
+model Notification {
+  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                String           @map("user_id") @db.Uuid
+  type                  NotificationType
+  message               String
+  bookingId             String?          @map("booking_id") @db.Uuid
+  courseChangeRequestId String?          @map("course_change_request_id") @db.Uuid
+  payload               Json             @default("{}")
+  isRead                Boolean          @default(false) @map("is_read")
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  deliveredEmailAt DateTime? @map("delivered_email_at") @db.Timestamptz(6)
+  deliveredLineAt  DateTime? @map("delivered_line_at") @db.Timestamptz(6)
+
+  user                User                 @relation(fields: [userId], references: [id])
+  booking             Booking?             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  courseChangeRequest CourseChangeRequest? @relation(fields: [courseChangeRequestId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+/// A student's registration in a course (mirrors Reg Chula; seeded in the prototype).
+model Enrollment {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId String  @map("student_id") @db.Uuid
+  termId    String  @map("term_id") @db.Uuid
+  courseId  String  @map("course_id") @db.Uuid
+  /// Null when unknown — demo data never invents official sections or credits.
+  section   String?
+  credits   Int?    @db.SmallInt
+  /// Provenance, e.g. "synthetic-demo". A future Reg Chula sync would write its own value.
+  source    String?
+
+  student User   @relation(fields: [studentId], references: [id])
+  term    Term   @relation(fields: [termId], references: [id], onDelete: Cascade)
+  course  Course @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, termId, courseId])
+  @@map("enrollments")
+}

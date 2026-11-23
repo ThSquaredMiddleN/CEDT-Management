@@ -1,0 +1,151 @@
+enum RoomType {
+  lecture
+  lab
+  hardware
+  meeting
+
+  @@map("room_type")
+}
+
+enum BookingStatus {
+  pending
+  approved
+  rejected
+  cancelled
+
+  @@map("booking_status")
+}
+
+enum BookingType {
+  recurring
+  one_off
+
+  @@map("booking_type")
+}
+
+enum EventType {
+  created
+  approved
+  rejected
+  withdrawn
+  cancelled
+  moved_occurrence
+  moved_series
+  edited
+  occurrence_cancelled
+
+  @@map("event_type")
+}
+
+model Building {
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code     String  @unique
+  name     String
+  isActive Boolean @default(true) @map("is_active")
+
+  rooms Room[]
+
+  @@map("buildings")
+}
+
+model Room {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  buildingId String   @map("building_id") @db.Uuid
+  name       String
+  capacity   Int
+  roomType   RoomType @map("room_type")
+  equipment  String[] @default([])
+  isActive   Boolean  @default(true) @map("is_active")
+
+  building    Building            @relation(fields: [buildingId], references: [id])
+  bookings    Booking[]
+  occurrences BookingOccurrence[]
+
+  @@unique([buildingId, name])
+  @@index([buildingId])
+  @@index([isActive])
+  @@map("rooms")
+}
+
+model Booking {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestNo    String        @unique @map("request_no")
+  status       BookingStatus @default(pending)
+  bookingType  BookingType   @map("booking_type")
+  termId       String        @map("term_id") @db.Uuid
+  courseId     String?       @map("course_id") @db.Uuid
+  title        String
+  section      String?
+  instructorId String        @map("instructor_id") @db.Uuid
+  requestedBy  String        @map("requested_by") @db.Uuid
+  roomId       String        @map("room_id") @db.Uuid
+  dayOfWeek    Int?          @map("day_of_week") @db.SmallInt
+  startDate    DateTime?     @map("start_date") @db.Date
+  endDate      DateTime?     @map("end_date") @db.Date
+  oneOffDate   DateTime?     @map("one_off_date") @db.Date
+  startTime    DateTime      @map("start_time") @db.Time(0)
+  endTime      DateTime      @map("end_time") @db.Time(0)
+  studentCount Int           @map("student_count")
+  note         String?
+  decidedById  String?       @map("decided_by") @db.Uuid
+  decidedAt    DateTime?     @map("decided_at") @db.Timestamptz(6)
+  rejectReason String?       @map("reject_reason")
+  cancelReason String?       @map("cancel_reason")
+  snapshot     Json
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  term          Term                @relation(fields: [termId], references: [id])
+  course        Course?             @relation(fields: [courseId], references: [id])
+  instructor    User                @relation("instructor", fields: [instructorId], references: [id])
+  requester     User                @relation("requestedBy", fields: [requestedBy], references: [id])
+  decidedBy     User?               @relation("decidedBy", fields: [decidedById], references: [id])
+  room          Room                @relation(fields: [roomId], references: [id])
+  occurrences   BookingOccurrence[]
+  events        BookingEvent[]
+  notifications Notification[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([requestedBy, createdAt(sort: Desc)])
+  @@index([instructorId])
+  @@index([termId])
+  @@map("bookings")
+}
+
+model BookingOccurrence {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId   String   @map("booking_id") @db.Uuid
+  roomId      String   @map("room_id") @db.Uuid
+  date        DateTime @db.Date
+  startTime   DateTime @map("start_time") @db.Time(0)
+  endTime     DateTime @map("end_time") @db.Time(0)
+  isCancelled Boolean  @default(false) @map("is_cancelled")
+  isBlocking  Boolean  @default(false) @map("is_blocking")
+  // `timeslot` tstzrange GENERATED column is added by the raw SQL migration
+  // (Prisma cannot express generated range columns).
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  room    Room    @relation(fields: [roomId], references: [id])
+
+  @@index([bookingId])
+  @@index([roomId, date])
+  @@index([date])
+  @@map("booking_occurrences")
+}
+
+model BookingEvent {
+  id        BigInt    @id @default(autoincrement())
+  bookingId String    @map("booking_id") @db.Uuid
+  actorId   String    @map("actor_id") @db.Uuid
+  eventType EventType @map("event_type")
+  oldValue  Json?     @map("old_value")
+  newValue  Json?     @map("new_value")
+  reason    String?
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actor   User    @relation(fields: [actorId], references: [id])
+
+  @@index([bookingId, createdAt])
+  @@map("booking_events")
+}
