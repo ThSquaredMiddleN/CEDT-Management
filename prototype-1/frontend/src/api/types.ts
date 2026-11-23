@@ -217,6 +217,38 @@ export interface Announcement {
 
 export type AnnouncementInput = Pick<Announcement, "title" | "content" | "audiences">;
 
+export type NewsTag =
+  | "competition"
+  | "activities"
+  | "scholarship"
+  | "internship"
+  | "academic"
+  | "other";
+export type NewsStatus = "draft" | "published";
+
+export interface NewsImage {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  position: number;
+}
+
+export interface NewsArticle {
+  id: string;
+  title: string;
+  content: string;
+  tags: NewsTag[];
+  status: NewsStatus;
+  authorId: string;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  images: NewsImage[];
+}
+
+export type NewsInput = Pick<NewsArticle, "title" | "content" | "tags">;
+
 /** Affected-bookings list returned with 409 NEEDS_CONFIRM when deactivating master data. */
 export interface AffectedBooking {
   bookingId: string;
@@ -227,4 +259,46 @@ export interface AffectedBooking {
   roomName: string;
   startTime: string;
   endTime: string;
+}
+
+// ------------------------------------------------------------------ receipt checks
+
+export type ReceiptVerdict = "ok" | "warn" | "fail";
+export type ReceiptCheckState = "ok" | "warn" | "fail" | "info";
+
+export interface ReceiptCheckItem {
+  name: string;
+  state: ReceiptCheckState;
+  detail: string;
+}
+
+/** A saved check row. Never carries the student's name (it is not stored). */
+export interface ReceiptCheckRow {
+  id: string;
+  studentId: string;
+  term: string;
+  kind: "pdf" | "screenshot";
+  reference: string | null;
+  amount: string | null;
+  paymentStatus: string | null;
+  paidAt: string | null;
+  funding: string | null;
+  checks: ReceiptCheckItem[];
+  verdict: ReceiptVerdict;
+  checkedById: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Sidecar field: `value` is what the page shows; `pii` marks name, student ID and reference. */
+export interface ReceiptField {
+  value: string | null;
+  box: unknown;
+  pii: boolean;
+}
+
+/** Returned by POST /receipts/check. `fields` is for the staff member's screen only. */
+export interface ReceiptCheckResponse {
+  check: ReceiptCheckRow;
+  fields: Record<string, ReceiptField>;
 }

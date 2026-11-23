@@ -34,6 +34,8 @@ npm run dev                   # http://localhost:5173
 
 `DATABASE_URL` points at your local Postgres, e.g. `postgresql://$USER@localhost:5432/labsync?schema=public` (Homebrew installs use your OS user with trust auth — no password). The migrations create the `citext`, `btree_gist` and `pgcrypto` extensions themselves. If you're starting from a dirty DB, `npx prisma migrate reset --force` drops, recreates, migrates and re-seeds in one step.
 
+News poster files are stored on the backend filesystem at `NEWS_UPLOAD_DIR` (default: `backend/var/news-uploads` when started from `backend/`). For deployments, mount persistent storage at this path; the database stores poster metadata and file ordering, not the image bytes.
+
 Then open **http://localhost:5173**. The **calendar is public** — you can browse it without logging in (approved bookings only). Booking and management require a staff login.
 
 ### Test accounts (from the seed)
@@ -87,7 +89,31 @@ npm run test:prepare   # once: create + migrate + seed the isolated labsync_test
 npm test               # all tests run against labsync_test (Course Change pins "today" to week 9)
 npm run test:fresh     # recommended: create/migrate/seed a NEW scratch DB, test once, remove only that scratch DB
 npm run db:seed   # idempotent; only seeds bookings when the booking table is empty
+npm run receipts:purge   # delete receipt checks older than RECEIPT_RETENTION_DAYS (default 365)
 ```
+
+### Receipt checks (OCR)
+
+Staff check a student's tuition receipt once per semester at **Admin → Receipt checks** (`/admin/receipts`):
+enter the student ID, pick the term, upload the CU receipt PDF or the CU NEX payment screenshot. The page
+shows the fields read and the checks (paid, this semester, belongs to this student, reference not used by
+another student). The result is saved, one row per student per term; **the file and the student's name are
+never stored**.
+
+Reading the receipt is done by a small Python service on localhost (`ocr-service/`, see its README). Start
+it next to the backend:
+
+```bash
+cd ocr-service
+python -m venv .venv && .venv\Scripts\activate   # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt                  # PDFs only
+pip install -r requirements-paddle.txt           # optional: screenshots, via PaddleOCR
+python server.py                                 # :8790; OCR_ENGINE=stub fakes screenshots without Paddle
+```
+
+Without the service the page says "OCR service is not running". The backend refuses an `OCR_SERVICE_URL`
+that isn't localhost: receipts carry names and student IDs (PDPA), so never point it at a cloud OCR API.
+Backend tests use a fake service, so `npm test` doesn't need Python.
 
 ---
 
@@ -119,11 +145,11 @@ Seeded: 3 students with enrollments, the five routing windows for 2026/1, CEDT49
 
 ## What's implemented
 
-**Backend** — a single **staff** role (session-cookie auth: argon2id, 5-strike/15-minute lockout, CSRF via `X-Requested-With`) plus an **anonymous public calendar** (no login → approved bookings only), booking create (auto-approved for staff) / approve / reject / cancel / withdraw / move, the conflict engine (recurrence expansion, one `findConflicts` behind all four call sites, alternative-room suggestions, non-blocking capacity warnings), master-data CRUD with soft delete and warn-and-confirm, announcement draft/create/update/publish endpoints with server-side rich-text sanitization, transactional in-app notifications, and CSV import (dry-run + commit) for courses and rooms.
+**Backend** — a single **staff** role (session-cookie auth: argon2id, 5-strike/15-minute lockout, CSRF via `X-Requested-With`) plus an **anonymous public calendar** (no login → approved bookings only), booking create (auto-approved for staff) / approve / reject / cancel / withdraw / move, the conflict engine (recurrence expansion, one `findConflicts` behind all four call sites, alternative-room suggestions, non-blocking capacity warnings), master-data CRUD with soft delete and warn-and-confirm, announcement and news draft/create/update/publish endpoints with server-side rich-text sanitization, authenticated poster upload and serving for news, transactional in-app notifications, and CSV import (dry-run + commit) for courses and rooms.
 
 **The G1 guarantee is enforced by the database**, not just by application code: `booking_occurrences` carries a generated `tstzrange` column plus a partial GiST exclusion constraint (`no_double_booking`) that makes two overlapping *approved* bookings in one room physically unrepresentable. Half-open `[)` ranges mean back-to-back bookings (10:00–12:00 / 12:00–14:00) never collide.
 
-**Frontend** — the screens (public read-only Calendar, Login, Dashboard + pending queue, Master Calendar weekly + daily, New Booking, My Requests, Master Data, and announcement list/create/detail/edit with a TipTap rich-text editor), the monochrome design system (status is texture — solid / striped-dashed / heavy-outline — with no red, green or amber anywhere), the hand-built calendar grid with side-by-side overlap layout, the real-time conflict check with debounce + request cancellation + out-of-order-response discard, URL-driven calendar state, and the 45-second-polling notification bell.
+**Frontend** — the screens (public read-only Calendar, Login, Dashboard + pending queue, Master Calendar weekly + daily, New Booking, My Requests, Master Data, announcement and news list/create/detail/edit with a TipTap rich-text editor), the monochrome design system (status is texture — solid / striped-dashed / heavy-outline — with no red, green or amber anywhere), the hand-built calendar grid with side-by-side overlap layout, the real-time conflict check with debounce + request cancellation + out-of-order-response discard, URL-driven calendar state, and the 45-second-polling notification bell.
 
 ---
 
@@ -145,7 +171,99 @@ These are the only places the implementation departs from the two guides.
 
 7. **The `booking_events` audit table is implemented**, though the backend guide lists it as optional for the prototype, so `GET /bookings/:id` returns a real `events[]` timeline.
 
-Not built, per the guides' own out-of-scope lists: email/LINE notifications, CSV export, SSO, student views, and the optional MSW mocks (the real backend runs locally, so they would be redundant).
+Not built, per the guides' own out-of-scope lists: email notifications, CSV export, SSO, student views, and the optional MSW mocks (the real backend runs locally, so they would be redundant).
+
+---
+
+## LINE notifications (optional)
+
+Staff can link their LINE account and get every in-app notification (submitted, approved, rejected, moved,
+cancelled, withdrawn) pushed to LINE as well, in Thai then English. Code: `backend/src/modules/line/`,
+`frontend/src/features/line-link/`. It is **off unless both LINE keys are set** (or `LINE_DRY_RUN=true`, see below), so the app runs as before without them.
+
+**How linking works:** the staff member adds the LINE Official Account → the bot replies with a one-time link
+(`/line/link?token=…`, valid 15 minutes, single use) → they log in as usual and press **Confirm** → done.
+Unfollowing the OA, or `POST /api/v1/line/unlink`, removes the link. Only notifications created after linking are
+sent, so linking never floods old ones.
+
+**Test it locally (no LINE account)**
+
+`LINE_DRY_RUN=true` runs the whole flow without LINE. Nothing is sent: each reply and push is printed to the backend
+console in full, link included. No LINE account, phone or tunnel is needed.
+
+1. In `backend/.env` set `LINE_CHANNEL_SECRET=any-local-secret` and `LINE_DRY_RUN=true`. The secret can be any
+   string, because the simulator signs with the same value. A token, if set, is ignored in dry-run. Restart
+   `npm run dev`; the console says LINE is in dry-run mode.
+2. In `backend/`, run `npm run line:sim -- follow`. The console prints the bot's reply with the one-time link.
+3. Open the link, log in as `somchai@cedt.edu` and press **Confirm**.
+4. In another browser or profile, log in as `admin@cedt.edu`, open `/admin/dashboard` and reject (or approve)
+   Somchai's seeded pending request. Within about 5 s the console prints `[LINE dry-run] push to U` + 31 zeros +
+   `1:` followed by the Thai and English text, and a link to `/requests`.
+5. **"New request" push:** staff bookings made in the app are auto-approved and notify no one, so the app cannot
+   create a pending request. `npm run line:pending` makes one on the seed data (options: `--as <email>`, `--date`,
+   `--start`, `--end`; see `scripts/line-pending.ts`). Every staff member gets "New request", the linked one by LINE,
+   with a link to `/admin/dashboard`. Use `--as` with the linked account to get a request you can then reject.
+6. `npm run line:sim -- message` replies "already linked to <name>". Opening a used or older link shows "invalid or expired"
+   straight away, before login (the page checks the token when it opens, read-only, and again on **Confirm**).
+7. `npm run line:sim -- unfollow` removes the link, so no more pushes reach that LINE ID. Run `follow` again for a new link.
+8. For a second person, give the simulator another ID: `npm run line:sim -- follow --user U` + 32 lowercase hex
+   digits. Each LINE ID links to one account.
+
+The default user is `U` + 31 zeros + `1`. Dry-run prints the one-time link and the LINE user ID, so keep it to local
+development: don't tunnel a dry-run backend (anyone who guesses the secret could post events), and the backend
+refuses to start with `LINE_DRY_RUN` under `NODE_ENV=production`.
+
+**Setup**
+
+1. In the [LINE Official Account Manager](https://manager.line.biz/), create an OA and enable the Messaging API.
+   In [LINE Developers](https://developers.line.biz/console/), copy the **channel secret** and issue a
+   **long-lived channel access token**.
+2. In `backend/.env` (never commit it):
+   ```
+   LINE_CHANNEL_SECRET=...
+   LINE_CHANNEL_ACCESS_TOKEN=...
+   # optional: LINE_LINK_TTL_MINUTES=15, LINE_DISPATCH_INTERVAL_MS=5000
+   ```
+   `APP_ORIGIN` is also the base of the link the bot sends, so it must be a URL the phone can open.
+3. LINE needs a public HTTPS webhook. Locally, a quick tunnel to the **frontend** works, and one tunnel serves both the
+   link page and the webhook (Vite's `/api` proxy forwards the webhook to the backend):
+   `cloudflared tunnel --url http://localhost:5173`. Set the webhook URL in LINE Developers to
+   `https://<tunnel>/api/v1/line/webhook`, turn **Use webhook** on, and press **Verify**. Turn **Webhook redelivery**
+   on too, so a failed delivery is retried. Then:
+   - Set `APP_ORIGIN=https://<tunnel>` in `backend/.env` and restart `npm run dev`. The link is built from it, and the
+     CSRF origin check accepts only it, so open the app via the tunnel URL, not `localhost`, or logins are refused.
+   - Vite blocks unknown hosts (from 5.4.12). Create `frontend/vite.local.config.mts` (already in `.gitignore`):
+     ```ts
+     import { mergeConfig } from "vite";
+     import base from "./vite.config";
+
+     export default mergeConfig(base, { server: { allowedHosts: [".trycloudflare.com"] } });
+     ```
+     Then run `npx vite --config vite.local.config.mts` in `frontend/` instead of `npm run dev`.
+   - A quick tunnel gets a new URL on each run, so update the webhook URL and `APP_ORIGIN` each time.
+   - Use your own free dev OA and channel. A channel has only one webhook URL, so two people's tunnels cannot both
+     receive events.
+4. `npx prisma migrate deploy` (adds `users.line_user_id`, `users.line_linked_at`, `line_link_tokens`,
+   `line_webhook_events`), then `npm run dev`.
+
+**Team access**
+
+The channel owner can invite teammates in LINE Developers, under the channel's **Roles**. An **Admin** can change the
+webhook and see the channel secret, so keep Admin to one backup person. Nobody needs a role to follow the OA and use it.
+
+**Behaviour worth knowing**
+
+- The webhook is checked against LINE's signature over the raw body and is the only route exempt from the
+  `X-Requested-With` CSRF rule (`config: { csrf: false }`). Bad or missing signature → 401.
+- The dispatcher polls for undelivered notifications every 5 s and marks `notifications.delivered_line_at`.
+  A LINE 429 (rate limit or monthly push quota) pauses it for 60 s; a notification that can't be rendered or that
+  LINE rejects permanently is marked and logged, not retried. Deactivated users get nothing.
+- The free LINE plan has a monthly push quota (each notification is one push).
+- `migration.sql` for `line_notify` was trimmed by hand: `prisma migrate diff` also proposes dropping
+  `booking_occurrences.timeslot`, the raw-SQL column behind the exclusion constraint. **If `prisma migrate dev`
+  ever proposes that drop, remove it** or `no_double_booking` is lost.
+- Tests (`backend/test/line/`) use a fake LINE client and fake credentials from `vitest.config.ts`; they never call
+  LINE.
 
 ---
 

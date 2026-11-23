@@ -58,6 +58,24 @@ enum AnnouncementAudience {
   @@map("announcement_audience")
 }
 
+enum NewsStatus {
+  draft
+  published
+
+  @@map("news_status")
+}
+
+enum NewsTag {
+  competition
+  activities
+  scholarship
+  internship
+  academic
+  other
+
+  @@map("news_tag")
+}
+
 enum EventType {
   created
   approved
@@ -100,6 +118,9 @@ model User {
   lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(6)
   studentNo        String?   @unique @map("student_no")
   advisorId        String?   @map("advisor_id") @db.Uuid
+  // LINE account linked to this user (one LINE ID belongs to at most one user).
+  lineUserId       String?   @unique @map("line_user_id")
+  lineLinkedAt     DateTime? @map("line_linked_at") @db.Timestamptz(6)
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -110,7 +131,9 @@ model User {
   defaultForCourses   Course[]
   events              BookingEvent[]
   notifications       Notification[]
+  receiptChecks       ReceiptCheck[]
   announcements       Announcement[]
+  newsArticles        NewsArticle[]
 
   advisor              User?                 @relation("advisor", fields: [advisorId], references: [id])
   advisees             User[]                @relation("advisor")
@@ -560,6 +583,55 @@ model CourseChangeSignatureBatch {
   @@map("course_change_signature_batches")
 }
 
+/** One-time link from a LINE user ID to the app login. Only the sha256 of the raw token is stored. */
+model LineLinkToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  lineUserId String    @map("line_user_id")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt     DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([lineUserId])
+  @@map("line_link_tokens")
+}
+
+/// Dedupe row per LINE webhook event. Written before the handler runs; handledAt is set only after the handler
+/// succeeds. A row with handledAt null means the event has not finished, so a redelivery runs it again.
+model LineWebhookEvent {
+  webhookEventId String    @id @map("webhook_event_id")
+  receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  handledAt      DateTime? @map("handled_at") @db.Timestamptz(6)
+
+  @@map("line_webhook_events")
+}
+
+// Tuition receipt check (once per student per term). Holds the extracted check fields only:
+// never the file, never the student's name (the sidecar's `name` field is returned to staff, not stored).
+model ReceiptCheck {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId     String   @map("student_id")
+  term          String
+  kind          String
+  reference     String?
+  amount        String?
+  paymentStatus String?  @map("payment_status")
+  paidAt        String?  @map("paid_at")
+  funding       String?
+  checks        Json
+  verdict       String
+  checkedById   String   @map("checked_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  checkedBy User @relation(fields: [checkedById], references: [id])
+
+  @@unique([studentId, term])
+  @@index([reference])
+  @@index([term])
+  @@map("receipt_checks")
+}
+
 model Announcement {
   id          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   title       String                @db.VarChar(200)
@@ -576,4 +648,39 @@ model Announcement {
   @@index([status, updatedAt(sort: Desc)])
   @@index([authorId])
   @@map("announcements")
+}
+
+model NewsArticle {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String      @db.VarChar(200)
+  content     String      @default("") @db.Text
+  tags        NewsTag[]   @default([])
+  status      NewsStatus  @default(draft)
+  authorId    String      @map("author_id") @db.Uuid
+  publishedAt DateTime?   @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  author User       @relation(fields: [authorId], references: [id])
+  images NewsImage[]
+
+  @@index([status, updatedAt(sort: Desc)])
+  @@index([authorId])
+  @@map("news_articles")
+}
+
+model NewsImage {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  newsId       String   @map("news_id") @db.Uuid
+  storageKey   String   @unique @map("storage_key") @db.VarChar(80)
+  originalName String   @map("original_name") @db.VarChar(255)
+  mimeType     String   @map("mime_type") @db.VarChar(32)
+  sizeBytes    Int      @map("size_bytes")
+  position     Int
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  news NewsArticle @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  @@index([newsId, position])
+  @@map("news_images")
 }

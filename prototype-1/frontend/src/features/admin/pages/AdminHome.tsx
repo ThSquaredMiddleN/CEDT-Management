@@ -26,7 +26,7 @@ const MENU_GROUPS: MenuGroup[] = [
     rowGap: "gap-y-4",
     items: [
       { text: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements" },
-      { text: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon /> },
+      { text: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon />, to: "/admin/news" },
       { text: "จัดการห้องเรียน", icon: <CalendarIcon />, to: "/admin/data" },
     ],
   },

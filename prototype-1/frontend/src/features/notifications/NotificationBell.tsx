@@ -1,3 +1,4 @@
+import { BellIcon } from "@heroicons/react/24/outline";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { th } from "date-fns/locale";
@@ -24,7 +25,11 @@ const ICONS: Record<string, typeof Check> = {
   cc_cancelled: X,
 };
 
-export function NotificationBell() {
+export function NotificationBell({
+  variant = "default",
+}: {
+  variant?: "default" | "topbar";
+} = {}) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -53,14 +58,29 @@ export function NotificationBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label="การแจ้งเตือน">
-          <Bell className="size-5" />
-          {unread > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-neutral-50">
-              {unread}
-            </span>
-          )}
-        </Button>
+        {variant === "topbar" ? (
+          <button
+            type="button"
+            aria-label="การแจ้งเตือน"
+            className="relative flex size-6 items-center justify-center rounded-md text-grey-900 transition-colors hover:text-brand-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+          >
+            <BellIcon className="size-6" aria-hidden="true" />
+            {unread > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-brand-primary text-[10px] font-semibold text-white">
+                {unread}
+              </span>
+            )}
+          </button>
+        ) : (
+          <Button variant="ghost" size="icon" className="relative" aria-label="การแจ้งเตือน">
+            <Bell className="size-5" />
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-neutral-50">
+                {unread}
+              </span>
+            )}
+          </Button>
+        )}
       </PopoverTrigger>
 
       <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-0">

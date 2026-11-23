@@ -19,11 +19,14 @@
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset --force",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
+    "receipts:purge": "tsx --env-file=.env scripts/receipts-purge.ts",
     "test": "vitest run",
     "test:fresh": "tsx --env-file=.env scripts/test-fresh.ts",
     "test:prepare": "tsx --env-file=.env scripts/prepare-test-db.ts",
     "demo:reset": "tsx --env-file=.env scripts/demo-reset.ts",
-    "demo:course-change-v2": "tsx --env-file=.env scripts/demo-course-change-v2.ts"
+    "demo:course-change-v2": "tsx --env-file=.env scripts/demo-course-change-v2.ts",
+    "line:sim": "tsx --env-file=.env scripts/line-sim.ts",
+    "line:pending": "tsx --env-file=.env scripts/line-pending.ts"
   },
   "prisma": {
     "seed": "tsx --env-file=.env prisma/seed.ts"

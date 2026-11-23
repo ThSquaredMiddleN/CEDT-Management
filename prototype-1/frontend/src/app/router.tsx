@@ -28,6 +28,11 @@ const LoginPage = lazy(() =>
     default: module.LoginPage,
   })),
 );
+const LineLinkPage = lazy(() =>
+  import("@/features/line-link/LineLinkPage").then((module) => ({
+    default: module.LineLinkPage,
+  })),
+);
 const MasterDataPage = lazy(() =>
   import("@/features/master-data/MasterDataPage").then((module) => ({
     default: module.MasterDataPage,
@@ -38,6 +43,11 @@ const CourseChangePage = lazy(() =>
     default: module.CourseChangePage,
   })),
 );
+const ReceiptChecksPage = lazy(() =>
+  import("@/features/receipts/ReceiptChecksPage").then((module) => ({
+    default: module.ReceiptChecksPage,
+  })),
+);
 const MyRequests = lazy(() =>
   import("@/features/my-requests/MyRequests").then((module) => ({
     default: module.MyRequests,
@@ -45,6 +55,11 @@ const MyRequests = lazy(() =>
 );
 const MapPage = lazy(() =>
   import("./MapPage").then((module) => ({ default: module.MapPage })),
+);
+const CuLinksPage = lazy(() =>
+  import("@/features/cu-links/pages/CuLinksPage").then((module) => ({
+    default: module.CuLinksPage,
+  })),
 );
 const AnnouncementListPage = lazy(() =>
   import("@/features/announcements/pages/AnnouncementListPage").then((module) => ({
@@ -64,6 +79,46 @@ const AnnouncementDetailPage = lazy(() =>
 const AnnouncementEditPage = lazy(() =>
   import("@/features/announcements/pages/AnnouncementEditPage").then((module) => ({
     default: module.AnnouncementEditPage,
+  })),
+);
+const StudentAnnouncementListPage = lazy(() =>
+  import("@/features/announcements/pages/StudentAnnouncementListPage").then((module) => ({
+    default: module.StudentAnnouncementListPage,
+  })),
+);
+const StudentAnnouncementDetailPage = lazy(() =>
+  import("@/features/announcements/pages/StudentAnnouncementDetailPage").then((module) => ({
+    default: module.StudentAnnouncementDetailPage,
+  })),
+);
+const NewsListPage = lazy(() =>
+  import("@/features/news/pages/NewsListPage").then((module) => ({
+    default: module.NewsListPage,
+  })),
+);
+const NewsCreatePage = lazy(() =>
+  import("@/features/news/pages/NewsCreatePage").then((module) => ({
+    default: module.NewsCreatePage,
+  })),
+);
+const NewsDetailPage = lazy(() =>
+  import("@/features/news/pages/NewsDetailPage").then((module) => ({
+    default: module.NewsDetailPage,
+  })),
+);
+const NewsEditPage = lazy(() =>
+  import("@/features/news/pages/NewsEditPage").then((module) => ({
+    default: module.NewsEditPage,
+  })),
+);
+const StudentNewsListPage = lazy(() =>
+  import("@/features/news/pages/StudentNewsListPage").then((module) => ({
+    default: module.StudentNewsListPage,
+  })),
+);
+const StudentNewsDetailPage = lazy(() =>
+  import("@/features/news/pages/StudentNewsDetailPage").then((module) => ({
+    default: module.StudentNewsDetailPage,
   })),
 );
 
@@ -147,68 +202,43 @@ export function AppRoutes() {
             }
           />
           <Route path="schedule/a" element={<MapPage />} />
+          <Route path="links" element={<CuLinksPage />} />
+          <Route path="announcements" element={<StudentAnnouncementListPage />} />
+          <Route path="announcements/:id" element={<StudentAnnouncementDetailPage />} />
+          <Route path="news" element={<StudentNewsListPage />} />
+          <Route path="news/:id" element={<StudentNewsDetailPage />} />
+          {/* Token comes from the LINE chat link. Not wrapped in RequireAuth: the page checks the token before login. */}
+          <Route path="line/link" element={<LineLinkPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
-        <Route path="admin" element={<AdminLayout />}>
+        <Route
+          path="admin"
+          element={
+            <RequireAuth>
+              <AdminLayout />
+            </RequireAuth>
+          }
+        >
           <Route index element={<AdminHome />} />
-          <Route
-            path="dashboard"
-            element={
-              <RequireAuth>
-                <AdminDashboard />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="data"
-            element={
-              <RequireAuth>
-                <MasterDataPage />
-              </RequireAuth>
-            }
-          />
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="data" element={<MasterDataPage />} />
           <Route
             path="course-change"
             element={
-              <RequireAuth>
-                <DeferredPage>
-                  <CourseChangePage />
-                </DeferredPage>
-              </RequireAuth>
+              <DeferredPage>
+                <CourseChangePage />
+              </DeferredPage>
             }
           />
-          <Route
-            path="announcements"
-            element={
-              <RequireAuth>
-                <AnnouncementListPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="announcements/create"
-            element={
-              <RequireAuth>
-                <AnnouncementCreatePage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="announcements/:id"
-            element={
-              <RequireAuth>
-                <AnnouncementDetailPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="announcements/:id/edit"
-            element={
-              <RequireAuth>
-                <AnnouncementEditPage />
-              </RequireAuth>
-            }
-          />
+          <Route path="receipts" element={<ReceiptChecksPage />} />
+          <Route path="announcements" element={<AnnouncementListPage />} />
+          <Route path="announcements/create" element={<AnnouncementCreatePage />} />
+          <Route path="announcements/:id" element={<AnnouncementDetailPage />} />
+          <Route path="announcements/:id/edit" element={<AnnouncementEditPage />} />
+          <Route path="news" element={<NewsListPage />} />
+          <Route path="news/create" element={<NewsCreatePage />} />
+          <Route path="news/:id" element={<NewsDetailPage />} />
+          <Route path="news/:id/edit" element={<NewsEditPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

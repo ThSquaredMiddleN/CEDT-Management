@@ -44,11 +44,16 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 30_000,
     // Course Change routing depends on "today": pin it to week 9 of the seeded term (2026/1).
+    // Fake LINE credentials, set after the .env spread so a real secret or token is never used by tests.
+    // LINE_DRY_RUN is forced off too, so a .env that sets it for local use does not change the tests.
     env: {
       ...dotEnv,
       DATABASE_URL: TEST_DATABASE_URL,
       NODE_ENV: "test",
       COURSE_CHANGE_TODAY: "2026-09-30",
+      LINE_CHANNEL_SECRET: "test-line-channel-secret",
+      LINE_CHANNEL_ACCESS_TOKEN: "test-line-access-token",
+      LINE_DRY_RUN: "false",
     },
   },
 });

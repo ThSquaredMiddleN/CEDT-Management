@@ -15,20 +15,25 @@ const announcementSelection = {
   updatedAt: true,
 } as const;
 
-export async function listAnnouncements() {
+export async function listAnnouncements(options: { publishedOnly?: boolean } = {}) {
   const items = await prisma.announcement.findMany({
+    where: options.publishedOnly ? { status: "published" } : undefined,
     select: announcementSelection,
-    orderBy: { updatedAt: "desc" },
+    orderBy: options.publishedOnly
+      ? [{ publishedAt: "desc" }, { updatedAt: "desc" }]
+      : { updatedAt: "desc" },
   });
   return { items };
 }
 
-export async function getAnnouncement(id: string) {
+export async function getAnnouncement(id: string, options: { publishedOnly?: boolean } = {}) {
   const announcement = await prisma.announcement.findUnique({
     where: { id },
     select: announcementSelection,
   });
-  if (!announcement) throw notFound("Announcement not found");
+  if (!announcement || (options.publishedOnly && announcement.status !== "published")) {
+    throw notFound("Announcement not found");
+  }
   return { announcement };
 }
 
