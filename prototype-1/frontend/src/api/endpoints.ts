@@ -24,6 +24,8 @@ import type {
   ReceiptCheckResponse,
   ReceiptCheckRow,
   ReceiptVerdict,
+  NewsArticle,
+  NewsInput,
   Room,
   Term,
   User,
@@ -82,6 +84,75 @@ export const useUpdateAnnouncement = (id: string) =>
 export const usePublishAnnouncement = (id: string) =>
   useAnnouncementMutation<void>(() =>
     post<{ announcement: Announcement }>(`/announcements/${id}/publish`),
+  );
+
+// --------------------------------------------------------------------------- news
+
+export function useNews() {
+  return useQuery({
+    queryKey: qk.news,
+    queryFn: () => api<{ items: NewsArticle[] }>("/news"),
+  });
+}
+
+export function useNewsArticle(id: string | null) {
+  return useQuery({
+    queryKey: qk.newsArticle(id ?? ""),
+    queryFn: () => api<{ news: NewsArticle }>(`/news/${id}`),
+    enabled: !!id,
+  });
+}
+
+function useNewsMutation<TVariables>(
+  mutationFn: (variables: TVariables) => Promise<{ news: NewsArticle }>,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: ({ news }) => {
+      qc.setQueryData(qk.newsArticle(news.id), { news });
+      void qc.invalidateQueries({ queryKey: qk.news });
+    },
+  });
+}
+
+export const useCreateNews = () =>
+  useNewsMutation<FormData>((body) =>
+    api<{ news: NewsArticle }>("/news", { method: "POST", body }),
+  );
+
+export const useUpdateNews = (id: string) =>
+  useNewsMutation<NewsInput>((body) =>
+    patch<{ news: NewsArticle }>(`/news/${id}`, body),
+  );
+
+export function useUploadNewsImages(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: FormData) =>
+      api<{ news: NewsArticle }>(`/news/${id}/images`, { method: "POST", body }),
+    onSuccess: ({ news }) => {
+      qc.setQueryData(qk.newsArticle(news.id), { news });
+      void qc.invalidateQueries({ queryKey: qk.news });
+    },
+  });
+}
+
+export function useRemoveNewsImage(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (imageId: string) =>
+      api<{ ok: true }>(`/news/${id}/images/${imageId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.newsArticle(id) });
+      void qc.invalidateQueries({ queryKey: qk.news });
+    },
+  });
+}
+
+export const usePublishNews = (id: string) =>
+  useNewsMutation<void>(() =>
+    post<{ news: NewsArticle }>(`/news/${id}/publish`),
   );
 
 // ---------------------------------------------------------------------- calendar
@@ -332,3 +403,12 @@ export function useDeleteReceiptCheck() {
     },
   });
 }
+// --------------------------------------------------------------------------- line
+
+/** Links the signed-in staff member's LINE account. 400 = invalid, expired or used token. */
+export const linkLineAccount = (token: string) =>
+  post<{ linked: true }>("/line/link", { token });
+
+/** Read-only check run when the link page opens, before login. Only says whether Confirm would work. */
+export const checkLineLinkToken = (token: string) =>
+  post<{ valid: boolean }>("/line/link/check", { token });

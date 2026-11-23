@@ -57,6 +57,24 @@ enum AnnouncementAudience {
   @@map("announcement_audience")
 }
 
+enum NewsStatus {
+  draft
+  published
+
+  @@map("news_status")
+}
+
+enum NewsTag {
+  competition
+  activities
+  scholarship
+  internship
+  academic
+  other
+
+  @@map("news_tag")
+}
+
 enum EventType {
   created
   approved
@@ -92,6 +110,9 @@ model User {
   isActive         Boolean   @default(true) @map("is_active")
   failedLoginCount Int       @default(0) @map("failed_login_count")
   lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(6)
+  // LINE account linked to this user (one LINE ID belongs to at most one user).
+  lineUserId       String?   @unique @map("line_user_id")
+  lineLinkedAt     DateTime? @map("line_linked_at") @db.Timestamptz(6)
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -104,6 +125,7 @@ model User {
   notifications       Notification[]
   receiptChecks       ReceiptCheck[]
   announcements       Announcement[]
+  newsArticles        NewsArticle[]
 
   @@index([role, isActive])
   @@map("users")
@@ -283,6 +305,29 @@ model Notification {
   @@map("notifications")
 }
 
+/** One-time link from a LINE user ID to the app login. Only the sha256 of the raw token is stored. */
+model LineLinkToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  lineUserId String    @map("line_user_id")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt     DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([lineUserId])
+  @@map("line_link_tokens")
+}
+
+/// Dedupe row per LINE webhook event. Written before the handler runs; handledAt is set only after the handler
+/// succeeds. A row with handledAt null means the event has not finished, so a redelivery runs it again.
+model LineWebhookEvent {
+  webhookEventId String    @id @map("webhook_event_id")
+  receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  handledAt      DateTime? @map("handled_at") @db.Timestamptz(6)
+
+  @@map("line_webhook_events")
+}
+
 // Tuition receipt check (once per student per term). Holds the extracted check fields only:
 // never the file, never the student's name (the sidecar's `name` field is returned to staff, not stored).
 model ReceiptCheck {
@@ -325,4 +370,39 @@ model Announcement {
   @@index([status, updatedAt(sort: Desc)])
   @@index([authorId])
   @@map("announcements")
+}
+
+model NewsArticle {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String      @db.VarChar(200)
+  content     String      @default("") @db.Text
+  tags        NewsTag[]   @default([])
+  status      NewsStatus  @default(draft)
+  authorId    String      @map("author_id") @db.Uuid
+  publishedAt DateTime?   @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  author User       @relation(fields: [authorId], references: [id])
+  images NewsImage[]
+
+  @@index([status, updatedAt(sort: Desc)])
+  @@index([authorId])
+  @@map("news_articles")
+}
+
+model NewsImage {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  newsId       String   @map("news_id") @db.Uuid
+  storageKey   String   @unique @map("storage_key") @db.VarChar(80)
+  originalName String   @map("original_name") @db.VarChar(255)
+  mimeType     String   @map("mime_type") @db.VarChar(32)
+  sizeBytes    Int      @map("size_bytes")
+  position     Int
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  news NewsArticle @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  @@index([newsId, position])
+  @@map("news_images")
 }

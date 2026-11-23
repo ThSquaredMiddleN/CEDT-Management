@@ -210,6 +210,38 @@ export interface Announcement {
 
 export type AnnouncementInput = Pick<Announcement, "title" | "content" | "audiences">;
 
+export type NewsTag =
+  | "competition"
+  | "activities"
+  | "scholarship"
+  | "internship"
+  | "academic"
+  | "other";
+export type NewsStatus = "draft" | "published";
+
+export interface NewsImage {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  position: number;
+}
+
+export interface NewsArticle {
+  id: string;
+  title: string;
+  content: string;
+  tags: NewsTag[];
+  status: NewsStatus;
+  authorId: string;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  images: NewsImage[];
+}
+
+export type NewsInput = Pick<NewsArticle, "title" | "content" | "tags">;
+
 /** Affected-bookings list returned with 409 NEEDS_CONFIRM when deactivating master data. */
 export interface AffectedBooking {
   bookingId: string;
