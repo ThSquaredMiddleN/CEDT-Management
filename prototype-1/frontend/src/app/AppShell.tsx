@@ -1,10 +1,8 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { UserCircleIcon } from "@heroicons/react/24/outline";
 import { LogOut, Settings } from "lucide-react";
 import { useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 
-import { logout } from "@/api/endpoints";
 import { Sidebar, type SidebarItem } from "@/components/Sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -16,11 +14,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { clearStudentDrafts } from "@/features/course-change/draft";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
 import { initials } from "@/lib/formatters";
 import { useAuth } from "./AuthProvider";
-import { clearSessionCache } from "./session";
+import { signOut } from "./signOut";
 
 export function AppShell({
   sidebarItems,
@@ -33,18 +30,7 @@ export function AppShell({
 }) {
   const { user } = useAuth();
   const { pathname } = useLocation();
-  const navigate = useNavigate();
-  const qc = useQueryClient();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  const signOut = async () => {
-    await logout().catch(() => undefined);
-    // Drop unsent Course Change drafts, then mark the session signed-out before clearing private
-    // queries — a bare qc.clear() lets mounted pages refetch and fire a burst of 401s.
-    try { clearStudentDrafts(sessionStorage); } catch { /* Storage may be disabled. */ }
-    clearSessionCache(qc);
-    navigate("/login", { replace: true });
-  };
 
   const displayName = [user?.titlePrefix, user?.name]
     .filter(Boolean)

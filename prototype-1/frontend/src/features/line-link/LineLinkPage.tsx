@@ -46,7 +46,7 @@ export function LineLinkPage() {
   const [params] = useSearchParams();
   const location = useLocation();
   const { user } = useAuth();
-  // Staff land on the calendar (roleLanding), not the student home at "/".
+  // Where to go after linking (roleLanding: the portal home).
   const home = roleLanding(user?.role);
 
   // Read the token once and keep it in state. Nothing is sent until the user confirms.

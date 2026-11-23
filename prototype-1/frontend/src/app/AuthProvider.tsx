@@ -15,9 +15,9 @@ const AuthContext = createContext<AuthContextValue>({ user: null });
 
 export const useAuth = () => useContext(AuthContext);
 
-// Staff land on the calendar (Dashboard is one nav click away); students only have Course Change.
-export const roleLanding = (role?: Role): string =>
-  role === "student" ? "/course-change" : "/calendar";
+// Everyone lands on the portal home (news and announcements). `role` stays so a role-specific
+// landing page can come back without touching the callers.
+export const roleLanding = (_role?: Role): string => "/";
 
 /** Full-page splash while the session bootstraps — never a blank screen. */
 function Splash() {
