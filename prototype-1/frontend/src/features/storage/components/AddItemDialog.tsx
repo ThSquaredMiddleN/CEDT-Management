@@ -28,7 +28,7 @@ const schema = z.object({
   name: z.string().trim().min(1, "กรุณาระบุชื่ออุปกรณ์").max(100),
   type: z.enum(["UNIQUE", "BULK"]),
   total: z.coerce
-    .number({ invalid_type_error: "กรุณาระบุจำนวน" })
+    .number({ error: "กรุณาระบุจำนวน" })
     .int("จำนวนต้องเป็นจำนวนเต็ม")
     .min(1, "ต้องมีอย่างน้อย 1 ชิ้น")
     .max(100000, "จำนวนสูงเกินไป"),

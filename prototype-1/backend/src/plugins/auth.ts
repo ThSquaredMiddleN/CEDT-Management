@@ -4,16 +4,20 @@ import { config, isProd } from "../config.js";
 import { prisma } from "../db.js";
 import { forbidden, unauthenticated } from "../lib/errors.js";
 
-// "admin" is retained as an alias for "any": there is now a single `staff` role, so any
-// authenticated user has full access. Kept so route configs don't all have to change.
-export type AuthLevel = "public" | "any" | "admin";
+// "any" and "admin" both mean "staff": they predate the `student` role (Course Change) and
+// are kept so the LabSync route configs don't all have to change. "user" is any signed-in
+// account (staff or student); "student" is students only.
+export type AuthLevel = "public" | "user" | "student" | "any" | "admin";
+
+export type Role = "staff" | "student";
 
 export interface SessionUser {
   id: string;
   name: string;
   email: string;
-  role: "staff";
+  role: Role;
   titlePrefix: string | null;
+  studentNo: string | null;
 }
 
 declare module "fastify" {
@@ -22,6 +26,8 @@ declare module "fastify" {
   }
   interface FastifyContextConfig {
     auth?: AuthLevel;
+    /** Set `csrf: false` only on routes with their own request authentication (the LINE webhook). */
+    csrf?: boolean;
   }
 }
 
@@ -65,6 +71,7 @@ async function resolveUser(req: FastifyRequest): Promise<SessionUser | undefined
     email: u.email,
     role: u.role,
     titlePrefix: u.titlePrefix,
+    studentNo: u.studentNo,
   };
 }
 
@@ -82,7 +89,7 @@ export function registerAuth(app: FastifyInstance): void {
     const level: AuthLevel = req.routeOptions.config?.auth ?? "any";
 
     // CSRF (§6.3): custom header required on every mutation; Origin must match when sent.
-    if (req.method !== "GET" && req.method !== "HEAD") {
+    if (req.method !== "GET" && req.method !== "HEAD" && req.routeOptions.config?.csrf !== false) {
       if (req.headers["x-requested-with"] !== "XMLHttpRequest") {
         throw forbidden("Missing X-Requested-With header");
       }
@@ -95,8 +102,14 @@ export function registerAuth(app: FastifyInstance): void {
     req.user = await resolveUser(req);
 
     if (level === "public") return;
-    // Both "any" and "admin" now just require an authenticated staff user.
     if (!req.user) throw unauthenticated();
+    if (level === "user") return;
+    if (level === "student") {
+      if (req.user.role !== "student") throw forbidden();
+      return;
+    }
+    // "any" / "admin": staff only (CC-BR-10 — students never reach the LabSync API).
+    if (req.user.role !== "staff") throw forbidden();
   });
 }
 

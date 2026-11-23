@@ -1,6 +1,7 @@
 import {
   CalendarIcon,
   CpuChipIcon,
+  DocumentMagnifyingGlassIcon,
   DocumentTextIcon,
   HomeIcon,
   MegaphoneIcon,
@@ -10,13 +11,16 @@ import { useLocation } from "react-router-dom";
 import { AppShell } from "@/app/AppShell";
 import type { SidebarItem } from "@/components/Sidebar";
 
+const RECEIPTS_PATH = "/admin/receipts";
+
 const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
   { label: "หน้าหลัก", icon: <HomeIcon />, to: "/admin" },
   { label: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements" },
-  { label: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon /> },
+  { label: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon />, to: "/admin/news" },
   { label: "จัดการห้องเรียน", icon: <CalendarIcon /> },
-  { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon /> },
+  { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon />, to: "/admin/course-change" },
   { label: "จัดการคลังอุปกรณ์", icon: <CpuChipIcon />, to: "/admin/storage" },
+  { label: "Receipt checks", icon: <DocumentMagnifyingGlassIcon />, to: RECEIPTS_PATH },
 ];
 
 export function AdminLayout() {
@@ -35,7 +39,10 @@ export function AdminLayout() {
     <AppShell
       sidebarItems={items}
       showGuestProfile
-      hideHeader={pathname.startsWith("/admin/announcements")}
+      hideHeader={
+        pathname.startsWith("/admin/announcements") ||
+        pathname.startsWith("/admin/news")
+      }
     />
   );
 }

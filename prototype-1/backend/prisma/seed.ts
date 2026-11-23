@@ -1,9 +1,12 @@
+import { deflateSync } from "node:zlib";
 import argon2 from "argon2";
 import { prisma } from "../src/db.js";
 import type { SessionUser } from "../src/plugins/auth.js";
 import { approveBooking, createBooking, rejectBooking } from "../src/modules/bookings/service.js";
 import type { BookingInput } from "../src/modules/bookings/schemas.js";
+import { addNewsImages } from "../src/modules/news/service.js";
 import { dateFromISO } from "../src/lib/time.js";
+import { seedCourseChange } from "./seed-course-change.js";
 
 /**
  * Seeds the dataset the wireframes were designed against (§9). Idempotent: every write is
@@ -11,6 +14,72 @@ import { dateFromISO } from "../src/lib/time.js";
  */
 
 const hash = (pw: string) => argon2.hash(pw, { type: argon2.argon2id });
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) !== 0 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buffer: Buffer): number {
+  let c = 0xffffffff;
+  for (const byte of buffer) {
+    c = (CRC_TABLE[(c ^ byte) & 0xff] ?? 0) ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const typeBuffer = Buffer.from(type, "ascii");
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 0);
+  return Buffer.concat([length, typeBuffer, data, crc]);
+}
+
+function createPlaceholderPng(
+  width: number,
+  height: number,
+  rgb: readonly [number, number, number],
+): Buffer {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // RGB
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+
+  const rowSize = 1 + width * 3;
+  const raw = Buffer.alloc(rowSize * height);
+  const [r, g, b] = rgb;
+  for (let y = 0; y < height; y++) {
+    const rowStart = y * rowSize;
+    raw[rowStart] = 0;
+    for (let x = 0; x < width; x++) {
+      const px = rowStart + 1 + x * 3;
+      raw[px] = r;
+      raw[px + 1] = g;
+      raw[px + 2] = b;
+    }
+  }
+
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", deflateSync(raw)),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
 
 async function main() {
   // ------------------------------------------------------------------- users
@@ -22,7 +91,7 @@ async function main() {
     { name: "Krit W.", titlePrefix: "Dr.", email: "krit@cedt.edu", password: "instr1234", role: "staff" as const },
   ];
 
-  const userByEmail: Record<string, { id: string; name: string; email: string; role: "staff"; titlePrefix: string | null }> = {};
+  const userByEmail: Record<string, SessionUser> = {};
   for (const u of users) {
     const row = await prisma.user.upsert({
       where: { email: u.email },
@@ -41,6 +110,7 @@ async function main() {
       email: row.email,
       role: row.role,
       titlePrefix: row.titlePrefix,
+      studentNo: row.studentNo,
     };
   }
 
@@ -128,6 +198,189 @@ async function main() {
     });
     courseByCode[c.code] = row.id;
   }
+
+  // ----------------------------------------------------------- announcements
+  const publishedAnnouncementCount = await prisma.announcement.count({
+    where: { status: "published" },
+  });
+  if (publishedAnnouncementCount === 0) {
+    await prisma.announcement.createMany({
+      data: [
+        {
+          title: "ประกาศที่นั่งสอบกลางภาควิชา 2110575",
+          content:
+            "<p>นิสิตชั้นปีที่ 3 ที่ลงทะเบียนรายวิชา <strong>2110575</strong> สามารถตรวจสอบผังที่นั่งสอบกลางภาคและข้อปฏิบัติการเข้าห้องสอบได้ที่อาคาร <strong>E12</strong></p><ul><li>กรุณานำบัตรนิสิตมาแสดงก่อนเข้าห้องสอบ 15 นาที</li><li>ไม่อนุญาตให้นำอุปกรณ์สื่อสารเข้าห้องสอบ</li></ul>",
+          audiences: ["year3"],
+          status: "published",
+          authorId: admin.id,
+          publishedAt: new Date("2026-10-01T09:00:00+07:00"),
+        },
+        {
+          title: "กำหนดการลงทะเบียนเรียนและเพิ่ม-ลดรายวิชา ภาคต้น 2569",
+          content:
+            "<p>แจ้งกำหนดการเพิ่ม-ลดรายวิชาสำหรับนิสิตหลักสูตร CEDT ทุกชั้นปี ประจำภาคการศึกษาต้น ปีการศึกษา 2569</p><ul><li>ช่วงเพิ่ม-ลดรายวิชา: 3 – 14 สิงหาคม 2569</li><li>ตรวจสอบตารางเรียนและห้องปฏิบัติการได้ที่หน้า ตารางเรียน / สอบ</li></ul>",
+          audiences: ["all"],
+          status: "published",
+          authorId: admin.id,
+          publishedAt: new Date("2026-09-25T10:00:00+07:00"),
+        },
+        {
+          title: "เปิดรับยื่นแบบฟอร์มขอฝึกงานภาคฤดูร้อน 2569",
+          content:
+            "<p>นิสิตที่ประสงค์ฝึกงานในภาคฤดูร้อน 2569 ให้ยื่นแบบฟอร์มขอหนังสือส่งตัวและแจ้งข้อมูลสถานประกอบการผ่านระบบภายในวันที่ <strong>30 พฤศจิกายน 2569</strong></p>",
+          audiences: ["year2", "year3"],
+          status: "published",
+          authorId: admin.id,
+          publishedAt: new Date("2026-09-18T14:00:00+07:00"),
+        },
+        {
+          title: "ปฐมนิเทศนิสิตใหม่ CEDT ประจำปีการศึกษา 2569",
+          content:
+            "<p>ขอเชิญนิสิตชั้นปีที่ 1 เข้าร่วมกิจกรรมปฐมนิเทศและแนะนำการใช้ห้องปฏิบัติการคอมพิวเตอร์ ณ ห้อง <strong>E12-410</strong> เวลา 09:00 – 12:00 น.</p>",
+          audiences: ["year1"],
+          status: "published",
+          authorId: admin.id,
+          publishedAt: new Date("2026-09-10T08:30:00+07:00"),
+        },
+        {
+          title: "กำหนดส่งเล่มโครงงาน Senior Project (CEDT499)",
+          content:
+            "<p>นิสิตชั้นปีที่ 4 ที่ลงทะเบียนรายวิชา <strong>CEDT499 Senior Project</strong> กรุณาส่งเอกสารสรุปความก้าวหน้าและจองเวลาพบอาจารย์ที่ปรึกษาก่อนวันสอบโครงงาน</p>",
+          audiences: ["year4"],
+          status: "published",
+          authorId: admin.id,
+          publishedAt: new Date("2026-09-05T16:00:00+07:00"),
+        },
+        {
+          title: "ประกาศปรับเวลาการใช้ห้องปฏิบัติการ E12-Lab1",
+          content:
+            "<p>ร่างประกาศแจ้งปิดปรับปรุงระบบเครือข่ายห้อง <strong>E12-Lab1</strong> ชั่วคราวในช่วงสุดสัปดาห์</p>",
+          audiences: ["year1", "year2"],
+          status: "draft",
+          authorId: admin.id,
+          publishedAt: null,
+        },
+      ],
+    });
+    console.log("Seeded announcements: 5 published, 1 draft.");
+  }
+
+  // -------------------------------------------------------------------- news
+  const publishedNewsCount = await prisma.newsArticle.count({
+    where: { status: "published" },
+  });
+  if (publishedNewsCount === 0) {
+    await prisma.newsArticle.createMany({
+      data: [
+        {
+          title: "เปิดรับสมัครนักศึกษา! Innovation Event 2026",
+          content:
+            "<p>ขอเชิญนิสิต CEDT ร่วมส่งผลงานนวัตกรรมซอฟต์แวร์และฮาร์ดแวร์เข้าประกวดในเวที <strong>Innovation Event 2026</strong> ชิงทุนสนับสนุนพัฒนาต่อยอดและรางวัลรวมกว่า 100,000 บาท</p><ul><li>สมัครเป็นทีม ทีมละ 3–4 คน</li><li>ปิดรับสมัครวันที่ 15 สิงหาคม 2569</li></ul>",
+          tags: ["competition"],
+          status: "published",
+          authorId: admin.id,
+          publishedAt: new Date("2026-07-24T09:00:00+07:00"),
+        },
+        {
+          title: "กิจกรรม CEDT Job Fair & Career Talk 2026",
+          content:
+            "<p>พบกับบริษัทเทคโนโลยีชั้นนำกว่า 30 แห่ง พร้อมช่วงเสวนาแนะแนวสายอาชีพด้าน Software Engineering, Data &amp; AI และ Hardware Systems สำหรับนิสิตทุกชั้นปี</p>",
+          tags: ["activities", "internship"],
+          status: "published",
+          authorId: admin.id,
+          publishedAt: new Date("2026-07-20T13:00:00+07:00"),
+        },
+        {
+          title: "ทุนการศึกษาต่อยอดนวัตกรรมดิจิทัล ประจำปี 2569",
+          content:
+            "<p>เปิดรับสมัครนิสิตที่มีผลการเรียนดีและมีความสนใจพัฒนาโครงงานด้าน Digital Technology เพื่อขอรับทุนสนับสนุนการศึกษาและค่าอุปกรณ์วิจัย</p>",
+          tags: ["scholarship"],
+          status: "published",
+          authorId: admin.id,
+          publishedAt: new Date("2026-07-15T10:30:00+07:00"),
+        },
+        {
+          title: "เปิดรับสมัครโครงการฝึกงานภาคฤดูร้อนร่วมกับบริษัทพันธมิตร",
+          content:
+            "<p>นิสิตที่สนใจฝึกงานสาย Full-Stack, Cloud Infrastructure และ Embedded Systems สามารถยื่น Portfolio เพื่อรับการคัดเลือกสัมภาษณ์รอบพิเศษได้แล้ววันนี้</p>",
+          tags: ["internship"],
+          status: "published",
+          authorId: admin.id,
+          publishedAt: new Date("2026-07-10T11:00:00+07:00"),
+        },
+        {
+          title: "เสวนาวิชาการ AI Systems Engineering 2026",
+          content:
+            "<p>ร่างข่าวประชาสัมพันธ์งานเสวนาวิชาการด้านระบบ AI สำหรับภาคอุตสาหกรรม (อยู่ระหว่างรอข้อมูลวิทยากรเพิ่มเติม)</p>",
+          tags: ["academic"],
+          status: "draft",
+          authorId: admin.id,
+          publishedAt: null,
+        },
+      ],
+    });
+    console.log("Seeded news: 4 published, 1 draft.");
+  }
+
+  // ------------------------------------------------------------ news posters
+  const existingNewsImageCount = await prisma.newsImage.count();
+  if (existingNewsImageCount === 0) {
+    const posterPlans: {
+      title: string;
+      images: { filename: string; rgb: readonly [number, number, number] }[];
+    }[] = [
+      {
+        title: "เปิดรับสมัครนักศึกษา! Innovation Event 2026",
+        images: [
+          { filename: "innovation-poster-1.png", rgb: [226, 232, 240] },
+          { filename: "innovation-poster-2.png", rgb: [203, 213, 225] },
+          { filename: "innovation-poster-3.png", rgb: [148, 163, 184] },
+        ],
+      },
+      {
+        title: "กิจกรรม CEDT Job Fair & Career Talk 2026",
+        images: [{ filename: "job-fair-poster.png", rgb: [209, 213, 219] }],
+      },
+      {
+        title: "ทุนการศึกษาต่อยอดนวัตกรรมดิจิทัล ประจำปี 2569",
+        images: [
+          { filename: "scholarship-poster-1.png", rgb: [229, 231, 235] },
+          { filename: "scholarship-poster-2.png", rgb: [156, 163, 175] },
+        ],
+      },
+      {
+        title: "เสวนาวิชาการ AI Systems Engineering 2026",
+        images: [{ filename: "ai-seminar-poster.png", rgb: [203, 213, 225] }],
+      },
+    ];
+
+    let totalSeededImages = 0;
+    for (const plan of posterPlans) {
+      const article = await prisma.newsArticle.findFirst({
+        where: { title: plan.title },
+        select: { id: true },
+      });
+      if (!article) continue;
+
+      await addNewsImages(
+        article.id,
+        plan.images.map((img) => ({
+          filename: img.filename,
+          mimeType: "image/png",
+          buffer: createPlaceholderPng(420, 594, img.rgb),
+        })),
+      );
+      totalSeededImages += plan.images.length;
+    }
+    console.log(`Seeded news poster placeholders: ${totalSeededImages} images.`);
+  }
+
+  // ----------------------------------------------------------- course change
+  await seedCourseChange({
+    termId: term1.id,
+    staff: { admin, anucha, pimchanok },
+    hash,
+  });
 
   // ---------------------------------------------------------------- bookings
   // Bookings go through the real service so occurrences, snapshots, request numbers and

@@ -9,13 +9,13 @@ export const LIABILITY_FORM_ID = "liability-form";
 
 const schema = z.object({
   amount: z.coerce
-    .number({ invalid_type_error: "กรุณาระบุยอดเงิน" })
+    .number({ error: "กรุณาระบุยอดเงิน" })
     .positive("ยอดเงินต้องมากกว่า 0")
     .max(1_000_000, "ยอดเงินสูงเกินไป"),
   remark: z.string().trim().min(1, "กรุณาระบุเหตุผลการปรับเงิน").max(500),
 });
 
-export type LiabilityValues = z.infer<typeof schema>;
+export type LiabilityValues = z.output<typeof schema>;
 
 interface LiabilityFormProps {
   onSubmit: (values: LiabilityValues) => void;
@@ -27,7 +27,7 @@ export function LiabilityForm({ onSubmit }: LiabilityFormProps) {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LiabilityValues>({ resolver: zodResolver(schema) });
+  } = useForm<z.input<typeof schema>, unknown, LiabilityValues>({ resolver: zodResolver(schema) });
 
   return (
     <form

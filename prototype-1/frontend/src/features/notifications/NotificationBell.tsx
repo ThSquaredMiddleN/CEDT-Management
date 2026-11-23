@@ -1,5 +1,7 @@
+import { BellIcon } from "@heroicons/react/24/outline";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow, parseISO } from "date-fns";
+import { th } from "date-fns/locale";
 import { Bell, Check, Clock, MoveRight, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,9 +18,18 @@ const ICONS: Record<string, typeof Check> = {
   booking_moved: MoveRight,
   booking_cancelled_by_instructor: X,
   request_withdrawn: X,
+  cc_submitted: Clock,
+  cc_approved: Check,
+  cc_rejected: X,
+  cc_completed: Check,
+  cc_cancelled: X,
 };
 
-export function NotificationBell() {
+export function NotificationBell({
+  variant = "default",
+}: {
+  variant?: "default" | "topbar";
+} = {}) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -32,42 +43,62 @@ export function NotificationBell() {
   const openNotification = (n: AppNotification) => {
     if (!n.isRead) markRead.mutate({ ids: [n.id] });
     setOpen(false);
+    if (n.type.startsWith("cc_")) {
+      void qc.invalidateQueries({ queryKey: ["course-change"] });
+      navigate(n.courseChangeRequestId ? `/course-change?view=tracking&request=${encodeURIComponent(n.courseChangeRequestId)}` : "/course-change?view=tracking");
+      return;
+    }
     void qc.invalidateQueries({ queryKey: ["bookings"] });
     // Decisions on the caller's own requests land on My Requests; everything else (new
     // submissions, withdrawals, cancellations) is queue work on the Dashboard.
     const toMyRequests = n.type === "request_approved" || n.type === "request_rejected";
-    navigate(toMyRequests ? "/requests" : "/admin");
+    navigate(toMyRequests ? "/requests" : "/admin/dashboard");
   };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
-          <Bell className="size-5" />
-          {unread > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-neutral-50">
-              {unread}
-            </span>
-          )}
-        </Button>
+        {variant === "topbar" ? (
+          <button
+            type="button"
+            aria-label="การแจ้งเตือน"
+            className="relative flex size-6 items-center justify-center rounded-md text-grey-900 transition-colors hover:text-brand-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+          >
+            <BellIcon className="size-6" aria-hidden="true" />
+            {unread > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-brand-primary text-[10px] font-semibold text-white">
+                {unread}
+              </span>
+            )}
+          </button>
+        ) : (
+          <Button variant="ghost" size="icon" className="relative" aria-label="การแจ้งเตือน">
+            <Bell className="size-5" />
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-semibold text-neutral-50">
+                {unread}
+              </span>
+            )}
+          </Button>
+        )}
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-80 p-0">
+      <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-0">
         <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-          <span className="text-sm font-semibold">Notifications</span>
+          <span className="text-sm font-semibold">การแจ้งเตือน</span>
           {unread > 0 && (
             <button
               onClick={() => markRead.mutate({ all: true })}
               className="text-xs text-neutral-500 underline underline-offset-4 hover:text-neutral-950"
             >
-              Mark all read
+              อ่านทั้งหมดแล้ว
             </button>
           )}
         </div>
 
         <div className="max-h-80 overflow-y-auto">
           {items.length === 0 && (
-            <p className="px-4 py-8 text-center text-sm text-neutral-500">No notifications yet.</p>
+            <p className="px-4 py-8 text-center text-sm text-neutral-500">ยังไม่มีการแจ้งเตือน</p>
           )}
 
           {items.map((n) => {
@@ -90,7 +121,7 @@ export function NotificationBell() {
                 <span className="flex-1">
                   <span className="block text-xs leading-snug text-neutral-950">{n.message}</span>
                   <span className="mt-0.5 block text-[10px] text-neutral-500">
-                    {formatDistanceToNow(parseISO(n.createdAt), { addSuffix: true })}
+                    {formatDistanceToNow(parseISO(n.createdAt), { addSuffix: true, locale: th })}
                   </span>
                 </span>
               </button>

@@ -244,7 +244,7 @@ export function CalendarPage() {
       onSuccess: () => {
         toast("Approved — instructor notified");
         clearGhost();
-        if (fromQueue) navigate("/admin");
+        if (fromQueue) navigate("/admin/dashboard");
       },
       onError: (e) => {
         const msg =
@@ -523,7 +523,7 @@ export function CalendarPage() {
               variant="ghost"
               onClick={() => {
                 clearGhost();
-                if (fromQueue) navigate("/admin");
+                if (fromQueue) navigate("/admin/dashboard");
               }}
             >
               {fromQueue ? "Back to queue" : "Dismiss"}
@@ -546,7 +546,7 @@ export function CalendarPage() {
                   toast("Rejected — instructor notified");
                   setRejectOpen(false);
                   clearGhost();
-                  if (fromQueue) navigate("/admin");
+                  if (fromQueue) navigate("/admin/dashboard");
                 },
               },
             )

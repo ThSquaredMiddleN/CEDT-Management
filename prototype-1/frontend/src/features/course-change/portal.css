@@ -1,0 +1,31 @@
+.cc-portal { color: #171717; line-height: 1.6; }
+.cc-portal h1, .cc-portal h2, .cc-portal h3, .cc-dialog h2 { text-wrap: balance; }
+.cc-portal button, .cc-dialog button { -webkit-tap-highlight-color: transparent; }
+.cc-portal button:not(:disabled), .cc-dialog button:not(:disabled) { transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
+.cc-portal button:active:not(:disabled), .cc-dialog button:active:not(:disabled) { transform: translateY(1px); }
+.cc-portal button:focus-visible, .cc-dialog button:focus-visible, .cc-portal summary:focus-visible { outline: 2px solid #171717; outline-offset: 3px; }
+.cc-surface { box-shadow: 0 2px 8px rgb(0 0 0 / .025); }
+.cc-panel-enter { animation: cc-enter 200ms ease-out both; }
+.cc-course-card { transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease; }
+.cc-course-card[aria-pressed="true"] { box-shadow: 0 0 0 1px #171717, 0 3px 12px rgb(0 0 0 / .04); }
+.cc-dialog { box-shadow: 0 20px 80px rgb(0 0 0 / .12); }
+.cc-dialog > div:first-of-type { padding-right: 1.5rem; }
+.cc-dialog[data-state="open"] { animation: cc-dialog-in 180ms ease-out both; }
+.cc-dialog[data-state="closed"] { animation: cc-dialog-out 120ms ease-in both; }
+.cc-dialog-actions { position: sticky; bottom: -.01px; margin: 0 -1.5rem -1.5rem; padding: 1rem 1.5rem; background: rgb(255 255 255 / .97); border-top: 1px solid #e5e5e5; gap: .5rem; flex-wrap: wrap; z-index: 1; }
+.cc-tab { position: relative; }
+.cc-tab[aria-pressed="true"]::after { content: ""; position: absolute; height: 2px; left: 1rem; right: 1rem; bottom: -1px; background: #171717; border-radius: 2px; }
+.cc-portal input[type="checkbox"] { accent-color: #171717; }
+.cc-portal ::selection, .cc-dialog ::selection { background: #dedede; color: #171717; }
+@keyframes cc-enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes cc-dialog-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)) scale(.99); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes cc-dialog-out { from { opacity: 1; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; transform: translate(-50%, calc(-50% + 4px)) scale(.99); } }
+@media (prefers-reduced-motion: reduce) {
+  .cc-portal button:active:not(:disabled), .cc-dialog button:active:not(:disabled) { transform: none; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+@media (pointer: coarse) {
+  .cc-portal button, .cc-dialog button, .cc-portal select { min-height: 44px; }
+  .cc-portal input[type="checkbox"] { width: 18px; height: 18px; }
+}

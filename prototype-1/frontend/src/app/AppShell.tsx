@@ -16,9 +16,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { clearStudentDrafts } from "@/features/course-change/draft";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
 import { initials } from "@/lib/formatters";
 import { useAuth } from "./AuthProvider";
+import { clearSessionCache } from "./session";
 
 export function AppShell({
   sidebarItems,
@@ -37,7 +39,10 @@ export function AppShell({
 
   const signOut = async () => {
     await logout().catch(() => undefined);
-    qc.clear();
+    // Drop unsent Course Change drafts, then mark the session signed-out before clearing private
+    // queries — a bare qc.clear() lets mounted pages refetch and fire a burst of 401s.
+    try { clearStudentDrafts(sessionStorage); } catch { /* Storage may be disabled. */ }
+    clearSessionCache(qc);
     navigate("/login", { replace: true });
   };
 

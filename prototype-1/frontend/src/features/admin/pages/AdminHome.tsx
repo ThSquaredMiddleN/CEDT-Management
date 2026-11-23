@@ -26,14 +26,14 @@ const MENU_GROUPS: MenuGroup[] = [
     rowGap: "gap-y-4",
     items: [
       { text: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements" },
-      { text: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon /> },
+      { text: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon />, to: "/admin/news" },
       { text: "จัดการห้องเรียน", icon: <CalendarIcon />, to: "/admin/data" },
     ],
   },
   {
     title: "ทะเบียน",
     rowGap: "gap-y-6",
-    items: [{ text: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon /> }],
+    items: [{ text: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon />, to: "/admin/course-change" }],
   },
   {
     title: "อื่น ๆ",

@@ -43,6 +43,7 @@
   --font-family-body: "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
   --shadow-light-6:
     0 8px 16px rgba(96, 97, 112, 0.16), 0 2px 4px rgba(40, 41, 61, 0.04);
+  --shadow-topbar: 0 2px 8px rgba(0, 0, 0, 0.1);
   --shadow-button:
     0 8px 16px rgba(96, 97, 112, 0.08), 0 2px 4px rgba(40, 41, 61, 0.02);
 
