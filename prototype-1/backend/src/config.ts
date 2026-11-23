@@ -14,6 +14,7 @@ const schema = z.object({
   SESSION_COOKIE_NAME: z.string().default("labsync_session"),
   SESSION_TTL_HOURS: z.coerce.number().default(168),
   APP_TZ: z.string().default("Asia/Bangkok"),
+  NEWS_UPLOAD_DIR: z.string().default("var/news-uploads"),
   // LINE is optional: it runs when the secret is set and either the token or LINE_DRY_RUN is set (see lineEnabled).
   LINE_CHANNEL_SECRET: z.string().optional(),
   LINE_CHANNEL_ACCESS_TOKEN: z.string().optional(),

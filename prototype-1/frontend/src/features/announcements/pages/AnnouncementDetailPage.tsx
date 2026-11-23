@@ -1,76 +1,16 @@
-import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { ArrowLeftIcon } from "@heroicons/react/20/solid";
 import { useAnnouncement, usePublishAnnouncement } from "@/api/endpoints";
-import type { Announcement } from "@/api/types";
+import { useToast } from "@/app/toast";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ErrorCard, Spinner } from "@/components/states";
-import {
-  audienceLabel,
-  formatAnnouncementDate,
-  normalizeAnnouncementAudiences,
-  sanitizeAnnouncementHtml,
-} from "../announcement-utils";
-
-function AnnouncementArticle({ announcement }: { announcement: Announcement }) {
-  const date = announcement.publishedAt ?? announcement.updatedAt;
-  return (
-    <article className="rounded-xl border border-neutral-200 bg-white px-5 py-4">
-      <div className="flex items-center justify-between gap-4">
-        <time
-          dateTime={date}
-          className="font-body text-body-xs-emphasize text-grey-900"
-        >
-          {formatAnnouncementDate(date, true)}
-        </time>
-        <Badge
-          variant="secondary"
-          className="rounded-full border-transparent bg-grey-100 font-body text-body-xs text-grey-400"
-        >
-          {announcement.status === "draft" ? "ฉบับร่าง" : "เผยแพร่แล้ว"}
-        </Badge>
-      </div>
-      <h1 className="mt-4 font-body text-header-xs-emphasize text-brand-primary">
-        {announcement.title}
-      </h1>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {normalizeAnnouncementAudiences(announcement.audiences).map((audience) => (
-          <Badge
-            key={audience}
-            variant="secondary"
-            className="rounded-full border-transparent bg-grey-100 font-body text-body-xs text-grey-400"
-          >
-            {audienceLabel(audience)}
-          </Badge>
-        ))}
-      </div>
-      <hr className="my-4 border-neutral-200" />
-      <div
-        className="announcement-rich-content font-body text-body-md text-grey-400"
-        dangerouslySetInnerHTML={{ __html: sanitizeAnnouncementHtml(announcement.content) }}
-      />
-    </article>
-  );
-}
+import { AnnouncementArticle } from "../components/AnnouncementArticle";
 
 export function AnnouncementDetailPage() {
   const { id } = useParams();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [successMessage, setSuccessMessage] = useState<string | null>(() =>
-    location.state === "announcement-updated"
-      ? "แก้ไขประกาศและบันทึกแล้ว"
-      : null,
-  );
+  const toast = useToast();
   const query = useAnnouncement(id ?? null);
   const publishAnnouncement = usePublishAnnouncement(id ?? "");
-
-  useEffect(() => {
-    if (location.state === "announcement-updated") {
-      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-    }
-  }, [location.pathname, location.search, location.state, navigate]);
 
   if (!id) return <ErrorCard message="ไม่พบรหัสประกาศ" />;
   if (query.isPending) {
@@ -108,14 +48,6 @@ export function AnnouncementDetailPage() {
         <ArrowLeftIcon className="size-5" aria-hidden="true" />
         Back
       </Link>
-      {successMessage && (
-        <p
-          className="mb-5 rounded-lg border border-grey-200 bg-grey-100 px-4 py-3 font-body text-body-sm text-grey-700"
-          role="status"
-        >
-          {successMessage}
-        </p>
-      )}
       <div className="mt-6">
         <AnnouncementArticle announcement={announcement} />
       </div>
@@ -142,7 +74,7 @@ export function AnnouncementDetailPage() {
             onClick={() =>
               publishAnnouncement.mutate(undefined, {
                 onSuccess: () => {
-                  setSuccessMessage("เผยแพร่ประกาศและบันทึกแล้ว");
+                  toast("เผยแพร่ประกาศเรียบร้อยแล้ว");
                   void query.refetch();
                 },
               })

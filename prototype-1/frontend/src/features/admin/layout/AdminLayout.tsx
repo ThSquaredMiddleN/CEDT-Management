@@ -13,7 +13,7 @@ import type { SidebarItem } from "@/components/Sidebar";
 const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
   { label: "หน้าหลัก", icon: <HomeIcon />, to: "/admin" },
   { label: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements" },
-  { label: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon /> },
+  { label: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon />, to: "/admin/news" },
   { label: "จัดการห้องเรียน", icon: <CalendarIcon /> },
   { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon /> },
   { label: "ยืมอุปกรณ์", icon: <CpuChipIcon /> },
@@ -35,7 +35,10 @@ export function AdminLayout() {
     <AppShell
       sidebarItems={items}
       showGuestProfile
-      hideHeader={pathname.startsWith("/admin/announcements")}
+      hideHeader={
+        pathname.startsWith("/admin/announcements") ||
+        pathname.startsWith("/admin/news")
+      }
     />
   );
 }

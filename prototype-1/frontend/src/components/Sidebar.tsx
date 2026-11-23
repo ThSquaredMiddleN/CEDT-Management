@@ -22,7 +22,7 @@ export function Sidebar({ items, collapsed, onToggle, footer }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "flex h-dvh shrink-0 flex-col overflow-hidden border-r border-[#e8e8e8] bg-white-50 transition-[width] duration-200",
+        "sticky top-0 flex h-dvh shrink-0 self-start flex-col overflow-hidden border-r border-[#e8e8e8] bg-white-50 transition-[width] duration-200",
         collapsed ? "w-[57px]" : "w-[220px]",
       )}
       aria-label="Main sidebar"
