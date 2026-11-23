@@ -16,7 +16,7 @@ const DUPLICATE_CHECK = "Not submitted before";
 const sidecarResponse = z.object({
   kind: z.enum(["pdf", "screenshot"]),
   // Each field is {value, box, pii}; only `value` is read here. Names come back to staff, never stored.
-  fields: z.record(z.object({ value: z.string().nullable() }).passthrough()),
+  fields: z.record(z.string(), z.object({ value: z.string().nullable() }).passthrough()),
   checks: z.array(
     z.object({
       name: z.string(),

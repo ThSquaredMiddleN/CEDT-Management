@@ -18,9 +18,9 @@ try {
   created = true;
   const env = { ...process.env, DATABASE_URL: testUrl.toString(), TEST_DATABASE_URL: testUrl.toString(), NODE_ENV: "test" };
   console.log("Preparing a new isolated test database (no demo data will be changed).");
-  execFileSync("npx", ["prisma", "migrate", "deploy"], { env, stdio: "inherit" });
-  execFileSync("npx", ["tsx", "prisma/seed.ts"], { env, stdio: "inherit" });
-  execFileSync("npx", ["vitest", "run", ...process.argv.slice(2)], { env, stdio: "inherit" });
+  execFileSync("npx", ["prisma", "migrate", "deploy"], { env, stdio: "inherit", shell: process.platform === "win32" });
+  execFileSync("npx", ["tsx", "prisma/seed.ts"], { env, stdio: "inherit", shell: process.platform === "win32" });
+  execFileSync("npx", ["vitest", "run", ...process.argv.slice(2)], { env, stdio: "inherit", shell: process.platform === "win32" });
 } catch (error) {
   process.exitCode = 1;
   console.error(error instanceof Error && "status" in error ? "Fresh test run failed; see diagnostics above." : "Could not prepare or clean up the isolated test database.");

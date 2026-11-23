@@ -51,7 +51,6 @@ afterAll(async () => {
 
 describe("auth matrix across modules", () => {
   const staffOnly: [string, string][] = [
-    ["GET", "/announcements"],
     ["GET", "/bookings"],
     ["GET", "/users"],
     ["GET", "/course-change/settings"],
@@ -61,6 +60,11 @@ describe("auth matrix across modules", () => {
     expect((await call(method as "GET", url)).statusCode).toBe(401);
     expect((await call(method as "GET", url, student)).statusCode).toBe(403);
     expect((await call(method as "GET", url, staff)).statusCode).toBe(200);
+  });
+
+  // The student portal lists published announcements without login (news module, PR #8).
+  it("GET /announcements is public", async () => {
+    expect((await call("GET", "/announcements")).statusCode).toBe(200);
   });
 
   it("keeps student-only Course Change endpoints closed to staff", async () => {

@@ -31,6 +31,6 @@ if (!rows[0]?.exists) {
 await prisma.$disconnect();
 
 const env = { ...process.env, DATABASE_URL: testUrl };
-execFileSync("npx", ["prisma", "migrate", "deploy"], { env, stdio: "inherit" });
-execFileSync("npx", ["tsx", "prisma/seed.ts"], { env, stdio: "inherit" });
+execFileSync("npx", ["prisma", "migrate", "deploy"], { env, stdio: "inherit", shell: process.platform === "win32" });
+execFileSync("npx", ["tsx", "prisma/seed.ts"], { env, stdio: "inherit", shell: process.platform === "win32" });
 console.log(`Test database ${testDb} is migrated and seeded.`);

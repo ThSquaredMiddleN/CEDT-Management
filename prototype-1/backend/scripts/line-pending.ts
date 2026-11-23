@@ -36,6 +36,7 @@ try {
     email: user.email,
     role: user.role,
     titlePrefix: user.titlePrefix,
+    studentNo: user.studentNo,
   };
   const booking = await createBooking(
     {

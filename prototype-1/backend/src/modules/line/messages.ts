@@ -19,6 +19,11 @@ const TITLES: Record<NotificationType, (requestNo: string) => Copy> = {
   booking_moved: (n) => ({ th: `การจอง ${n} ถูกย้าย`, en: `Booking ${n} was moved` }),
   booking_cancelled_by_instructor: (n) => ({ th: `การจอง ${n} ถูกยกเลิก`, en: `Booking ${n} was cancelled` }),
   request_withdrawn: (n) => ({ th: `คำขอ ${n} ถูกถอน`, en: `Request ${n} was withdrawn` }),
+  cc_submitted: (n) => ({ th: `มีคำร้องลด/ถอนรายวิชาใหม่ ${n}`, en: `New course change request ${n}` }),
+  cc_approved: (n) => ({ th: `คำร้อง ${n} ได้รับการอนุมัติแล้ว`, en: `Course change request ${n} approved` }),
+  cc_rejected: (n) => ({ th: `คำร้อง ${n} ไม่ได้รับการอนุมัติ`, en: `Course change request ${n} rejected` }),
+  cc_completed: (n) => ({ th: `คำร้อง ${n} ดำเนินการเสร็จแล้ว`, en: `Course change request ${n} completed` }),
+  cc_cancelled: (n) => ({ th: `คำร้อง ${n} ถูกยกเลิก`, en: `Course change request ${n} was cancelled` }),
 };
 
 const DAYS_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"] as const;
