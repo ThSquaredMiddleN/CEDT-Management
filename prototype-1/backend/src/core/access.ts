@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma, type Tx } from "../db.js";
 import { conflict, duplicate, forbidden, notFound, validation } from "../lib/errors.js";
+import { audit } from "./audit.js";
 import { can, IT_ADMIN_ROLE, STUDENT_ROLE, type SessionUser } from "./permissions.js";
 
 const ROLE_KEY = /^[a-z][a-z0-9_]{1,40}$/;
@@ -17,11 +18,20 @@ export interface AccessChange {
   note: string;
 }
 
-/**
- * Persists the changes of one save inside its transaction. Step 4 (audit) is not merged yet, so
- * this writes nothing for now; Task B8 makes it call audit() once per change.
- */
-async function recordChanges(_tx: Tx, _actor: SessionUser, _changes: AccessChange[]): Promise<void> {}
+/** Writes one audit row per change inside the save's transaction (shared plan 2.8). */
+async function recordChanges(tx: Tx, actor: SessionUser, changes: AccessChange[]): Promise<void> {
+  for (const c of changes) {
+    await audit(tx, {
+      actorId: actor.id,
+      action: c.action,
+      subjectType: c.subjectType,
+      subjectId: c.subjectId,
+      before: c.before,
+      after: c.after,
+      note: c.note,
+    });
+  }
+}
 
 function requireReason(reason: string | null | undefined): string {
   const r = (reason ?? "").trim();

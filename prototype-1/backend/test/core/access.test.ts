@@ -116,6 +116,14 @@ describe("saveUserAccess", () => {
       }
     }
   });
+  it("writes one audit row per change, with the reason as the note", async () => {
+    const before = await prisma.auditLog.count({ where: { subjectId: norole } });
+    const { changes } = await saveUserAccess(itadmin, norole, { roleIds: [], permissions: ["core.import.manage"], reason: "ทดสอบ audit" }, known);
+    const rows = await prisma.auditLog.findMany({ where: { subjectId: norole }, orderBy: { createdAt: "desc" }, take: changes.length });
+    expect(changes.length).toBeGreaterThan(0);
+    expect((await prisma.auditLog.count({ where: { subjectId: norole } })) - before).toBe(changes.length);
+    expect(rows.every((r) => r.note === "ทดสอบ audit" && r.actorId === itadmin.id)).toBe(true);
+  });
 });
 
 describe("roles", () => {
