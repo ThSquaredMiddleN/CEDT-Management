@@ -5,6 +5,7 @@ import { FlaskConical } from "lucide-react";
 import { useState } from "react";
 import { useCcContext } from "@/api/courseChange";
 import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { SkeletonRow } from "@/components/states";
 import { fmtDate } from "./shared";
 import { StaffView } from "./StaffView";
@@ -33,8 +34,8 @@ export function CourseChangePage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-[.16em] text-neutral-500">CEDT · COURSE CHANGE</p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{user?.role === "student" ? "จัดการคำร้อง ลด / ถอนรายวิชา" : "ดูแลคำร้อง ลด / ถอนรายวิชา"}</h1>
-          <p className="max-w-2xl text-sm text-neutral-600">{user?.role === "student" ? "ยื่นคำร้องและติดตามทุกขั้นตอนในที่เดียว" : "ตรวจสอบคำร้อง รวบรวมตามรายวิชา และติดตามงานที่รอดำเนินการ"}</p>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{!can(user, "course_change.view") ? "จัดการคำร้อง ลด / ถอนรายวิชา" : "ดูแลคำร้อง ลด / ถอนรายวิชา"}</h1>
+          <p className="max-w-2xl text-sm text-neutral-600">{!can(user, "course_change.view") ? "ยื่นคำร้องและติดตามทุกขั้นตอนในที่เดียว" : "ตรวจสอบคำร้อง รวบรวมตามรายวิชา และติดตามงานที่รอดำเนินการ"}</p>
           {ctx.data?.term && (
             <p className="flex flex-wrap items-center gap-2 text-sm text-neutral-500">
               {ctx.data.term.label} · วันนี้ {fmtDate(ctx.data.today)} · สัปดาห์ที่ {ctx.data.week}
@@ -46,7 +47,7 @@ export function CourseChangePage() {
             </p>
           )}
         </div>
-        {user?.role === "staff" && ctx.data?.term && <div className="flex flex-wrap gap-2" role="group" aria-label="มุมมองเจ้าหน้าที่">
+        {can(user, "course_change.view") && ctx.data?.term && <div className="flex flex-wrap gap-2" role="group" aria-label="มุมมองเจ้าหน้าที่">
           <Button variant={view === "inbox" ? "default" : "outline"} aria-pressed={view === "inbox"} onClick={() => changeView("inbox")}>คำร้อง</Button>
           <Button variant={view === "schedules" ? "default" : "outline"} aria-pressed={view === "schedules"} onClick={() => changeView("schedules")}>กำหนดรายวิชา / Block</Button>
           <Button variant={view === "settings" ? "default" : "outline"} aria-pressed={view === "settings"} onClick={() => changeView("settings")}>สิทธิ์รายวิชา / ตารางเดิม</Button>
@@ -69,7 +70,7 @@ export function CourseChangePage() {
 
 
         {ctx.data?.term &&
-          (user?.role === "student" ? <StudentView key={`${user.id}:${ctx.data.term.id}`} userId={user.id} ctx={ctx.data} /> : view === "schedules" ? <SchedulesView onDirtyChange={setSettingsDirty} /> : view === "settings" ? <SettingsView onDirtyChange={setSettingsDirty} /> : <StaffView ctx={ctx.data} />)}
+          (user && !can(user, "course_change.view") ? <StudentView key={`${user.id}:${ctx.data.term.id}`} userId={user.id} ctx={ctx.data} /> : view === "schedules" ? <SchedulesView onDirtyChange={setSettingsDirty} /> : view === "settings" ? <SettingsView onDirtyChange={setSettingsDirty} /> : <StaffView ctx={ctx.data} />)}
         <Dialog open={leavingSettings} onOpenChange={setLeavingSettings}>
           <DialogContent className="w-[calc(100%-2rem)]">
             <DialogHeader><DialogTitle>มีการตั้งค่าที่ยังไม่บันทึก</DialogTitle><DialogDescription>กลับไปแก้ไขต่อ หรือทิ้งการแก้ไขแล้วไปหน้าที่เลือก</DialogDescription></DialogHeader>

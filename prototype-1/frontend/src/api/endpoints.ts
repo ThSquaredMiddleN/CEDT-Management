@@ -291,11 +291,11 @@ export function useTerms() {
 }
 
 export function useUsers(
-  params: { role?: string; active?: string } = {},
+  params: { permission?: string; active?: string } = {},
   options: { enabled?: boolean } = {},
 ) {
   const s = new URLSearchParams();
-  if (params.role) s.set("role", params.role);
+  if (params.permission) s.set("permission", params.permission);
   if (params.active) s.set("active", params.active);
 
   return useQuery({

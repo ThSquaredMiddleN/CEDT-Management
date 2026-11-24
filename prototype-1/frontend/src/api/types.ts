@@ -1,4 +1,3 @@
-export type Role = "staff" | "student";
 export type BookingStatus = "pending" | "approved" | "rejected" | "cancelled";
 export type BookingType = "recurring" | "one_off";
 export type RoomType = "lecture" | "lab" | "hardware" | "meeting";
@@ -7,9 +6,12 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: Role;
   titlePrefix: string | null;
-  studentNo?: string | null;
+  studentNo: string | null;
+  /** studentNo != null. For finding the user's own data only; use can() for features. */
+  isStudent: boolean;
+  /** Effective permissions from /auth/me. */
+  permissions: string[];
 }
 
 export interface CalendarOccurrence {
@@ -164,7 +166,7 @@ export interface DirectoryUser {
   name: string;
   titlePrefix: string | null;
   email?: string;
-  role?: Role;
+  roles: string[];
   isActive?: boolean;
 }
 

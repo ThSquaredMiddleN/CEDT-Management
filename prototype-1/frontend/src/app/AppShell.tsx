@@ -36,7 +36,7 @@ export function AppShell({
     .filter(Boolean)
     .join(" ");
   const sidebarName = user ? displayName : "Staff TA";
-  const sidebarRole = user?.role ?? "admin";
+  const sidebarRole = user ? (user.isStudent ? "นิสิต" : "เจ้าหน้าที่") : "admin";
 
   return (
     <div className="flex min-h-screen bg-white">

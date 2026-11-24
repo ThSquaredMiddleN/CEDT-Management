@@ -49,11 +49,11 @@ export function LoginPage() {
     mutationFn: login,
     onSuccess: (data) => {
       qc.setQueryData(qk.me, data);
-      navigate(next ?? roleLanding(data.user.role), { replace: true });
+      navigate(next ?? roleLanding(), { replace: true });
     },
   });
 
-  if (user) return <Navigate to={next ?? roleLanding(user.role)} replace />;
+  if (user) return <Navigate to={next ?? roleLanding()} replace />;
 
   const error = mutation.error;
   const isLocked = error instanceof ApiError && error.status === 423;

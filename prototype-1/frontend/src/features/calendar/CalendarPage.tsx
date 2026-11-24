@@ -25,6 +25,7 @@ import {
 } from "@/api/endpoints";
 import type { CalendarOccurrence } from "@/api/types";
 import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { useToast } from "@/app/toast";
 import { RejectDialog } from "@/features/admin-dashboard/RejectDialog";
 import { EmptyState, ErrorCard, StatusBadge } from "@/components/states";
@@ -97,7 +98,9 @@ export function CalendarPage() {
 
   const rooms = useRooms({ active: "true" });
   const buildings = useBuildings();
-  const instructors = useUsers({ role: "staff", active: "true" }, { enabled: !!user });
+  // GET /users needs core.users.view; without it the instructor filter is hidden.
+  const canFilterInstructor = can(user, "core.users.view");
+  const instructors = useUsers({ permission: "bookings.use", active: "true" }, { enabled: canFilterInstructor });
 
   const ghost = useBooking(ghostId);
   const approve = useApproveBooking();
@@ -367,7 +370,7 @@ export function CalendarPage() {
             options={roomOptions}
           />
           {/* Instructor and Status filters are staff-only — the public view is approved-only. */}
-          {user && (
+          {canFilterInstructor && (
           <FilterDropdown
             label="Instructor"
             icon={UserIcon}

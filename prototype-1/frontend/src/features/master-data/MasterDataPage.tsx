@@ -99,7 +99,7 @@ export function MasterDataPage() {
   const users = useUsers();
   const terms = useTerms();
 
-  const activeInstructors = useUsers({ role: "staff", active: "true" });
+  const activeInstructors = useUsers({ permission: "bookings.use", active: "true" });
 
   const resource: Record<TabKey, string> = {
     courses: "courses",
@@ -204,7 +204,6 @@ export function MasterDataPage() {
       { name: "code", label: "Building Code", type: "text", required: true },
       { name: "name", label: "Building Name", type: "text", required: true },
     ],
-    // Single `staff` role: no role picker — new accounts default to staff on the backend.
     users: [
       { name: "name", label: "Name", type: "text", required: true },
       { name: "titlePrefix", label: "Title", type: "text" },
@@ -311,7 +310,7 @@ export function MasterDataPage() {
                     <>
                       <TableHead className="pl-6">Name</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
+                      <TableHead>บทบาท</TableHead>
                     </>
                   )}
                   {tab === "terms" && (
@@ -362,7 +361,7 @@ export function MasterDataPage() {
                         <TableCell className="text-neutral-500">{String(row.email ?? "")}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="capitalize font-normal">
-                            {String(row.role ?? "")}
+                            {(row.roles as string[] | undefined)?.join(", ") || "—"}
                           </Badge>
                         </TableCell>
                       </>

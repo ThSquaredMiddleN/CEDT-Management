@@ -2,6 +2,7 @@ import { PhaseWait } from "./PhaseWait";
 import { useActionDraft } from "./useActionDraft";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { useToast } from "@/app/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,7 +73,7 @@ export function WorkflowPanel({ r }: { r: CcRequestDetail }) {
   };
   const [error, setError] = useState("");
   const [kind, setKind] = useState(
-    user?.role === "staff" ? "signed_petition" : "student_petition",
+    can(user, "course_change.manage") ? "signed_petition" : "student_petition",
   );
   const [file, setFile] = useState<File | null>(null);
   useEffect(() => {
@@ -89,7 +90,7 @@ export function WorkflowPanel({ r }: { r: CcRequestDetail }) {
   const [second, setSecond] = useState("");
   const [mergeReview, setMergeReview] = useState(false);
   const plan = r.workflowPlan!;
-  const staff = user?.role === "staff";
+  const staff = can(user, "course_change.manage");
   const busy = workflow.isPending || upload.isPending || merge.isPending;
   const active = ["pending_approval", "processing"].includes(r.status);
   const boundary = r.events
