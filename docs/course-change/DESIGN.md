@@ -26,7 +26,7 @@
 
 **ผลการทดสอบล่าสุด (28 ต.ค. 2569):** Course Change 71/71; backend ทั้งหมด 84/84 บนฐานทดสอบใหม่ และ frontend 31/31 รวมการกู้คืนฉบับร่าง การลองยื่นเดิมแบบไม่ซ้ำ และการล้าง session cache ดู [rport 28/10](rport-28-10.md)
 
-**ไฟล์หลัก:** backend `prototype-1/backend/src/modules/course-change/` · migration `prisma/migrations/20261002120000_course_change/` · frontend `prototype-1/frontend/src/features/course-change/` · tests `prototype-1/backend/test/course-change-*.test.ts`
+**ไฟล์หลัก:** backend `prototype-1/backend/src/modules/course-change/` · migration `prisma/schema/migrations/20261002120000_course_change/` · frontend `prototype-1/frontend/src/features/course-change/` · tests `prototype-1/backend/test/course-change-*.test.ts`
 
 ---
 

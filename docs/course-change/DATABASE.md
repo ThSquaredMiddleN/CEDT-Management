@@ -22,8 +22,8 @@ show comes from the `courses` table through the API (`/course-change/eligible-co
 
 ## 2. Prisma schema location
 
-- Schema: `prototype-1/backend/prisma/schema.prisma`
-- Migrations: `prototype-1/backend/prisma/migrations/` (4: `init`, `exclusion_constraint`, `course_change`, `course_catalog`)
+- Schema: `prototype-1/backend/prisma/schema/` (course change tables in `course-change.prisma`, shared tables in `core.prisma`)
+- Migrations: `prototype-1/backend/prisma/schema/migrations/` (4: `init`, `exclusion_constraint`, `course_change`, `course_catalog`)
 - Seeds: `prisma/seed.ts` (LabSync) → calls `prisma/seed-course-change.ts`; catalog data in `prisma/data/cedt-course-catalog.ts`
 - Client: `backend/src/db.ts`
 

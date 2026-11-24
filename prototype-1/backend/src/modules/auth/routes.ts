@@ -1,9 +1,10 @@
+import { randomBytes } from "node:crypto";
 import argon2 from "argon2";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { config } from "../../config.js";
 import { prisma } from "../../db.js";
-import { locked, unauthenticated } from "../../lib/errors.js";
+import { badRequest, locked, unauthenticated } from "../../lib/errors.js";
 import {
   clearSessionCookie,
   hashToken,
@@ -22,6 +23,10 @@ const passwordSchema = z.object({
   newPassword: z.string().min(8, "must be at least 8 characters"),
 });
 
+/** A hash of a random secret, made once: verifying against it costs the same as a real check and never matches. */
+let dummy: Promise<string> | undefined;
+const dummyHash = () => (dummy ??= argon2.hash(randomBytes(32).toString("hex"), { type: argon2.argon2id }));
+
 const MAX_FAILED = 5;
 const LOCK_MINUTES = 15;
 
@@ -31,12 +36,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const user = await prisma.user.findUnique({ where: { email } });
 
-    // Generic 401 for unknown email, wrong password, and deactivated user alike (§6.1).
-    if (!user || !user.isActive) throw unauthenticated("Invalid email or password");
+    // Generic 401 for unknown email, wrong password, and deactivated user alike (§6.1). These paths still run one
+    // argon2 verify, so response time does not show which emails exist or have no password.
+    if (!user || !user.isActive) {
+      await argon2.verify(await dummyHash(), password);
+      throw unauthenticated("Invalid email or password");
+    }
 
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       const mins = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000);
       throw locked(`Account locked. Try again in ${mins} minutes`);
+    }
+
+    // MCV-only accounts have no password: same generic 401, and no failed-login count (there is nothing to guess).
+    if (user.passwordHash === null) {
+      await argon2.verify(await dummyHash(), password);
+      throw unauthenticated("Invalid email or password");
     }
 
     const ok = await argon2.verify(user.passwordHash, password);
@@ -104,6 +119,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const { currentPassword, newPassword } = passwordSchema.parse(req.body);
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: me.id } });
+    if (user.passwordHash === null) throw badRequest("This account signs in through MCV and has no password");
     if (!(await argon2.verify(user.passwordHash, currentPassword))) {
       throw unauthenticated("Current password is incorrect");
     }

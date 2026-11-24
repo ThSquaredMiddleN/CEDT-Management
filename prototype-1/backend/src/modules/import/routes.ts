@@ -1,6 +1,7 @@
 import { parse } from "csv-parse/sync";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { prisma } from "../../db.js";
+import { importGroups } from "../../core/groups.js";
 import { badRequest, validation } from "../../lib/errors.js";
 
 interface RowReport {
@@ -177,5 +178,12 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
       ),
     );
     return { dryRun: false, summary, rows };
+  });
+
+  app.post("/import/groups", { config: { auth: "admin" } }, async (req) => {
+    const records = await readCsv(req);
+    if (isDryRun(req)) return importGroups(prisma, records, { dryRun: true });
+    // Lookups are batched (a few queries per group), so this stays well under the limit; 30 s covers a slow hosted DB.
+    return prisma.$transaction((tx) => importGroups(tx, records, { dryRun: false }), { timeout: 30_000 });
   });
 }
