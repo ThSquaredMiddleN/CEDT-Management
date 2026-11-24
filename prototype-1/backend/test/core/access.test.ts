@@ -43,6 +43,16 @@ let itadmin: SessionUser;
 let norole: string;
 const roleId = async (key: string) => (await prisma.role.findUniqueOrThrow({ where: { key } })).id;
 
+/** Snapshots every it_admin assignment (active and inactive users), clears them, and returns a restore function. */
+async function isolateItAdmins(): Promise<() => Promise<void>> {
+  const saved = await prisma.userRoleAssignment.findMany({ where: { role: { key: "it_admin" } } });
+  await prisma.userRoleAssignment.deleteMany({ where: { role: { key: "it_admin" } } });
+  return async () => {
+    await prisma.userRoleAssignment.deleteMany({ where: { role: { key: "it_admin" } } });
+    await prisma.userRoleAssignment.createMany({ data: saved });
+  };
+}
+
 beforeAll(async () => {
   itadmin = (await loadSessionUser(await idOf(prisma, "itadmin@test.local")))!;
   norole = await idOf(prisma, "norole@test.local");
@@ -108,16 +118,61 @@ describe("saveUserAccess", () => {
   });
 
   it("refuses to remove the last IT Admin", async () => {
-    const admins = await prisma.userRoleAssignment.findMany({ where: { role: { key: "it_admin" }, user: { isActive: true } } });
-    await prisma.userRoleAssignment.deleteMany({ where: { role: { key: "it_admin" }, userId: { not: itadmin.id } } });
+    const itAdminRole = await roleId("it_admin");
+    const restore = await isolateItAdmins();
     try {
+      await prisma.userRoleAssignment.create({ data: { userId: itadmin.id, roleId: itAdminRole } });
       await expect(saveUserAccess(itadmin, itadmin.id, { roleIds: [], permissions: [], reason: "ออก" }, known)).rejects.toMatchObject({ code: "CONFLICT" });
     } finally {
-      for (const a of admins) {
-        await prisma.userRoleAssignment.upsert({ where: { userId_roleId: { userId: a.userId, roleId: a.roleId } }, create: a, update: {} });
-      }
+      await restore();
     }
   });
+
+  it("keeps at least one IT Admin when two admins are removed at the same time", async () => {
+    const itAdminRole = await roleId("it_admin");
+    const restore = await isolateItAdmins();
+    try {
+      await prisma.userRoleAssignment.createMany({ data: [{ userId: itadmin.id, roleId: itAdminRole }, { userId: norole, roleId: itAdminRole }] });
+      const results = await Promise.allSettled([
+        saveUserAccess(itadmin, itadmin.id, { roleIds: [], permissions: [], reason: "ออก 1" }, known),
+        saveUserAccess(itadmin, norole, { roleIds: [], permissions: [], reason: "ออก 2" }, known),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+      expect(rejected.reason).toMatchObject({ code: "CONFLICT" });
+      expect(await prisma.userRoleAssignment.count({ where: { role: { key: "it_admin" }, user: { isActive: true } } })).toBe(1);
+    } finally {
+      await restore();
+    }
+  });
+
+  it("lets an inactive user's it_admin be removed even when no active admin is left", async () => {
+    const itAdminRole = await roleId("it_admin");
+    const restore = await isolateItAdmins();
+    try {
+      await prisma.userRoleAssignment.create({ data: { userId: norole, roleId: itAdminRole } });
+      await prisma.user.update({ where: { id: norole }, data: { isActive: false } });
+      const { access } = await saveUserAccess(itadmin, norole, { roleIds: [], permissions: [], reason: "ถอนคนที่ปิดใช้งาน" }, known);
+      expect(access.roles).toEqual([]);
+    } finally {
+      await prisma.user.update({ where: { id: norole }, data: { isActive: true } });
+      await restore();
+    }
+  });
+
+  it("does not let a stale permission name block an unrelated save", async () => {
+    await prisma.userPermission.create({ data: { userId: norole, permission: "gone.module.view", reason: "stale" } });
+    try {
+      const { access } = await saveUserAccess(itadmin, norole, { roleIds: [], permissions: ["gone.module.view", "core.users.view"], reason: "ไม่เกี่ยว" }, known);
+      expect(access.direct.map((d) => d.permission).sort()).toEqual(["core.users.view", "gone.module.view"]);
+      await expect(
+        saveUserAccess(itadmin, norole, { roleIds: [], permissions: ["gone.module.view", "core.users.view", "also.gone.view"], reason: "x" }, known),
+      ).rejects.toMatchObject({ code: "VALIDATION" });
+    } finally {
+      await prisma.userPermission.deleteMany({ where: { userId: norole } });
+    }
+  });
+
   it("writes one audit row per change, with the reason as the note", async () => {
     const before = await prisma.auditLog.count({ where: { subjectId: norole } });
     const { changes } = await saveUserAccess(itadmin, norole, { roleIds: [], permissions: ["core.import.manage"], reason: "ทดสอบ audit" }, known);
@@ -130,13 +185,27 @@ describe("saveUserAccess", () => {
 
 describe("roles", () => {
   it("creates and updates a role, recording one change each", async () => {
-    const created = await createRole(itadmin, { key: "test_helper", name: "ผู้ช่วย", description: null, permissions: ["core.users.view"], reason: "สร้าง" }, known);
+    const key = `test_helper_${Date.now()}`;
+    const created = await createRole(itadmin, { key, name: "ผู้ช่วย", description: "คำอธิบาย", permissions: ["core.users.view"], reason: "สร้าง" }, known);
     expect(created.changes.map((c) => c.action)).toEqual(["core.role.created"]);
+    expect(created.changes[0]!.after).toMatchObject({ key, isActive: true, description: "คำอธิบาย" });
     const updated = await updateRole(itadmin, created.role.id, { name: "ผู้ช่วย 2", description: null, permissions: [], isActive: true, reason: "แก้" }, known);
     expect(updated.role).toMatchObject({ name: "ผู้ช่วย 2", permissions: [] });
     expect(updated.changes.map((c) => c.action)).toEqual(["core.role.updated"]);
-    await expect(createRole(itadmin, { key: "test_helper", name: "ซ้ำ", description: null, permissions: [], reason: "x" }, known)).rejects.toMatchObject({ code: "DUPLICATE" });
+    await expect(createRole(itadmin, { key, name: "ซ้ำ", description: null, permissions: [], reason: "x" }, known)).rejects.toMatchObject({ code: "DUPLICATE" });
     await expect(createRole(itadmin, { key: "Bad Key", name: "x", description: null, permissions: [], reason: "x" }, known)).rejects.toMatchObject({ code: "VALIDATION" });
+  });
+
+  it("makes the actor hold every permission of a role being reactivated", async () => {
+    const role = await prisma.role.create({
+      data: { key: `test_inactive_${Date.now()}`, name: "ปิดอยู่", isActive: false, permissions: { create: [{ permission: "receipts.view" }] } },
+    });
+    await expect(
+      updateRole(itadmin, role.id, { name: "ปิดอยู่", description: null, permissions: ["receipts.view"], isActive: true, reason: "เปิด" }, known),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect((await prisma.role.findUniqueOrThrow({ where: { id: role.id } })).isActive).toBe(false);
+    // Staying inactive (a rename) needs no such permission.
+    await updateRole(itadmin, role.id, { name: "ปิดอยู่ 2", description: null, permissions: ["receipts.view"], isActive: false, reason: "เปลี่ยนชื่อ" }, known);
   });
 
   it("protects system roles", async () => {
@@ -190,8 +259,9 @@ describe("/api/v1/access", () => {
   });
 
   it("refuses to deactivate the last IT Admin from Master Data", async () => {
-    const admins = await prisma.userRoleAssignment.findMany({ where: { role: { key: "it_admin" } } });
-    await prisma.userRoleAssignment.deleteMany({ where: { role: { key: "it_admin" }, userId: { not: itadmin.id } } });
+    const itAdminRole = await roleId("it_admin");
+    const restore = await isolateItAdmins();
+    await prisma.userRoleAssignment.create({ data: { userId: itadmin.id, roleId: itAdminRole } });
     try {
       const staff = await loginAs(app, "staff@test.local");
       const res = await app.inject({
@@ -202,9 +272,7 @@ describe("/api/v1/access", () => {
       });
       expect(res.statusCode).toBe(409);
     } finally {
-      for (const a of admins) {
-        await prisma.userRoleAssignment.upsert({ where: { userId_roleId: { userId: a.userId, roleId: a.roleId } }, create: a, update: {} });
-      }
+      await restore();
     }
   });
 });

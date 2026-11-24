@@ -49,8 +49,21 @@ function requireHeld(actor: SessionUser, permissions: string[]): void {
   if (missing.length) throw forbidden(`ให้ได้เฉพาะสิทธิ์ที่คุณมี: ${missing.join(", ")}`);
 }
 
+/**
+ * Serialises every change that can shrink the set of active IT Admins (READ COMMITTED would let two
+ * transactions each remove a different admin and both see one left). Always take the user/role row lock
+ * first, then this one, so lock order is the same everywhere.
+ */
+async function lockItAdmins(tx: Tx): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM roles WHERE key = ${IT_ADMIN_ROLE} FOR UPDATE`;
+}
+
 /** Throws when removing it_admin from this user (or deactivating them) would leave no IT Admin. */
 export async function assertNotLastItAdmin(tx: Tx, userId: string): Promise<void> {
+  const target = await tx.$queryRaw<{ is_active: boolean }[]>`SELECT is_active FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+  // An already-inactive user is not counted as an active admin, so removing them changes nothing.
+  if (!target[0] || !target[0].is_active) return;
+  await lockItAdmins(tx);
   const holds = await tx.userRoleAssignment.count({ where: { userId, role: { key: IT_ADMIN_ROLE } } });
   if (!holds) return;
   const others = await tx.userRoleAssignment.count({
@@ -110,10 +123,11 @@ export async function saveUserAccess(
 ): Promise<{ access: UserAccessView; changes: AccessChange[] }> {
   const changes: AccessChange[] = [];
   await prisma.$transaction(async (tx) => {
-    if (!(await tx.user.findUnique({ where: { id: userId }, select: { id: true } }))) throw notFound("ไม่พบผู้ใช้");
+    // Lock the target first so concurrent saves of the same user run one after the other.
+    const target = await tx.$queryRaw<{ is_active: boolean }[]>`SELECT is_active FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+    if (!target[0]) throw notFound("ไม่พบผู้ใช้");
     const wantRoles = new Set(input.roleIds);
     const wantPerms = new Set(input.permissions);
-    requireKnown([...wantPerms], known);
 
     const roles = await tx.role.findMany({ where: { id: { in: [...wantRoles] } }, include: { permissions: true } });
     if (roles.length !== wantRoles.size) throw validation("ไม่พบบทบาทบางรายการ");
@@ -127,6 +141,7 @@ export async function saveUserAccess(
     const addRoles = roles.filter((r) => !haveRoles.has(r.id));
     const removeRoles = current.filter((a) => !wantRoles.has(a.roleId));
     const addPerms = [...wantPerms].filter((p) => !havePerms.has(p)).sort();
+    requireKnown(addPerms, known);
     const removePerms = currentDirect.filter((p) => !wantPerms.has(p.permission));
     if (addRoles.length + removeRoles.length + addPerms.length + removePerms.length === 0) return;
 
@@ -137,10 +152,14 @@ export async function saveUserAccess(
     }
     requireHeld(actor, addPerms);
     if (removeRoles.some((a) => a.role.key === IT_ADMIN_ROLE)) {
+      // Inactive users are not active admins, so removing theirs cannot empty the set.
+      if (target[0].is_active) await lockItAdmins(tx);
       // Remove first, then check: the count below must not include this user any more.
       await tx.userRoleAssignment.deleteMany({ where: { userId, role: { key: IT_ADMIN_ROLE } } });
-      const left = await tx.userRoleAssignment.count({ where: { role: { key: IT_ADMIN_ROLE }, user: { isActive: true } } });
-      if (left === 0) throw conflict("ต้องมี IT Admin ที่ใช้งานอยู่อย่างน้อยหนึ่งคน");
+      if (target[0].is_active) {
+        const left = await tx.userRoleAssignment.count({ where: { role: { key: IT_ADMIN_ROLE }, user: { isActive: true } } });
+        if (left === 0) throw conflict("ต้องมี IT Admin ที่ใช้งานอยู่อย่างน้อยหนึ่งคน");
+      }
     }
 
     const subject = { subjectType: "user" as const, subjectId: userId, note: reason };
@@ -222,7 +241,7 @@ export async function createRole(
         include: roleInclude,
       });
       const changes: AccessChange[] = [
-        { action: "core.role.created", subjectType: "role", subjectId: role.id, after: { key: role.key, name, permissions }, note: reason },
+        { action: "core.role.created", subjectType: "role", subjectId: role.id, after: { key: role.key, name, description: role.description, isActive: true, permissions }, note: reason },
       ];
       await recordChanges(tx, actor, changes);
       return { role: toRoleView(role), changes };
@@ -240,11 +259,12 @@ export async function updateRole(
   known: ReadonlySet<string>,
 ): Promise<{ role: RoleView; changes: AccessChange[] }> {
   return prisma.$transaction(async (tx) => {
+    // Lock the role so concurrent identical saves run one after the other instead of failing on P2002/P2025.
+    await tx.$queryRaw`SELECT id FROM roles WHERE id = ${id}::uuid FOR UPDATE`;
     const role = await tx.role.findUnique({ where: { id }, include: roleInclude });
     if (!role) throw notFound("ไม่พบบทบาท");
     const before = toRoleView(role);
     const permissions = [...new Set(input.permissions)].sort();
-    requireKnown(permissions, known);
     const name = input.name.trim();
     if (!name) throw validation("กรุณาระบุชื่อบทบาท");
     const description = input.description?.trim() || null;
@@ -255,11 +275,13 @@ export async function updateRole(
 
     const added = permissions.filter((p) => !before.permissions.includes(p));
     const removed = before.permissions.filter((p) => !permissions.includes(p));
+    requireKnown(added, known);
     const changed =
       added.length || removed.length || name !== role.name || description !== role.description || input.isActive !== role.isActive;
     if (!changed) return { role: before, changes: [] };
     const reason = requireReason(input.reason);
-    requireHeld(actor, added);
+    // Reactivating hands every permission of the role to its members again, so the actor must hold them all.
+    requireHeld(actor, !role.isActive && input.isActive ? permissions : added);
 
     await tx.rolePermission.deleteMany({ where: { roleId: id, permission: { in: removed } } });
     await tx.rolePermission.createMany({ data: added.map((permission) => ({ roleId: id, permission })) });
