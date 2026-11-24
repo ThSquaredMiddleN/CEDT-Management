@@ -157,15 +157,16 @@ function notifyPayload(b: Booking, snap: Snapshot, reason?: string | null): Noti
 
 /**
  * BR-5 + BR-12: create a booking and materialize its occurrences in ONE transaction.
- * Single `staff` role, so bookings auto-approve by default (approved + blocking rows, guarded
- * by the exclusion constraint). The seed passes `autoApprove: false` to craft pending demo rows.
+ * A requester with bookings.manage is auto-approved (approved + blocking rows, guarded by the
+ * exclusion constraint); one with only bookings.use gets a pending request that notifies every
+ * bookings.manage holder (BR-15). The seed passes `autoApprove: false` to craft pending demo rows.
  */
 export async function createBooking(
   input: BookingInput,
   actor: SessionUser,
   opts: { autoApprove?: boolean } = {},
 ) {
-  const autoApprove = opts.autoApprove ?? true;
+  const autoApprove = opts.autoApprove ?? can(actor, "bookings.manage");
 
   try {
     return await prisma.$transaction(async (tx) => {

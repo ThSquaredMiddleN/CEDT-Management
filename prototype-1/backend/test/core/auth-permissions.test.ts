@@ -126,3 +126,70 @@ describe("permission checks", () => {
     expect(JSON.stringify(list.json())).not.toContain(other!.id);
   });
 });
+
+describe("drafts are only visible with the module's .view permission", () => {
+  it("hides draft announcements and news from a student and a user without roles, shows them to staff", async () => {
+    const authorId = (await prisma.user.findUniqueOrThrow({ where: { email: "staff@test.local" } })).id;
+    const ann = await prisma.announcement.create({ data: { title: "TEST draft announcement", authorId } });
+    const news = await prisma.newsArticle.create({ data: { title: "TEST draft news", authorId } });
+    try {
+      const cases: [string, boolean][] = [
+        ["student@test.local", false],
+        ["norole@test.local", false],
+        ["staff@test.local", true],
+      ];
+      for (const [email, sees] of cases) {
+        const cookie = await loginAs(app, email);
+        const one = (url: string) => app.inject({ method: "GET", url, headers: { cookie } });
+        expect((await one(`/api/v1/announcements/${ann.id}`)).statusCode, email).toBe(sees ? 200 : 404);
+        expect((await one(`/api/v1/news/${news.id}`)).statusCode, email).toBe(sees ? 200 : 404);
+        expect(JSON.stringify((await one("/api/v1/announcements")).json()).includes(ann.id), email).toBe(sees);
+        expect(JSON.stringify((await one("/api/v1/news")).json()).includes(news.id), email).toBe(sees);
+      }
+    } finally {
+      await prisma.announcement.delete({ where: { id: ann.id } });
+      await prisma.newsArticle.delete({ where: { id: news.id } });
+    }
+  });
+});
+
+describe("booking auto-approval", () => {
+  it("leaves a bookings.use request pending and auto-approves a bookings.manage request", async () => {
+    const term = await prisma.term.findFirstOrThrow({ where: { isActive: true } });
+    const date = "2026-11-26";
+    const room = await prisma.room.findFirstOrThrow({
+      where: { isActive: true, occurrences: { none: { date: new Date(`${date}T00:00:00Z`) } } },
+    });
+    const created: string[] = [];
+    const book = async (email: string, startTime: string, endTime: string) => {
+      const cookie = await loginAs(app, email);
+      const instructorId = (await prisma.user.findUniqueOrThrow({ where: { email } })).id;
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/bookings",
+        headers: { cookie, "x-requested-with": "XMLHttpRequest" },
+        payload: {
+          bookingType: "one_off",
+          termId: term.id,
+          title: "TEST auto-approval",
+          instructorId,
+          roomId: room.id,
+          oneOffDate: date,
+          startTime,
+          endTime,
+          studentCount: 5,
+        },
+      });
+      expect(res.statusCode, `${email}: ${res.body}`).toBe(201);
+      created.push(res.json().booking.id);
+      return res.json().booking.status as string;
+    };
+    try {
+      expect(await book("teacher@test.local", "20:00", "20:30")).toBe("pending");
+      expect(await book("staff@test.local", "20:30", "21:00")).toBe("approved");
+    } finally {
+      await prisma.notification.deleteMany({ where: { bookingId: { in: created } } });
+      await prisma.booking.deleteMany({ where: { id: { in: created } } });
+    }
+  });
+});

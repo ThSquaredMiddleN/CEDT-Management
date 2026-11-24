@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { can } from "../../core/permissions.js";
 import { requireUser } from "../../plugins/auth.js";
 import { badRequest } from "../../lib/errors.js";
 import {
@@ -99,12 +100,12 @@ async function readMultipart(
 
 export async function newsRoutes(app: FastifyInstance): Promise<void> {
   app.get("/news", { config: { auth: "public" } }, async (req) =>
-    listNews({ publishedOnly: !req.user }),
+    listNews({ publishedOnly: !can(req.user, "news.view") }),
   );
 
   app.get("/news/:id", { config: { auth: "public" } }, async (req) => {
     const { id } = newsIdSchema.parse(req.params);
-    return getNews(id, { publishedOnly: !req.user });
+    return getNews(id, { publishedOnly: !can(req.user, "news.view") });
   });
 
   app.post("/news", { config: { auth: "user", permission: "news.manage" } }, async (req, reply) => {
@@ -139,7 +140,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/news/:id/images/:imageId", { config: { auth: "public" } }, async (req, reply) => {
     const { id, imageId } = newsImageIdSchema.parse(req.params);
-    const image = await getNewsImageRecord(id, imageId, { publishedOnly: !req.user });
+    const image = await getNewsImageRecord(id, imageId, { publishedOnly: !can(req.user, "news.view") });
     const bytes = await readNewsImage(image.storageKey);
     return reply
       .type(image.mimeType)

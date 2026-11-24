@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { can } from "../../core/permissions.js";
 import { requireUser } from "../../plugins/auth.js";
 import {
   announcementCreateSchema,
@@ -15,12 +16,12 @@ import {
 
 export async function announcementRoutes(app: FastifyInstance): Promise<void> {
   app.get("/announcements", { config: { auth: "public" } }, async (req) =>
-    listAnnouncements({ publishedOnly: !req.user }),
+    listAnnouncements({ publishedOnly: !can(req.user, "announcements.view") }),
   );
 
   app.get("/announcements/:id", { config: { auth: "public" } }, async (req) => {
     const { id } = announcementIdSchema.parse(req.params);
-    return getAnnouncement(id, { publishedOnly: !req.user });
+    return getAnnouncement(id, { publishedOnly: !can(req.user, "announcements.view") });
   });
 
   app.post("/announcements", { config: { auth: "user", permission: "announcements.manage" } }, async (req, reply) => {
