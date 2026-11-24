@@ -2,23 +2,14 @@ import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config, isProd } from "../config.js";
 import { prisma } from "../db.js";
+import { can, loadSessionUser, type SessionUser } from "../core/permissions.js";
 import { forbidden, unauthenticated } from "../lib/errors.js";
 
-// "any" and "admin" both mean "staff": they predate the `student` role (Course Change) and
-// are kept so the LabSync route configs don't all have to change. "user" is any signed-in
-// account (staff or student); "student" is students only.
-export type AuthLevel = "public" | "user" | "student" | "any" | "admin";
+// "public" = no session needed; "user" = any signed-in account. What the user may do is decided
+// by config.permission (see can()), never by the level.
+export type AuthLevel = "public" | "user";
 
-export type Role = "staff" | "student";
-
-export interface SessionUser {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  titlePrefix: string | null;
-  studentNo: string | null;
-}
+export type { SessionUser };
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -26,6 +17,11 @@ declare module "fastify" {
   }
   interface FastifyContextConfig {
     auth?: AuthLevel;
+    /**
+     * Permission the caller must hold. `null` = any signed-in user; the handler checks ownership
+     * itself. Required (string or null) on every non-public route that changes data.
+     */
+    permission?: string | null;
     /** Set `csrf: false` only on routes with their own request authentication (the LINE webhook). */
     csrf?: boolean;
   }
@@ -60,22 +56,13 @@ async function resolveUser(req: FastifyRequest): Promise<SessionUser | undefined
 
   const session = await prisma.session.findUnique({
     where: { tokenHash: hashToken(raw) },
-    include: { user: true },
+    select: { expiresAt: true, userId: true },
   });
-  if (!session || session.expiresAt <= new Date() || !session.user.isActive) return undefined;
-
-  const u = session.user;
-  return {
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    role: u.role,
-    titlePrefix: u.titlePrefix,
-    studentNo: u.studentNo,
-  };
+  if (!session || session.expiresAt <= new Date()) return undefined;
+  return (await loadSessionUser(session.userId)) ?? undefined;
 }
 
-export function registerAuth(app: FastifyInstance): void {
+export function registerAuth(app: FastifyInstance, knownPermissions: ReadonlySet<string>): void {
   // Every route must declare its auth level; an undeclared route is a startup error (§6.2).
   app.addHook("onRoute", (route) => {
     if (route.method === "HEAD" || route.method === "OPTIONS") return;
@@ -83,10 +70,25 @@ export function registerAuth(app: FastifyInstance): void {
     if (!route.config?.auth) {
       throw new Error(`Route ${route.method} ${route.url} does not declare config.auth`);
     }
+    const p = route.config.permission;
+    if (typeof p === "string" && !knownPermissions.has(p)) {
+      throw new Error(`Route ${route.method} ${route.url} uses unknown permission "${p}"`);
+    }
+    const methods = [route.method].flat();
+    const changesData = methods.some((m) => !["GET", "HEAD", "OPTIONS"].includes(m));
+    const declared = Object.prototype.hasOwnProperty.call(route.config, "permission");
+    if (route.config.auth !== "public" && changesData && !declared) {
+      throw new Error(
+        `Route ${methods.join(",")} ${route.url} changes data but does not declare config.permission (use null for own-data routes)`,
+      );
+    }
+    if (route.config.auth === "public" && p) {
+      throw new Error(`Route ${methods.join(",")} ${route.url} is public but declares a permission`);
+    }
   });
 
   app.addHook("preHandler", async (req) => {
-    const level: AuthLevel = req.routeOptions.config?.auth ?? "any";
+    const level: AuthLevel = req.routeOptions.config?.auth ?? "user";
 
     // CSRF (§6.3): custom header required on every mutation; Origin must match when sent.
     if (req.method !== "GET" && req.method !== "HEAD" && req.routeOptions.config?.csrf !== false) {
@@ -103,17 +105,12 @@ export function registerAuth(app: FastifyInstance): void {
 
     if (level === "public") return;
     if (!req.user) throw unauthenticated();
-    if (level === "user") return;
-    if (level === "student") {
-      if (req.user.role !== "student") throw forbidden();
-      return;
-    }
-    // "any" / "admin": staff only (CC-BR-10 — students never reach the LabSync API).
-    if (req.user.role !== "staff") throw forbidden();
+    const permission = req.routeOptions.config?.permission;
+    if (permission && !can(req.user, permission)) throw forbidden();
   });
 }
 
-/** Non-null user accessor for routes declared `any`/`admin`. */
+/** Non-null user accessor for routes declared `user`. */
 export function requireUser(req: FastifyRequest): SessionUser {
   if (!req.user) throw unauthenticated();
   return req.user;

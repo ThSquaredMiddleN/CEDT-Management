@@ -8,6 +8,7 @@
  * instructor Somchai. Pick another slot if it clashes with an approved booking (409).
  */
 import { parseArgs } from "node:util";
+import { loadSessionUser } from "../src/core/permissions.js";
 import { prisma } from "../src/db.js";
 import { createBooking } from "../src/modules/bookings/service.js";
 import type { SessionUser } from "../src/plugins/auth.js";
@@ -30,14 +31,7 @@ try {
   const course = await prisma.course.findFirstOrThrow({ where: { code: "CEDT499" } });
   const room = await prisma.room.findFirstOrThrow({ where: { name: "E12-501" } });
 
-  const actor: SessionUser = {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    titlePrefix: user.titlePrefix,
-    studentNo: user.studentNo,
-  };
+  const actor: SessionUser = (await loadSessionUser(user.id))!;
   const booking = await createBooking(
     {
       bookingType: "one_off",

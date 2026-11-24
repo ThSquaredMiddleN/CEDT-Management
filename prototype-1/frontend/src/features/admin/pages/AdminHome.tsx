@@ -6,12 +6,16 @@ import {
   MegaphoneIcon,
   NewspaperIcon,
 } from "@heroicons/react/24/outline";
+import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { MenuItem } from "@/features/admin/components/AdminMenuItem";
 
 interface AdminMenuEntry {
   text: string;
   icon: ReactNode;
   to?: string;
+  /** Hides the card from users who cannot open its page (same names as the AdminLayout sidebar). */
+  permission?: string;
 }
 
 interface MenuGroup {
@@ -25,15 +29,15 @@ const MENU_GROUPS: MenuGroup[] = [
     title: "ทั่วไป",
     rowGap: "gap-y-4",
     items: [
-      { text: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements" },
-      { text: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon />, to: "/admin/news" },
-      { text: "จัดการห้องเรียน", icon: <CalendarIcon />, to: "/admin/data" },
+      { text: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements", permission: "announcements.view" },
+      { text: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon />, to: "/admin/news", permission: "news.view" },
+      { text: "จัดการห้องเรียน", icon: <CalendarIcon />, to: "/admin/data", permission: "masterdata.manage" },
     ],
   },
   {
     title: "ทะเบียน",
     rowGap: "gap-y-6",
-    items: [{ text: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon />, to: "/admin/course-change" }],
+    items: [{ text: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon />, to: "/admin/course-change", permission: "course_change.view" }],
   },
   {
     title: "อื่น ๆ",
@@ -43,12 +47,17 @@ const MENU_GROUPS: MenuGroup[] = [
 ];
 
 export function AdminHome() {
+  const { user } = useAuth();
+  const groups = MENU_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => !i.permission || can(user, i.permission)),
+  })).filter((g) => g.items.length > 0);
   return (
     <div className="min-h-full bg-background px-6 py-8 md:px-10 lg:px-16">
       <div className="flex flex-col gap-8">
         <h1 className="font-body text-header-sm-emphasize text-grey-900">เมนู</h1>
         <div className="flex flex-col gap-6">
-          {MENU_GROUPS.map(({ title, items, rowGap }) => (
+          {groups.map(({ title, items, rowGap }) => (
             <section key={title} className="flex flex-col gap-2">
               <h2 className="font-body text-body-md text-grey-400">{title}</h2>
               <div

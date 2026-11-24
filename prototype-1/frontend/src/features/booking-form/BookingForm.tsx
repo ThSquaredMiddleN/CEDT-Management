@@ -16,6 +16,7 @@ import { ApiError } from "@/api/client";
 import { useBooking, useCreateBooking, useRooms, useTerms, useUsers } from "@/api/endpoints";
 import type { Booking, BookingInput, Course } from "@/api/types";
 import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,13 +51,15 @@ export function BookingForm() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
 
-  // Single `staff` role: every booking a staff user submits is auto-approved.
-  const isAdmin = true;
+  // Bookings from users with bookings.manage are auto-approved by the backend.
+  const isAdmin = can(user, "bookings.manage");
   const cloneId = params.get("clone");
 
   const terms = useTerms();
   const rooms = useRooms({ active: "true" });
-  const instructors = useUsers({ role: "staff", active: "true" });
+  // GET /users needs core.users.view. Without it the instructor is the current user and the picker is hidden.
+  const canPickInstructor = can(user, "core.users.view");
+  const instructors = useUsers({ permission: "bookings.use", active: "true" }, { enabled: canPickInstructor });
   const clone = useBooking(cloneId);
 
   const create = useCreateBooking();
@@ -321,7 +324,7 @@ export function BookingForm() {
                   onSelect={(c) => {
                     setCourse(c);
                     form.setValue("courseId", c.id);
-                    if (c.defaultInstructor) {
+                    if (canPickInstructor && c.defaultInstructor) {
                       form.setValue("instructorId", c.defaultInstructor.id);
                     }
                   }}
@@ -344,17 +347,28 @@ export function BookingForm() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-2">
-                <Label>Instructor Name</Label>
-                <Select {...form.register("instructorId")}>
-                  {(instructors.data?.items ?? []).map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {[u.titlePrefix, u.name].filter(Boolean).join(" ")}
-                      {u.id === user?.id ? " (You)" : ""}
-                    </option>
-                  ))}
-                </Select>
-              </div>
+              {canPickInstructor ? (
+                <div className="flex flex-col gap-2">
+                  <Label>Instructor Name</Label>
+                  <Select {...form.register("instructorId")}>
+                    {(instructors.data?.items ?? []).map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {[u.titlePrefix, u.name].filter(Boolean).join(" ")}
+                        {u.id === user?.id ? " (You)" : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <Label className="text-neutral-500">Instructor Name</Label>
+                  <Input
+                    readOnly
+                    value={[user?.titlePrefix, user?.name].filter(Boolean).join(" ")}
+                    className="bg-neutral-100 text-neutral-500"
+                  />
+                </div>
+              )}
 
               {v.bookingType === "recurring" ? (
                 <div className="flex flex-col gap-2">

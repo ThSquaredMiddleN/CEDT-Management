@@ -5,7 +5,8 @@ import { prisma } from "../src/db.js";
 
 /**
  * Integration of Course Change with the rest of LabSync after merging main: the auth matrix
- * across modules (a `student` role now exists next to `staff`) and the Announcements API end to
+ * across modules (students get their permissions from the automatic `student` role, staff from
+ * the `staff` role) and the Announcements API end to
  * end on Zod 4. Runs against the isolated test database (`npm run test:fresh`).
  */
 

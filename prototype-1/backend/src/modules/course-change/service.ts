@@ -19,7 +19,7 @@ import {
 import { isoDate, todayISO } from "../../lib/time.js";
 import type { SessionUser } from "../../plugins/auth.js";
 import { notify } from "../../core/notify.js";
-import { activeAdminIds } from "../../core/users.js";
+import { can, usersWithPermission } from "../../core/permissions.js";
 import { documentHash, renderDocumentHtml, type DocumentContent } from "./document.js";
 import { integrations } from "./integrations.js";
 import {
@@ -32,6 +32,10 @@ import {
   weekOf,
   weekStartDate,
 } from "./timeline.js";
+
+/** Course Change staff view: sees every request instead of only their own (managers are notified, so they see them too). */
+export const isCcStaff = (me: { permissions: readonly string[] }): boolean =>
+  can(me, "course_change.view") || can(me, "course_change.manage");
 
 /**
  * Course Change workflow engine (docs/course-change/DESIGN.md). Every status change runs in one
@@ -223,7 +227,7 @@ export async function notifyCc(
 /** Who acts on a pending request: the student's advisor for Flow B, the programme (all staff) otherwise. */
 export async function approverIds(tx: Tx, flow: CourseChangeFlow, snap: Snapshot): Promise<string[]> {
   if (flow === "advisor_pi" && snap.advisorId) return [snap.advisorId];
-  return activeAdminIds(tx);
+  return usersWithPermission("course_change.manage", tx);
 }
 
 export const event = (
@@ -464,7 +468,7 @@ export interface ListQuery {
 
 function requestScope(q: ListQuery, me: SessionUser): Prisma.CourseChangeRequestWhereInput {
   const scope: Prisma.CourseChangeRequestWhereInput =
-    me.role === "student" ? { studentId: me.id } : {};
+    isCcStaff(me) ? {} : { studentId: me.id };
   const search = q.search?.trim();
   return {
     ...scope,
@@ -550,7 +554,7 @@ export async function loadVisible(id: string, me: SessionUser, tx: Tx = prisma) 
     },
   });
   // 404 (not 403) for someone else's request, so request ids cannot be probed.
-  if (!r || (me.role === "student" && r.studentId !== me.id)) throw notFound("ไม่พบคำร้อง");
+  if (!r || (!isCcStaff(me) && r.studentId !== me.id)) throw notFound("ไม่พบคำร้อง");
   return r;
 }
 
@@ -558,7 +562,7 @@ export async function getRequest(id: string, me: SessionUser) {
   const r = await loadVisible(id, me);
   return {
     ...serialize(r),
-    files: await prisma.courseChangeFile.findMany({ where: { requestId: id, ...(me.role === "student" ? { OR: [{ kind: {not: "signed_petition"} }, { id: {in: r.events.flatMap(e => (e.payload as {releasedFileIds?: string[]} | null)?.releasedFileIds ?? [])} }] } : {}) }, select: { id: true, kind: true, filename: true, sha256: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
+    files: await prisma.courseChangeFile.findMany({ where: { requestId: id, ...(!isCcStaff(me) ? { OR: [{ kind: {not: "signed_petition"} }, { id: {in: r.events.flatMap(e => (e.payload as {releasedFileIds?: string[]} | null)?.releasedFileIds ?? [])} }] } : {}) }, select: { id: true, kind: true, filename: true, sha256: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
     steps: r.workflowVersion === 2 ? workflowStepViews(r) : stepStates(r.flow, r.status, r.events),
     events: r.events.map((e) => ({
       id: e.id.toString(),

@@ -23,8 +23,8 @@ export const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Modules whose notifications go to LINE for students only. Staff still see these rows in the web bell; on LINE
- * they would get one push per request from every student (owner's decision, 2026-11-24). Step 5a replaces the
- * role check with `studentNo`.
+ * they would get one push per request from every student (owner's decision, 2026-11-24).
+ * A student is a user with a student number.
  */
 export const STUDENT_ONLY_LINE_MODULES = ["course_change"];
 /** Webhook dedupe rows only matter while LINE may redeliver an event, so older ones are pruned. */
@@ -175,7 +175,7 @@ export async function dispatchLineOnce(deps: DispatchDeps): Promise<DispatchCoun
   // Ordered by id, then rotated by state.rotation below, so the users cut at BATCH_SIZE differ from tick to tick.
   const users = await full.prisma.user.findMany({
     where: { lineUserId: { not: null }, lineLinkedAt: { not: null }, isActive: true },
-    select: { id: true, lineUserId: true, lineLinkedAt: true, role: true },
+    select: { id: true, lineUserId: true, lineLinkedAt: true, studentNo: true },
     orderBy: { id: "asc" },
   });
 
@@ -192,7 +192,7 @@ export async function dispatchLineOnce(deps: DispatchDeps): Promise<DispatchCoun
         deliveredLineAt: null,
         createdAt: { gte: new Date(earliest) },
         // Never pushed, never marked: the row stays in the bell and ages out of this window.
-        ...(u.role === "student" ? {} : { module: { notIn: STUDENT_ONLY_LINE_MODULES } }),
+        ...(u.studentNo !== null ? {} : { module: { notIn: STUDENT_ONLY_LINE_MODULES } }),
       },
       orderBy: { createdAt: "asc" },
       take: PER_USER,

@@ -16,11 +16,12 @@ import {
 } from "../../lib/errors.js";
 import { isoDate } from "../../lib/time.js";
 import type { SessionUser } from "../../plugins/auth.js";
-import { activeAdminIds } from "../../core/users.js";
+import { can, usersWithPermission } from "../../core/permissions.js";
 import {
   event,
   notifyCc,
   getRequest,
+  isCcStaff,
   loadVisible,
   loadContext,
   nextRequestNo,
@@ -412,7 +413,7 @@ export async function submitRequest(
       payload: { phase: "staff_review", workflowVersion: 2 },
     });
     await notifyCc(tx, {
-      userIds: await activeAdminIds(tx),
+      userIds: await usersWithPermission("course_change.manage", tx),
       event: "submitted",
       message: `${r.requestNo} รอเจ้าหน้าที่ตรวจคำร้อง`,
       requestId: r.id,
@@ -469,8 +470,8 @@ export async function action(
     );
     if (
       studentAction
-        ? me.role !== "student" || r.studentId !== me.id
-        : me.role !== "staff"
+        ? r.studentId !== me.id
+        : !can(me, "course_change.manage")
     )
       throw forbidden();
     const requiredNote = [
@@ -610,7 +611,7 @@ export async function action(
       },
     );
     await notifyCc(tx, {
-      userIds: me.role === "student" ? await activeAdminIds(tx) : [r.studentId],
+      userIds: me.id === r.studentId ? await usersWithPermission("course_change.manage", tx) : [r.studentId],
       event:
         body.action === "complete"
           ? "completed"
@@ -660,8 +661,10 @@ export async function uploadFile(
   await validatePdf(data);
   await prisma.$transaction(async (tx) => {
     const r = await lockedRequest(tx, id, revision, me);
+    // Only the managing staff or the request's own student may attach files (view-only staff cannot).
+    if (!can(me, "course_change.manage") && r.studentId !== me.id) throw forbidden();
     if (
-      me.role === "student" &&
+      !can(me, "course_change.manage") &&
       (kind === "signed_petition" ||
         !["staff_review", "student_revision", "student_external"].includes(
           r.phase!,
@@ -669,7 +672,7 @@ export async function uploadFile(
     )
       throw forbidden("ไม่สามารถแนบเอกสารชนิดนี้ในขั้นตอนปัจจุบัน");
     if (
-      me.role === "staff" &&
+      can(me, "course_change.manage") &&
       kind === "signed_petition" &&
       r.phase !== "awaiting_signature"
     )
@@ -720,7 +723,7 @@ export async function mergeFiles(
       !(r.workflowPlan as unknown as Plan).needsMerge
     )
       throw conflict("คำร้องนี้ยังไม่อยู่ในขั้นรวมสองฉบับ");
-    if (me.role !== "student")
+    if (r.studentId !== me.id)
       throw forbidden("ให้นิสิตตรวจและรวมเอกสารของตนเอง");
     const files = await tx.courseChangeFile.findMany({
       where: { requestId: id, id: { in: ids } },
@@ -801,7 +804,7 @@ export async function downloadFile(
     where: { id: fileId, requestId: id },
   });
   if (!file) throw notFound("ไม่พบเอกสาร");
-  if (me.role === "student" && file.kind === "signed_petition") {
+  if (!isCcStaff(me) && file.kind === "signed_petition") {
     const request = await loadVisible(id, me);
     const released = request.events.flatMap(
       (e) =>

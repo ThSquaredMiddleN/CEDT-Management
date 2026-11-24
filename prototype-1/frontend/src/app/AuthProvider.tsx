@@ -5,7 +5,7 @@ import { fetchMe } from "@/api/endpoints";
 import { ApiError } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { qk } from "@/api/queryKeys";
-import type { Role, User } from "@/api/types";
+import type { User } from "@/api/types";
 
 interface AuthContextValue {
   user: User | null;
@@ -15,9 +15,8 @@ const AuthContext = createContext<AuthContextValue>({ user: null });
 
 export const useAuth = () => useContext(AuthContext);
 
-// Everyone lands on the portal home (news and announcements). `role` stays so a role-specific
-// landing page can come back without touching the callers.
-export const roleLanding = (_role?: Role): string => "/";
+// Everyone lands on the portal home (news and announcements).
+export const roleLanding = (): string => "/";
 
 /** Full-page splash while the session bootstraps — never a blank screen. */
 function Splash() {

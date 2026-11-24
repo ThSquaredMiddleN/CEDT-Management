@@ -11,7 +11,7 @@ let app: FastifyInstance;
 beforeAll(async () => {
   app = await buildApp();
   await app.ready();
-  await prisma.user.create({ data: { email, name: "MCV only", role: "student" } });
+  await prisma.user.create({ data: { email, name: "MCV only" } });
 });
 
 afterAll(async () => {

@@ -25,6 +25,7 @@ import {
 } from "@/api/endpoints";
 import type { CalendarOccurrence } from "@/api/types";
 import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { useToast } from "@/app/toast";
 import { RejectDialog } from "@/features/admin-dashboard/RejectDialog";
 import { EmptyState, ErrorCard, StatusBadge } from "@/components/states";
@@ -54,9 +55,12 @@ export function CalendarPage() {
   const toast = useToast();
   const [params, setParams] = useSearchParams();
 
-  // Single `staff` role: any logged-in user has full (formerly admin) powers; anonymous
-  // visitors get a read-only calendar with no action controls.
-  const isAdmin = !!user;
+  // Approve / cancel / move need bookings.manage; the booking form needs bookings.use; booking
+  // details open only for users who can see bookings. Anonymous visitors get a read-only calendar.
+  const isAdmin = can(user, "bookings.manage");
+  const canCreate = can(user, "bookings.use");
+  const canSeeBookings = canCreate || can(user, "bookings.view") || isAdmin;
+  const canFilterStatus = can(user, "bookings.view") || isAdmin;
 
   // All view state lives in the URL, so a calendar view is shareable and survives reload.
   const view = (params.get("view") as "weekly" | "daily") ?? "weekly";
@@ -97,7 +101,9 @@ export function CalendarPage() {
 
   const rooms = useRooms({ active: "true" });
   const buildings = useBuildings();
-  const instructors = useUsers({ role: "staff", active: "true" }, { enabled: !!user });
+  // GET /users needs core.users.view; without it the instructor filter is hidden.
+  const canFilterInstructor = can(user, "core.users.view");
+  const instructors = useUsers({ permission: "bookings.use", active: "true" }, { enabled: canFilterInstructor });
 
   const ghost = useBooking(ghostId);
   const approve = useApproveBooking();
@@ -367,7 +373,7 @@ export function CalendarPage() {
             options={roomOptions}
           />
           {/* Instructor and Status filters are staff-only — the public view is approved-only. */}
-          {user && (
+          {canFilterInstructor && (
           <FilterDropdown
             label="Instructor"
             icon={UserIcon}
@@ -380,7 +386,7 @@ export function CalendarPage() {
             }))}
           />
           )}
-          {user && (
+          {canFilterStatus && (
           <FilterDropdown
             label="Status"
             icon={CircleCheck}
@@ -449,8 +455,8 @@ export function CalendarPage() {
             occurrences={occurrences}
             ghosts={ghosts}
             isLoading={calendar.isPending}
-            onOccurrenceClick={user ? setSelected : () => {}}
-            onEmptySlotClick={user ? onEmptySlot : () => {}}
+            onOccurrenceClick={canSeeBookings ? setSelected : () => {}}
+            onEmptySlotClick={canCreate ? onEmptySlot : () => {}}
           />
 
           {calendar.isSuccess && occurrences.length === 0 && (
@@ -683,7 +689,7 @@ function BookingDetailDialog({
     <Dialog open={!!occurrence} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         {!b ? (
-          <EmptyState title="Loading booking…" />
+          <EmptyState title={detail.isError ? "ไม่สามารถดูรายละเอียดการจองนี้ได้" : "Loading booking…"} />
         ) : (
           <>
             <DialogHeader>

@@ -2,10 +2,20 @@ import argon2 from "argon2";
 import type { Prisma } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { usersWithPermission } from "../../core/permissions.js";
 import { prisma } from "../../db.js";
 import { duplicate, isUniqueViolation, needsConfirm, notFound } from "../../lib/errors.js";
 import { dateFromISO, hhmm, isoDate, todayISO } from "../../lib/time.js";
 import { requireUser } from "../../plugins/auth.js";
+
+/** Names of the user's active roles, as returned by GET /users. */
+async function activeRoleNames(userId: string): Promise<string[]> {
+  const rows = await prisma.userRoleAssignment.findMany({
+    where: { userId, role: { isActive: true } },
+    select: { role: { select: { name: true } } },
+  });
+  return rows.map((a) => a.role.name);
+}
 
 const idParam = z.object({ id: z.string().uuid() });
 
@@ -94,14 +104,12 @@ const userCreate = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   titlePrefix: z.string().nullable().optional(),
-  role: z.enum(["staff"]).default("staff"),
   password: z.string().min(8),
 });
 const userPatch = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
   titlePrefix: z.string().nullable().optional(),
-  role: z.enum(["staff"]).optional(),
   isActive: z.boolean().optional(),
   password: z.string().min(8).optional(),
 });
@@ -125,7 +133,7 @@ const serializeTerm = (t: {
 
 export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
   // ------------------------------------------------------------------ courses
-  app.get("/courses", { config: { auth: "any" } }, async (req) => {
+  app.get("/courses", { config: { auth: "user" } }, async (req) => {
     const q = z
       .object({ q: z.string().optional(), active: z.string().optional() })
       .parse(req.query);
@@ -162,7 +170,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post("/courses", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/courses", { config: { auth: "user", permission: "masterdata.manage" } }, async (req, reply) => {
     const body = courseCreate.parse(req.body);
     try {
       const c = await prisma.course.create({
@@ -176,7 +184,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch("/courses/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/courses/:id", { config: { auth: "user", permission: "masterdata.manage" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     const { confirm, ...body } = coursePatch.parse(req.body);
 
@@ -233,7 +241,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post("/rooms", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/rooms", { config: { auth: "user", permission: "masterdata.manage" } }, async (req, reply) => {
     const body = roomCreate.parse(req.body);
     try {
       const room = await prisma.room.create({ data: body, include: { building: true } });
@@ -244,7 +252,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch("/rooms/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/rooms/:id", { config: { auth: "user", permission: "masterdata.manage" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     const { confirm, ...body } = roomPatch.parse(req.body);
 
@@ -269,7 +277,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     items: await prisma.building.findMany({ orderBy: { code: "asc" } }),
   }));
 
-  app.post("/buildings", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/buildings", { config: { auth: "user", permission: "masterdata.manage" } }, async (req, reply) => {
     const body = buildingCreate.parse(req.body);
     try {
       return reply.code(201).send({ building: await prisma.building.create({ data: body }) });
@@ -279,7 +287,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch("/buildings/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/buildings/:id", { config: { auth: "user", permission: "masterdata.manage" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = buildingPatch.parse(req.body);
     try {
@@ -298,7 +306,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     return { items: items.map(serializeTerm) };
   });
 
-  app.post("/terms", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/terms", { config: { auth: "user", permission: "masterdata.manage" } }, async (req, reply) => {
     const body = termCreate.parse(req.body);
     const term = await prisma.$transaction(async (tx) => {
       // Only one term may be active (partial unique index enforces it).
@@ -318,7 +326,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send({ term: serializeTerm(term) });
   });
 
-  app.patch("/terms/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/terms/:id", { config: { auth: "user", permission: "masterdata.manage" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = termPatch.parse(req.body);
 
@@ -345,57 +353,68 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // -------------------------------------------------------------------- users
-  app.get("/users", { config: { auth: "any" } }, async (req) => {
+  app.get("/users", { config: { auth: "user", permission: "core.users.view" } }, async (req) => {
     requireUser(req);
     const q = z
       .object({
-        role: z.enum(["staff"]).optional(),
+        permission: z.string().optional(),
         active: z.string().optional(),
         q: z.string().optional(),
       })
       .parse(req.query);
 
     const where: Prisma.UserWhereInput = {};
-    if (q.role) where.role = q.role;
     if (q.active === "true") where.isActive = true;
     if (q.active === "false") where.isActive = false;
     if (q.q) where.name = { contains: q.q, mode: "insensitive" };
+    if (q.permission) where.id = { in: await usersWithPermission(q.permission) };
 
-    const users = await prisma.user.findMany({ where, orderBy: { name: "asc" } });
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: { name: "asc" },
+      include: { roles: { where: { role: { isActive: true } }, include: { role: { select: { name: true } } } } },
+    });
 
-    // Single `staff` role: every authenticated user gets the full projection.
     return {
       items: users.map((u) => ({
         id: u.id,
         name: u.name,
         titlePrefix: u.titlePrefix,
         email: u.email,
-        role: u.role,
+        roles: u.roles.map((a) => a.role.name),
         isActive: u.isActive,
         createdAt: u.createdAt.toISOString(),
       })),
     };
   });
 
-  app.post("/users", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/users", { config: { auth: "user", permission: "core.users.manage" } }, async (req, reply) => {
     const body = userCreate.parse(req.body);
     try {
-      const user = await prisma.user.create({
-        data: {
-          name: body.name,
-          email: body.email,
-          titlePrefix: body.titlePrefix ?? null,
-          role: body.role,
-          passwordHash: await argon2.hash(body.password, { type: argon2.argon2id }),
-        },
+      const user = await prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            name: body.name,
+            email: body.email,
+            titlePrefix: body.titlePrefix ?? null,
+            passwordHash: await argon2.hash(body.password, { type: argon2.argon2id }),
+          },
+        });
+        // New accounts get the legacy staff role; IT Admin adjusts it on /admin/access (step 5b).
+        const staff = await tx.role.findUniqueOrThrow({ where: { key: "staff" } });
+        await tx.userRoleAssignment.create({
+          data: { userId: created.id, roleId: staff.id, grantedById: requireUser(req).id },
+        });
+        return created;
       });
+      const roles = await activeRoleNames(user.id);
       return reply.code(201).send({
         user: {
           id: user.id,
           name: user.name,
           titlePrefix: user.titlePrefix,
           email: user.email,
-          role: user.role,
+          roles,
           isActive: user.isActive,
         },
       });
@@ -405,7 +424,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch("/users/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/users/:id", { config: { auth: "user", permission: "core.users.manage" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = userPatch.parse(req.body);
 
@@ -420,7 +439,6 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
             name: body.name,
             email: body.email,
             titlePrefix: body.titlePrefix,
-            role: body.role,
             isActive: body.isActive,
             ...(body.password
               ? { passwordHash: await argon2.hash(body.password, { type: argon2.argon2id }) }
@@ -440,7 +458,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
           name: user.name,
           titlePrefix: user.titlePrefix,
           email: user.email,
-          role: user.role,
+          roles: await activeRoleNames(user.id),
           isActive: user.isActive,
         },
       };

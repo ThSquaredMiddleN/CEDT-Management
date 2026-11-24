@@ -2,6 +2,8 @@ import { BookOpen, Building2, CalendarRange, DoorOpen, Pencil, Plus, Search, Use
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ApiError } from "@/api/client";
+import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import {
   useBuildings,
   useCourses,
@@ -82,7 +84,14 @@ export function MasterDataPage() {
   const [params, setParams] = useSearchParams();
   const toast = useToast();
 
-  const tab = (params.get("tab") as TabKey) ?? "courses";
+  const { user } = useAuth();
+  // GET /users needs core.users.view; creating and editing users needs core.users.manage.
+  const canViewUsers = can(user, "core.users.view");
+  const canManageUsers = can(user, "core.users.manage");
+  const visibleTabs = TABS.filter((t) => t.key !== "users" || canViewUsers);
+  const requestedTab = (params.get("tab") as TabKey) ?? "courses";
+  const tab: TabKey = visibleTabs.some((t) => t.key === requestedTab) ? requestedTab : "courses";
+  const canEdit = tab !== "users" || canManageUsers;
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<RowLike | null>(null);
   const [creating, setCreating] = useState(false);
@@ -96,10 +105,10 @@ export function MasterDataPage() {
   const courses = useCourses({ active: "all" });
   const rooms = useRooms();
   const buildings = useBuildings();
-  const users = useUsers();
+  const users = useUsers({}, { enabled: canViewUsers });
   const terms = useTerms();
 
-  const activeInstructors = useUsers({ role: "staff", active: "true" });
+  const activeInstructors = useUsers({ permission: "bookings.use", active: "true" }, { enabled: canViewUsers });
 
   const resource: Record<TabKey, string> = {
     courses: "courses",
@@ -204,7 +213,6 @@ export function MasterDataPage() {
       { name: "code", label: "Building Code", type: "text", required: true },
       { name: "name", label: "Building Name", type: "text", required: true },
     ],
-    // Single `staff` role: no role picker — new accounts default to staff on the backend.
     users: [
       { name: "name", label: "Name", type: "text", required: true },
       { name: "titlePrefix", label: "Title", type: "text" },
@@ -223,7 +231,7 @@ export function MasterDataPage() {
     <>
       <div className="border-b border-neutral-200 px-8">
         <div className="flex gap-6">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setParams({ tab: t.key }, { replace: true })}
@@ -258,10 +266,12 @@ export function MasterDataPage() {
                 className="pl-9"
               />
             </div>
-            <Button onClick={() => setCreating(true)}>
-              <Plus className="size-4" />
-              Add
-            </Button>
+            {canEdit && (
+              <Button onClick={() => setCreating(true)}>
+                <Plus className="size-4" />
+                Add
+              </Button>
+            )}
           </div>
         </div>
 
@@ -276,10 +286,12 @@ export function MasterDataPage() {
             <EmptyState
               title="Nothing here yet."
               action={
-                <Button onClick={() => setCreating(true)}>
-                  <Plus className="size-4" />
-                  Add
-                </Button>
+                canEdit ? (
+                  <Button onClick={() => setCreating(true)}>
+                    <Plus className="size-4" />
+                    Add
+                  </Button>
+                ) : undefined
               }
             />
           ) : (
@@ -311,7 +323,7 @@ export function MasterDataPage() {
                     <>
                       <TableHead className="pl-6">Name</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
+                      <TableHead>บทบาท</TableHead>
                     </>
                   )}
                   {tab === "terms" && (
@@ -362,7 +374,7 @@ export function MasterDataPage() {
                         <TableCell className="text-neutral-500">{String(row.email ?? "")}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="capitalize font-normal">
-                            {String(row.role ?? "")}
+                            {(row.roles as string[] | undefined)?.join(", ") || "—"}
                           </Badge>
                         </TableCell>
                       </>
@@ -382,14 +394,17 @@ export function MasterDataPage() {
                     <TableCell>
                       <Switch
                         checked={row.isActive !== false}
+                        disabled={!canEdit}
                         onCheckedChange={(next) => toggleActive(row, next)}
                       />
                     </TableCell>
 
                     <TableCell className="pr-6 text-right">
-                      <Button variant="ghost" size="icon-sm" onClick={() => setEditing(row)}>
-                        <Pencil className="size-4" />
-                      </Button>
+                      {canEdit && (
+                        <Button variant="ghost" size="icon-sm" onClick={() => setEditing(row)}>
+                          <Pencil className="size-4" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

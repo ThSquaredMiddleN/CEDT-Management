@@ -64,7 +64,7 @@ async function readUpload(req: FastifyRequest): Promise<{ file?: UploadedFile; f
 }
 
 export async function receiptRoutes(app: FastifyInstance): Promise<void> {
-  app.post("/receipts/check", { config: { auth: "any" } }, async (req, reply) => {
+  app.post("/receipts/check", { config: { auth: "user", permission: "receipts.manage" } }, async (req, reply) => {
     const me = requireUser(req);
     const { file, fields } = await readUpload(req);
     if (!file) throw badRequest("A `file` field is required");
@@ -86,13 +86,13 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get("/receipts", { config: { auth: "any" } }, async (req) => {
+  app.get("/receipts", { config: { auth: "user", permission: "receipts.view" } }, async (req) => {
     requireUser(req);
     const query = parseOr400(listQuerySchema, req.query, "Invalid filter");
     return { items: await listReceiptChecks(query) };
   });
 
-  app.delete("/receipts/:id", { config: { auth: "any" } }, async (req, reply) => {
+  app.delete("/receipts/:id", { config: { auth: "user", permission: "receipts.manage" } }, async (req, reply) => {
     requireUser(req);
     const { id } = parseOr400(idParamSchema, req.params, "Invalid receipt check id");
     await deleteReceiptCheck(id);

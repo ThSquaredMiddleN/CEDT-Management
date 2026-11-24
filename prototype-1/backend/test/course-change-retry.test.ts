@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { config } from "../src/config.js";
+import { usersWithPermission } from "../src/core/permissions.js";
 import { prisma } from "../src/db.js";
 
 let app: FastifyInstance;
@@ -62,7 +63,7 @@ describe("submission recovery", () => {
     expect(results[1].json().request.id).toBe(id);
     expect(await prisma.courseChangeRequest.count({ where: { courseId } })).toBe(1);
     expect(await prisma.courseChangeEvent.count({ where: { requestId: id, eventType: "submitted" } })).toBe(1);
-    expect(await prisma.notification.count({ where: { module: "course_change", subjectId: id, type: "course_change.submitted" } })).toBe(await prisma.user.count({where:{role:"staff",isActive:true}}));
+    expect(await prisma.notification.count({ where: { module: "course_change", subjectId: id, type: "course_change.submitted" } })).toBe((await usersWithPermission("course_change.manage")).length);
   });
   it("recovers the same request after the deadline instead of submitting again", async () => {
     const body = payload();

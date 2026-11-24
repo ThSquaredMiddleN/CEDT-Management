@@ -1,5 +1,6 @@
 import { deflateSync } from "node:zlib";
 import argon2 from "argon2";
+import { loadSessionUser } from "../src/core/permissions.js";
 import { prisma } from "../src/db.js";
 import type { SessionUser } from "../src/plugins/auth.js";
 import { approveBooking, createBooking, rejectBooking } from "../src/modules/bookings/service.js";
@@ -7,6 +8,8 @@ import type { BookingInput } from "../src/modules/bookings/schemas.js";
 import { addNewsImages } from "../src/modules/news/service.js";
 import { dateFromISO } from "../src/lib/time.js";
 import { seedCourseChange } from "./seed-course-change.js";
+import { assignRole } from "../src/core/permissions.js";
+import { seedTestAccounts } from "./seed-test-accounts.js";
 
 /**
  * Seeds the dataset the wireframes were designed against (§9). Idempotent: every write is
@@ -84,34 +87,36 @@ function createPlaceholderPng(
 async function main() {
   // ------------------------------------------------------------------- users
   const users = [
-    { name: "Waraporn K.", titlePrefix: null, email: "admin@cedt.edu", password: "admin1234", role: "staff" as const },
-    { name: "Somchai P.", titlePrefix: "Dr.", email: "somchai@cedt.edu", password: "instr1234", role: "staff" as const },
-    { name: "Anucha T.", titlePrefix: "Dr.", email: "anucha@cedt.edu", password: "instr1234", role: "staff" as const },
-    { name: "Pimchanok R.", titlePrefix: "Asst. Prof.", email: "pimchanok@cedt.edu", password: "instr1234", role: "staff" as const },
-    { name: "Krit W.", titlePrefix: "Dr.", email: "krit@cedt.edu", password: "instr1234", role: "staff" as const },
+    { name: "Waraporn K.", titlePrefix: null, email: "admin@cedt.edu", password: "admin1234" },
+    { name: "Somchai P.", titlePrefix: "Dr.", email: "somchai@cedt.edu", password: "instr1234" },
+    { name: "Anucha T.", titlePrefix: "Dr.", email: "anucha@cedt.edu", password: "instr1234" },
+    { name: "Pimchanok R.", titlePrefix: "Asst. Prof.", email: "pimchanok@cedt.edu", password: "instr1234" },
+    { name: "Krit W.", titlePrefix: "Dr.", email: "krit@cedt.edu", password: "instr1234" },
   ];
 
+  const userRows: Record<string, { id: string }> = {};
   const userByEmail: Record<string, SessionUser> = {};
   for (const u of users) {
     const row = await prisma.user.upsert({
       where: { email: u.email },
-      update: { name: u.name, titlePrefix: u.titlePrefix, role: u.role, isActive: true },
+      update: { name: u.name, titlePrefix: u.titlePrefix, isActive: true },
       create: {
         name: u.name,
         titlePrefix: u.titlePrefix,
         email: u.email,
-        role: u.role,
         passwordHash: await hash(u.password),
       },
     });
-    userByEmail[u.email] = {
-      id: row.id,
-      name: row.name,
-      email: row.email,
-      role: row.role,
-      titlePrefix: row.titlePrefix,
-      studentNo: row.studentNo,
-    };
+    userRows[u.email] = { id: row.id };
+  }
+
+  // Roles (step 5a): the demo admin is staff + IT admin; instructors keep the legacy staff role.
+  for (const u of users) await assignRole(prisma, userRows[u.email]!.id, "staff");
+  await assignRole(prisma, userRows["admin@cedt.edu"]!.id, "it_admin");
+  await seedTestAccounts(prisma, hash);
+  for (const u of users) {
+    const r = userRows[u.email]!;
+    userByEmail[u.email] = (await loadSessionUser(r.id))!;
   }
 
   const admin = userByEmail["admin@cedt.edu"]! as SessionUser;

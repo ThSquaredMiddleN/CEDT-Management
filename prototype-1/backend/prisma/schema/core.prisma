@@ -1,10 +1,3 @@
-enum UserRole {
-  staff
-  student
-
-  @@map("user_role")
-}
-
 model User {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email            String    @unique @db.Citext
@@ -12,7 +5,6 @@ model User {
   passwordHash     String?   @map("password_hash")
   name             String
   titlePrefix      String?   @map("title_prefix")
-  role             UserRole
   isActive         Boolean   @default(true) @map("is_active")
   failedLoginCount Int       @default(0) @map("failed_login_count")
   lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(6)
@@ -50,7 +42,12 @@ model User {
   courseChangeFilesUploaded    CourseChangeFile[]
   courseChangeSignatureBatches CourseChangeSignatureBatch[]
 
-  @@index([role, isActive])
+  roles              UserRoleAssignment[] @relation("userRoles")
+  rolesGranted       UserRoleAssignment[] @relation("rolesGranted")
+  permissions        UserPermission[]     @relation("userPermissions")
+  permissionsGranted UserPermission[]     @relation("permissionsGranted")
+
+  @@index([isActive])
   @@map("users")
 }
 
@@ -145,14 +142,14 @@ model Notification {
 /// in the migration. `action` is "<module>.<thing>.<verb>" (checked in core/audit.ts); secrets are stripped there too.
 model AuditLog {
   id          BigInt   @id @default(autoincrement())
-  actorId     String?  @map("actor_id") @db.Uuid    // ว่างถ้าระบบเป็นผู้ทำ เช่น งานลบตาม retention
+  actorId     String?  @map("actor_id") @db.Uuid // ว่างถ้าระบบเป็นผู้ทำ เช่น งานลบตาม retention
   module      String
-  action      String                                // "<module>.<สิ่งของ>.<การกระทำ>" เช่น "storage.request.approved"
-  subjectType String   @map("subject_type")         // "storage_request"
+  action      String // "<module>.<สิ่งของ>.<การกระทำ>" เช่น "storage.request.approved"
+  subjectType String   @map("subject_type") // "storage_request"
   subjectId   String   @map("subject_id")
   before      Json?
   after       Json?
-  note        String?                               // เช่น จำนวนแถวที่ลบตาม retention
+  note        String? // เช่น จำนวนแถวที่ลบตาม retention
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   actor User? @relation(fields: [actorId], references: [id], onDelete: Restrict)
@@ -239,4 +236,67 @@ model GroupMember {
   @@id([groupId, studentNo])
   @@index([studentNo])
   @@map("group_members")
+}
+
+/// A named set of permissions (a preset that stays attached to its users). Never deleted:
+/// is_active = false. System roles come from migrations; their key cannot change.
+model Role {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// e.g. "it_admin", "student", "teacher". ^[a-z][a-z0-9_]{1,40}$
+  key         String   @unique
+  name        String
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  permissions RolePermission[]
+  users       UserRoleAssignment[]
+
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId     String   @map("role_id") @db.Uuid
+  /// A name some module declares in code (see permissionCatalog).
+  permission String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permission])
+  @@map("role_permissions")
+}
+
+/// user_roles. Named UserRoleAssignment so it does not clash with the old UserRole enum.
+/// The "student" role is never stored here: it comes from users.student_no.
+model UserRoleAssignment {
+  userId      String   @map("user_id") @db.Uuid
+  roleId      String   @map("role_id") @db.Uuid
+  grantedById String?  @map("granted_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user      User  @relation("userRoles", fields: [userId], references: [id], onDelete: Restrict)
+  role      Role  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  grantedBy User? @relation("rolesGranted", fields: [grantedById], references: [id], onDelete: Restrict)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+/// A permission given to one person directly (add-only, no deny). A reason is required.
+model UserPermission {
+  userId      String   @map("user_id") @db.Uuid
+  permission  String
+  reason      String
+  grantedById String?  @map("granted_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user      User  @relation("userPermissions", fields: [userId], references: [id], onDelete: Restrict)
+  grantedBy User? @relation("permissionsGranted", fields: [grantedById], references: [id], onDelete: Restrict)
+
+  @@id([userId, permission])
+  @@map("user_permissions")
 }

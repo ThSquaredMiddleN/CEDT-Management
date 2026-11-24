@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { can } from "../../core/permissions.js";
 import { requireUser } from "../../plugins/auth.js";
 import { badRequest } from "../../lib/errors.js";
 import {
@@ -99,34 +100,34 @@ async function readMultipart(
 
 export async function newsRoutes(app: FastifyInstance): Promise<void> {
   app.get("/news", { config: { auth: "public" } }, async (req) =>
-    listNews({ publishedOnly: !req.user }),
+    listNews({ publishedOnly: !can(req.user, "news.view") }),
   );
 
   app.get("/news/:id", { config: { auth: "public" } }, async (req) => {
     const { id } = newsIdSchema.parse(req.params);
-    return getNews(id, { publishedOnly: !req.user });
+    return getNews(id, { publishedOnly: !can(req.user, "news.view") });
   });
 
-  app.post("/news", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/news", { config: { auth: "user", permission: "news.manage" } }, async (req, reply) => {
     const { fields, images } = await readMultipart(req, true);
     const newsFields = parseNewsMultipartFields(fields);
     const user = requireUser(req);
     return reply.code(201).send(await createNews(user.id, newsFields, images));
   });
 
-  app.patch("/news/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/news/:id", { config: { auth: "user", permission: "news.manage" } }, async (req) => {
     const { id } = newsIdSchema.parse(req.params);
     const fields = newsUpdateSchema.parse(req.body);
     return updateNews(id, fields);
   });
 
-  app.post("/news/:id/images", { config: { auth: "admin" } }, async (req) => {
+  app.post("/news/:id/images", { config: { auth: "user", permission: "news.manage" } }, async (req) => {
     const { id } = newsIdSchema.parse(req.params);
     const { images } = await readMultipart(req, false);
     return addNewsImages(id, images);
   });
 
-  app.delete("/news/:id/images/:imageId", { config: { auth: "admin" } }, async (req) => {
+  app.delete("/news/:id/images/:imageId", { config: { auth: "user", permission: "news.manage" } }, async (req) => {
     const { id, imageId } = newsImageIdSchema.parse(req.params);
     const { storageKey } = await removeNewsImageRecord(id, imageId);
     try {
@@ -139,7 +140,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/news/:id/images/:imageId", { config: { auth: "public" } }, async (req, reply) => {
     const { id, imageId } = newsImageIdSchema.parse(req.params);
-    const image = await getNewsImageRecord(id, imageId, { publishedOnly: !req.user });
+    const image = await getNewsImageRecord(id, imageId, { publishedOnly: !can(req.user, "news.view") });
     const bytes = await readNewsImage(image.storageKey);
     return reply
       .type(image.mimeType)
@@ -149,7 +150,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
       .send(bytes);
   });
 
-  app.post("/news/:id/publish", { config: { auth: "admin" } }, async (req) => {
+  app.post("/news/:id/publish", { config: { auth: "user", permission: "news.manage" } }, async (req) => {
     const { id } = newsIdSchema.parse(req.params);
     return publishNews(id);
   });

@@ -61,24 +61,24 @@ const bulkSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(50) });
 
 /** Course Change API — docs/course-change/DESIGN.md §8. */
 export async function courseChangeRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/course-change/signature-batches", {config:{auth:"admin"}}, signatureBatches);
-  app.get("/course-change/signature-batches/:id", {config:{auth:"admin"}}, req => signatureBatch(idParam.parse(req.params).id));
-  app.post("/course-change/signature-batches", {config:{auth:"admin"}}, req => createSignatureBatch(signatureBatchSchema.parse(req.body), requireUser(req)));
+  app.get("/course-change/signature-batches", { config: { auth: "user", permission: "course_change.view" } }, signatureBatches);
+  app.get("/course-change/signature-batches/:id", { config: { auth: "user", permission: "course_change.view" } }, req => signatureBatch(idParam.parse(req.params).id));
+  app.post("/course-change/signature-batches", { config: { auth: "user", permission: "course_change.manage" } }, req => createSignatureBatch(signatureBatchSchema.parse(req.body), requireUser(req)));
 
-  app.get("/course-change/schedules", { config: { auth: "admin" } }, schedules);
-  app.post("/course-change/schedules", { config: { auth: "admin" } }, req => saveSchedule(scheduleSchema.parse(req.body), requireUser(req)));
-  app.post("/course-change/requests/:id/workflow", { config: { auth: "user" } }, async req => {
+  app.get("/course-change/schedules", { config: { auth: "user", permission: "course_change.view" } }, schedules);
+  app.post("/course-change/schedules", { config: { auth: "user", permission: "course_change.manage" } }, req => saveSchedule(scheduleSchema.parse(req.body), requireUser(req)));
+  app.post("/course-change/requests/:id/workflow", { config: { auth: "user", permission: null } }, async req => {
     const { id } = idParam.parse(req.params);
     return { request: await action(id, actionSchema.parse(req.body), requireUser(req)) };
   });
-  app.post("/course-change/requests/:id/files", { config: { auth: "user" } }, async req => {
+  app.post("/course-change/requests/:id/files", { config: { auth: "user", permission: null } }, async req => {
     const { id } = idParam.parse(req.params);
     const { revision, kind } = z.object({ revision: z.coerce.number().int().nonnegative(), kind: z.enum(FILE_KINDS) }).parse(req.query);
     const part = await req.file({ limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0 } });
     if (!part) throw validation("กรุณาแนบไฟล์ PDF");
     return { request: await uploadFile(id, revision, kind, part.filename, await part.toBuffer(), requireUser(req)) };
   });
-  app.post("/course-change/requests/:id/merge", { config: { auth: "student" } }, async req => {
+  app.post("/course-change/requests/:id/merge", { config: { auth: "user", permission: "course_change.use" } }, async req => {
     const { id } = idParam.parse(req.params);
     const { revision, ids } = z.object({ revision: z.number().int().nonnegative(), ids: z.array(z.string().uuid()).length(2) }).parse(req.body);
     return { request: await mergeFiles(id, revision, ids, requireUser(req)) };
@@ -90,27 +90,27 @@ export async function courseChangeRoutes(app: FastifyInstance): Promise<void> {
       .header("Content-Disposition", `attachment; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(file.filename)}`).send(Buffer.from(file.data));
   });
 
-  app.get("/course-change/submissions/:id", { config: { auth: "student" } }, async (req) => {
+  app.get("/course-change/submissions/:id", { config: { auth: "user", permission: "course_change.use" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     return { request: await recoverSubmission(id, requireUser(req)) };
   });
-  app.get("/course-change/request-groups", { config: { auth: "admin" } }, async (req) => {
+  app.get("/course-change/request-groups", { config: { auth: "user", permission: "course_change.view" } }, async (req) => {
     return requestGroups(listSchema.parse(req.query), requireUser(req));
   });
-  app.get("/course-change/settings", { config: { auth: "admin" } }, () => getSettings());
-  app.post("/course-change/settings", { config: { auth: "admin" } }, (req) =>
+  app.get("/course-change/settings", { config: { auth: "user", permission: "course_change.view" } }, () => getSettings());
+  app.post("/course-change/settings", { config: { auth: "user", permission: "course_change.manage" } }, (req) =>
     saveSettings(settingsSchema.parse(req.body), requireUser(req)));
   app.get("/course-change/context", { config: { auth: "user" } }, async () =>
     getContext(ccToday()),
   );
 
-  app.get("/course-change/eligible-courses", { config: { auth: "student" } }, async (req) => {
+  app.get("/course-change/eligible-courses", { config: { auth: "user", permission: "course_change.use" } }, async (req) => {
     const me = requireUser(req);
     const { type } = z.object({ type: requestType }).parse(req.query);
     return eligibleCourses(me, type, ccToday());
   });
 
-  app.post("/course-change/requests", { config: { auth: "student" } }, async (req, reply) => {
+  app.post("/course-change/requests", { config: { auth: "user", permission: "course_change.use" } }, async (req, reply) => {
     const me = requireUser(req);
     const input = submitSchema.parse(req.body);
     return reply.code(201).send({ request: await submitRequest(input, me, ccToday()) });
@@ -127,14 +127,14 @@ export async function courseChangeRoutes(app: FastifyInstance): Promise<void> {
     return { request: await getRequest(id, me) };
   });
 
-  app.post("/course-change/requests/:id/cancel", { config: { auth: "student" } }, async (req) => {
+  app.post("/course-change/requests/:id/cancel", { config: { auth: "user", permission: "course_change.use" } }, async (req) => {
     const me = requireUser(req);
     const { id } = idParam.parse(req.params);
     return { request: await cancelRequest(id, me) };
   });
 
   // ------------------------------------------------------------- staff only
-  app.post("/course-change/requests/bulk-review", { config: { auth: "admin" } }, async req => {
+  app.post("/course-change/requests/bulk-review", { config: { auth: "user", permission: "course_change.manage" } }, async req => {
     const { items } = z.object({ items: z.array(z.object({ id: z.string().uuid(), revision: z.number().int().nonnegative() })).min(1).max(50) }).parse(req.body);
     const results: {id:string;ok:boolean;message?:string}[] = [];
     for (const item of items) {
@@ -143,26 +143,26 @@ export async function courseChangeRoutes(app: FastifyInstance): Promise<void> {
     }
     return { results };
   });
-  app.post("/course-change/requests/bulk-approve", { config: { auth: "admin" } }, async (req) => {
+  app.post("/course-change/requests/bulk-approve", { config: { auth: "user", permission: "course_change.manage" } }, async (req) => {
     const me = requireUser(req);
     const { ids } = bulkSchema.parse(req.body);
     return bulkApprove(ids, me);
   });
 
-  app.post("/course-change/requests/:id/approve", { config: { auth: "admin" } }, async (req) => {
+  app.post("/course-change/requests/:id/approve", { config: { auth: "user", permission: "course_change.manage" } }, async (req) => {
     const me = requireUser(req);
     const { id } = idParam.parse(req.params);
     return { request: await approveRequest(id, me) };
   });
 
-  app.post("/course-change/requests/:id/reject", { config: { auth: "admin" } }, async (req) => {
+  app.post("/course-change/requests/:id/reject", { config: { auth: "user", permission: "course_change.manage" } }, async (req) => {
     const me = requireUser(req);
     const { id } = idParam.parse(req.params);
     const { reason } = rejectSchema.parse(req.body);
     return { request: await rejectRequest(id, reason, me) };
   });
 
-  app.post("/course-change/requests/:id/complete", { config: { auth: "admin" } }, async (req) => {
+  app.post("/course-change/requests/:id/complete", { config: { auth: "user", permission: "course_change.manage" } }, async (req) => {
     const me = requireUser(req);
     const { id } = idParam.parse(req.params);
     const { note } = completeSchema.parse(req.body ?? {});

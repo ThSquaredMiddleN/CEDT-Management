@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { can } from "../../core/permissions.js";
 import { prisma } from "../../db.js";
 import { validation } from "../../lib/errors.js";
 import { dateFromISO, hhmm, isoDate } from "../../lib/time.js";
@@ -27,7 +28,7 @@ const querySchema = z.object({
 
 export async function calendarRoutes(app: FastifyInstance): Promise<void> {
   // Public: anyone may read the calendar without logging in. Anonymous visitors only ever
-  // see APPROVED bookings; authenticated staff can additionally see pending requests.
+  // see APPROVED bookings; users with bookings.view or bookings.manage can additionally see pending requests.
   app.get("/calendar", { config: { auth: "public" } }, async (req) => {
     const me = req.user;
     const q = querySchema.parse(req.query);
@@ -40,9 +41,9 @@ export async function calendarRoutes(app: FastifyInstance): Promise<void> {
       "approved",
       "pending",
     ]) as ("approved" | "pending")[];
-    // Not staff (anonymous or a student) → approved only, regardless of what was asked for.
+    // Without bookings.view or bookings.manage (anonymous, a student, ...) → approved only, regardless of what was asked for.
     const statuses =
-      me?.role === "staff" ? requested : (["approved"] as ("approved" | "pending")[]);
+      me && (can(me, "bookings.view") || can(me, "bookings.manage")) ? requested : (["approved"] as ("approved" | "pending")[]);
 
     const occurrences = await prisma.bookingOccurrence.findMany({
       where: {
@@ -67,9 +68,8 @@ export async function calendarRoutes(app: FastifyInstance): Promise<void> {
       const b = o.booking;
       const isOwn = me ? b.requestedBy === me.id || b.instructorId === me.id : false;
 
-      // Single `staff` role: every viewer who can see a booking sees it in full. There is no
-      // longer any cross-instructor anonymization — the public simply never receives pending
-      // bookings (filtered above), and staff see everything.
+      // Every viewer who can see a booking sees it in full. There is no cross-instructor
+      // anonymization — only bookings.view / bookings.manage receive pending bookings (filtered above).
       return [
         {
           occurrenceId: o.id,

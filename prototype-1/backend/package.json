@@ -19,6 +19,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset --force",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
+    "roles:grant": "tsx --env-file=.env scripts/grant-role.ts",
     "receipts:purge": "tsx --env-file=.env scripts/receipts-purge.ts",
     "test": "vitest run",
     "test:fresh": "tsx --env-file=.env scripts/test-fresh.ts",

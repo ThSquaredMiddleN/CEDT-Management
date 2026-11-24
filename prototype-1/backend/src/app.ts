@@ -3,7 +3,8 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import Fastify, { type FastifyInstance } from "fastify";
 import { config } from "./config.js";
-import { modules } from "./modules/index.js";
+import { warnUnknownPermissions } from "./core/permissions.js";
+import { modules, permissionCatalog } from "./modules/index.js";
 import type { BuildOptions } from "./modules/types.js";
 import { registerAuth } from "./plugins/auth.js";
 import { registerErrorHandler } from "./plugins/errors.js";
@@ -18,7 +19,11 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
   await app.register(multipart);
 
   registerErrorHandler(app);
-  registerAuth(app);
+  const knownPermissions = new Set(permissionCatalog.map((p) => p.key));
+  registerAuth(app, knownPermissions);
+  app.addHook("onReady", async () => {
+    if (config.NODE_ENV !== "test") await warnUnknownPermissions(app, knownPermissions);
+  });
 
   app.get("/health", { config: { auth: "public" } }, async () => ({ ok: true }));
 

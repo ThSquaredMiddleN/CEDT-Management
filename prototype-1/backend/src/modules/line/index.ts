@@ -7,6 +7,10 @@ import { lineRoutes } from "./routes.js";
 
 export const lineModule: AppModule = {
   name: "line",
+  label: "LINE",
+  permissions: [
+    { key: "line.use", label: "เชื่อมบัญชี LINE" },
+  ],
   async setup(app, opts) {
     // LINE_DRY_RUN: prints each message to this console instead of sending it (see createDryRunLineClient).
     const dryRunClient = lineDryRun ? createDryRunLineClient(app.log) : undefined;

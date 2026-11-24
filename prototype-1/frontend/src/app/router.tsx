@@ -1,11 +1,11 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import type { Role } from "@/api/types";
 import { AdminHome } from "@/features/admin/pages/AdminHome";
 import { AdminLayout } from "@/features/admin/layout/AdminLayout";
 import { StudentHome } from "@/features/student/pages/StudentHome";
 import { PortalLayout } from "@/features/portal/layout/PortalLayout";
-import { roleLanding, useAuth } from "./AuthProvider";
+import { useAuth } from "./AuthProvider";
+import { can, isStaff } from "./permissions";
 import { DeferredPage } from "./DeferredPage";
 
 const AdminDashboard = lazy(() =>
@@ -176,8 +176,20 @@ function PageLoading() {
   );
 }
 
-/** Staff pages are the default; pass `roles` to open a page to students as well. */
-function RequireAuth({ children, roles = ["staff"] }: { children: ReactNode; roles?: Role[] }) {
+function NoAccess() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-32 text-center">
+      <h1 className="text-2xl font-semibold tracking-tight">ไม่มีสิทธิ์เข้าถึง</h1>
+      <p className="text-sm text-neutral-500">บัญชีนี้ยังไม่มีสิทธิ์ใช้หน้านี้ ติดต่อ IT Admin หากต้องการสิทธิ์</p>
+    </div>
+  );
+}
+
+/**
+ * Signed-in users only. `permission` also requires that permission; `staff` requires any
+ * `.view` permission (the /admin layout). Hides pages only: the API checks the same names.
+ */
+function RequireAuth({ children, permission, staff = false }: { children: ReactNode; permission?: string; staff?: boolean }) {
   const { user } = useAuth();
   const location = useLocation();
 
@@ -185,21 +197,21 @@ function RequireAuth({ children, roles = ["staff"] }: { children: ReactNode; rol
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
   }
-  if (!roles.includes(user.role)) return <Navigate to={roleLanding(user.role)} replace />;
+  if ((permission && !can(user, permission)) || (staff && !isStaff(user))) return <NoAccess />;
   return <>{children}</>;
 }
 
 /**
  * Course Change lives at /course-change for students and /admin/course-change for staff (same
- * page, role-specific view). Staff who land on the student URL — e.g. from a notification link —
- * are forwarded to the admin one with the query string intact.
+ * page, permission-specific view). Staff who land on the student URL — e.g. from a notification
+ * link — are forwarded to the admin one with the query string intact.
  */
 function StudentCourseChange() {
   const { user } = useAuth();
   const { search } = useLocation();
-  if (user?.role === "staff") return <Navigate to={`/admin/course-change${search}`} replace />;
+  if (can(user, "course_change.view")) return <Navigate to={`/admin/course-change${search}`} replace />;
   return (
-    <RequireAuth roles={["student"]}>
+    <RequireAuth permission="course_change.use">
       <DeferredPage>
         <CourseChangePage />
       </DeferredPage>
@@ -234,7 +246,7 @@ export function AppRoutes() {
           <Route
             path="requests/new"
             element={
-              <RequireAuth>
+              <RequireAuth permission="bookings.use">
                 <BookingForm />
               </RequireAuth>
             }
@@ -242,7 +254,7 @@ export function AppRoutes() {
           <Route
             path="requests"
             element={
-              <RequireAuth>
+              <RequireAuth permission="bookings.use">
                 <MyRequests />
               </RequireAuth>
             }
@@ -255,11 +267,11 @@ export function AppRoutes() {
           <Route path="news/:id" element={<StudentNewsDetailPage />} />
           {/* Token comes from the LINE chat link. Not wrapped in RequireAuth: the page checks the token before login. */}
           <Route path="line/link" element={<LineLinkPage />} />
-          {/* LINE settings (connect, unlink) for any signed-in user. */}
+          {/* LINE settings (connect, unlink) for anyone with line.use. */}
           <Route
             path="line"
             element={
-              <RequireAuth roles={["staff", "student"]}>
+              <RequireAuth permission="line.use">
                 <LineSettingsPage />
               </RequireAuth>
             }
@@ -271,32 +283,34 @@ export function AppRoutes() {
         <Route
           path="admin"
           element={
-            <RequireAuth>
+            <RequireAuth staff>
               <AdminLayout />
             </RequireAuth>
           }
         >
           <Route index element={<AdminHome />} />
-          <Route path="dashboard" element={<AdminDashboard />} />
-          <Route path="data" element={<MasterDataPage />} />
+          <Route path="dashboard" element={<RequireAuth permission="bookings.view"><AdminDashboard /></RequireAuth>} />
+          <Route path="data" element={<RequireAuth permission="masterdata.manage"><MasterDataPage /></RequireAuth>} />
           <Route
             path="course-change"
             element={
-              <DeferredPage>
-                <CourseChangePage />
-              </DeferredPage>
+              <RequireAuth permission="course_change.view">
+                <DeferredPage>
+                  <CourseChangePage />
+                </DeferredPage>
+              </RequireAuth>
             }
           />
-          <Route path="receipts" element={<ReceiptChecksPage />} />
-          <Route path="line" element={<LineSettingsPage />} />
-          <Route path="announcements" element={<AnnouncementListPage />} />
-          <Route path="announcements/create" element={<AnnouncementCreatePage />} />
-          <Route path="announcements/:id" element={<AnnouncementDetailPage />} />
-          <Route path="announcements/:id/edit" element={<AnnouncementEditPage />} />
-          <Route path="news" element={<NewsListPage />} />
-          <Route path="news/create" element={<NewsCreatePage />} />
-          <Route path="news/:id" element={<NewsDetailPage />} />
-          <Route path="news/:id/edit" element={<NewsEditPage />} />
+          <Route path="receipts" element={<RequireAuth permission="receipts.view"><ReceiptChecksPage /></RequireAuth>} />
+          <Route path="line" element={<RequireAuth permission="line.use"><LineSettingsPage /></RequireAuth>} />
+          <Route path="announcements" element={<RequireAuth permission="announcements.view"><AnnouncementListPage /></RequireAuth>} />
+          <Route path="announcements/create" element={<RequireAuth permission="announcements.manage"><AnnouncementCreatePage /></RequireAuth>} />
+          <Route path="announcements/:id" element={<RequireAuth permission="announcements.view"><AnnouncementDetailPage /></RequireAuth>} />
+          <Route path="announcements/:id/edit" element={<RequireAuth permission="announcements.manage"><AnnouncementEditPage /></RequireAuth>} />
+          <Route path="news" element={<RequireAuth permission="news.view"><NewsListPage /></RequireAuth>} />
+          <Route path="news/create" element={<RequireAuth permission="news.manage"><NewsCreatePage /></RequireAuth>} />
+          <Route path="news/:id" element={<RequireAuth permission="news.view"><NewsDetailPage /></RequireAuth>} />
+          <Route path="news/:id/edit" element={<RequireAuth permission="news.manage"><NewsEditPage /></RequireAuth>} />
           <Route
             path="storage"
             element={

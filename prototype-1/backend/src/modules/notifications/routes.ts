@@ -51,7 +51,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post("/notifications/read", { config: { auth: "user" } }, async (req, reply) => {
+  app.post("/notifications/read", { config: { auth: "user", permission: null } }, async (req, reply) => {
     const me = requireUser(req);
     const body = readSchema.parse(req.body);
 

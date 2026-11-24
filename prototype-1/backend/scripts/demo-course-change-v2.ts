@@ -1,5 +1,6 @@
 import { createDemoScenarios } from "./demo-course-change-scenarios.js";
 import { ccToday } from "../src/modules/course-change/service.js";
+import { loadSessionUser } from "../src/core/permissions.js";
 import { prisma } from "../src/db.js";
 import { isoDate, addDaysISO } from "../src/lib/time.js";
 import { saveSchedule } from "../src/modules/course-change/workflow.js";
@@ -21,12 +22,14 @@ try {
     );
   // Open from today for a week, clipped to the last day of the term.
   const closesOn = [addDaysISO(today, 7), isoDate(term.endDate)].sort()[0]!;
-  const staff = await prisma.user.findUniqueOrThrow({
+  const staffRow = await prisma.user.findUniqueOrThrow({
     where: { email: "admin@cedt.edu" },
   });
+  const staff = (await loadSessionUser(staffRow.id))!;
   const student = await prisma.user.findUniqueOrThrow({
     where: { email: "student3@cedt.edu" },
   });
+  const studentSession = (await loadSessionUser(student.id))!;
   const code = "DEMO-CC-V2";
   const previous = await prisma.course.findUnique({ where: { code } });
   if (previous && previous.catalogSource !== "synthetic-course-change-v2")
@@ -106,7 +109,7 @@ try {
       staff,
     );
   }
-  await createDemoScenarios(term, today, staff, student);
+  await createDemoScenarios(term, today, staff, studentSession);
   console.log(
     `Ready: student3@cedt.edu → DEMO-CC-V2, open ${today} – ${closesOn}. ` +
       "No existing requests or programme schedules were reset.",

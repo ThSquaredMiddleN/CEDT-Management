@@ -23,7 +23,7 @@ import type { SessionUser } from "../../plugins/auth.js";
 import { expandOccurrences, type Candidate } from "../conflicts/expand.js";
 import { findAlternativeRooms, findConflicts, type ConflictEntry } from "../conflicts/find.js";
 import { notify } from "../../core/notify.js";
-import { activeAdminIds } from "../../core/users.js";
+import { can, usersWithPermission } from "../../core/permissions.js";
 import type { BookingInput } from "./schemas.js";
 
 /** In-app links chosen at write time: admins get the queue, instructors and requesters their own list. */
@@ -42,6 +42,16 @@ export type NotifyPayload = {
   endTime: string;
   reason?: string | null;
 };
+
+/**
+ * bookings.view sees every booking; bookings.use sees the ones they requested or teach.
+ * bookings.manage also sees every booking: approving and moving need the full queue.
+ */
+export function bookingVisibility(me: { id: string; permissions: readonly string[] }): Prisma.BookingWhereInput {
+  if (can(me, "bookings.view") || can(me, "bookings.manage")) return {};
+  if (can(me, "bookings.use")) return { OR: [{ requestedBy: me.id }, { instructorId: me.id }] };
+  throw forbidden();
+}
 
 interface Snapshot {
   courseCode: string | null;
@@ -147,15 +157,16 @@ function notifyPayload(b: Booking, snap: Snapshot, reason?: string | null): Noti
 
 /**
  * BR-5 + BR-12: create a booking and materialize its occurrences in ONE transaction.
- * Single `staff` role, so bookings auto-approve by default (approved + blocking rows, guarded
- * by the exclusion constraint). The seed passes `autoApprove: false` to craft pending demo rows.
+ * A requester with bookings.manage is auto-approved (approved + blocking rows, guarded by the
+ * exclusion constraint); one with only bookings.use gets a pending request that notifies every
+ * bookings.manage holder (BR-15). The seed passes `autoApprove: false` to craft pending demo rows.
  */
 export async function createBooking(
   input: BookingInput,
   actor: SessionUser,
   opts: { autoApprove?: boolean } = {},
 ) {
-  const autoApprove = opts.autoApprove ?? true;
+  const autoApprove = opts.autoApprove ?? can(actor, "bookings.manage");
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -236,7 +247,7 @@ export async function createBooking(
       if (!autoApprove) {
         const when = dayOrDate(booking.dayOfWeek, booking.oneOffDate ? isoDate(booking.oneOffDate) : null);
         await notify(tx, {
-          userIds: await activeAdminIds(tx),
+          userIds: await usersWithPermission("bookings.manage", tx),
           type: "bookings.request_submitted",
           module: "bookings",
           subjectId: booking.id,
@@ -400,9 +411,11 @@ export async function cancelBooking(
     });
     if (!booking) throw notFound("Booking not found");
 
-    // Single `staff` role: every authenticated user has full (formerly admin) privileges.
-    const isAdmin = true;
+    // bookings.manage may cancel any booking; otherwise only the requester may withdraw/cancel.
+    const isAdmin = can(actor, "bookings.manage");
     const isOwner = booking.requestedBy === actor.id;
+    // 404 like getBookingDetail, so booking ids cannot be probed.
+    if (!isAdmin && !isOwner) throw notFound("Booking not found");
 
     if (booking.status === "rejected" || booking.status === "cancelled") {
       throw invalidTransition("This request was already actioned.");
@@ -489,7 +502,7 @@ export async function cancelBooking(
         const ageHours = (Date.now() - booking.createdAt.getTime()) / 3_600_000;
         if (ageHours > 24) {
           await notify(tx, {
-            userIds: await activeAdminIds(tx),
+            userIds: await usersWithPermission("bookings.manage", tx),
             type: "bookings.request_withdrawn",
             module: "bookings",
             subjectId: id,
@@ -500,7 +513,7 @@ export async function cancelBooking(
         }
       } else {
         await notify(tx, {
-          userIds: await activeAdminIds(tx),
+          userIds: await usersWithPermission("bookings.manage", tx),
           type: "bookings.booking_cancelled_by_instructor",
           module: "bookings",
           subjectId: id,
@@ -728,10 +741,12 @@ function serializeBooking(b: BookingWithRefs) {
 }
 
 export async function getBookingDetail(id: string, actor: SessionUser, tx: Tx = prisma) {
-  const b = await tx.booking.findUnique({ where: { id }, include: bookingInclude });
+  // bookings.view reads any booking; bookings.use only its own (404 otherwise, so ids cannot be probed).
+  const b = await tx.booking.findFirst({
+    where: { AND: [{ id }, bookingVisibility(actor)] },
+    include: bookingInclude,
+  });
   if (!b) throw notFound("Booking not found");
-
-  // Single `staff` role: any authenticated user may read any booking.
 
   return {
     ...serializeBooking(b),
@@ -771,8 +786,8 @@ export async function listBookings(
   if (query.status) where.status = query.status;
   if (query.termId) where.termId = query.termId;
 
-  // Single `staff` role: staff see every request. "My Requests" opts into own-only scoping
-  // with `mine=true`; the Dashboard queue and calendar filters can scope by instructor/building.
+  // bookings.view sees every request, bookings.use only its own (bookingVisibility). "My Requests"
+  // opts into own-only scoping with `mine=true`; the Dashboard queue and calendar filters can scope by instructor/building.
   if (query.mine) {
     where.requestedBy = actor.id;
   } else {
@@ -785,15 +800,16 @@ export async function listBookings(
       ? { startDate: query.order }
       : { createdAt: query.order };
 
+  const visible: Prisma.BookingWhereInput = { AND: [where, bookingVisibility(actor)] };
   const [rows, total] = await Promise.all([
     prisma.booking.findMany({
-      where,
+      where: visible,
       include: bookingInclude,
       orderBy,
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
     }),
-    prisma.booking.count({ where }),
+    prisma.booking.count({ where: visible }),
   ]);
 
   // Drives the unread dot on My Requests / the queue.
