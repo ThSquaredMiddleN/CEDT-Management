@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { assignRole, usersWithPermission } from "../../src/core/permissions.js";
 import { config } from "../../src/config.js";
 import { prisma } from "../../src/db.js";
 import { createLineClient, type FetchFn, type LineClient } from "../../src/modules/line/client.js";
@@ -48,29 +49,42 @@ const tally = (over: Partial<DispatchCounts> = {}): DispatchCounts => ({
 /** Fake LINE ID prefix for the test that links all six users: the seed has five, so one extra user is added. */
 const CAP_PREFIX = `U${"0".repeat(29)}c`;
 const EXTRA_EMAIL = "dispatcher-test-extra@example.test";
+/** A user with no roles and no studentNo, so no line.use source. */
+const HIDDEN_EMAIL = "dispatcher-test-hidden@example.test";
 
-/** Creates the extra user. It has no notifications from other tests, so a test can link it as far back as it needs. */
+/**
+ * Creates the extra user as a staff member, so it holds line.use through its role. It has no notifications from other
+ * tests, so a test can link it as far back as it needs. Cleanup removes its role assignment first (the FK restricts).
+ */
 async function extraUser(): Promise<string> {
   const user = await prisma.user.create({
     data: { email: EXTRA_EMAIL, passwordHash: "not-a-login", name: "Dispatcher Test" },
     select: { id: true },
   });
+  await assignRole(prisma, user.id, "staff");
   return user.id;
 }
 
 async function cleanup(): Promise<void> {
   await prisma.notification.deleteMany({ where: { message: { startsWith: MARK } } });
-  await prisma.user.updateMany({
-    where: { lineUserId: { startsWith: CAP_PREFIX } },
-    data: { lineUserId: null, lineLinkedAt: null },
-  });
-  await prisma.user.deleteMany({ where: { email: EXTRA_EMAIL } });
+  await prisma.lineAccount.deleteMany({ where: { lineUserId: { startsWith: CAP_PREFIX } } });
+  await prisma.userRoleAssignment.deleteMany({ where: { user: { email: { in: [EXTRA_EMAIL, HIDDEN_EMAIL] } } } });
+  await prisma.user.deleteMany({ where: { email: { in: [EXTRA_EMAIL, HIDDEN_EMAIL] } } });
   await cleanLineState();
 }
 
 /** Links a seeded user to a fake LINE ID as of `linkedAt`. */
 async function link(email: string, lineUserId: string, linkedAt: Date): Promise<void> {
-  await prisma.user.update({ where: { email }, data: { lineUserId, lineLinkedAt: linkedAt } });
+  const { id } = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } });
+  await linkUser(id, lineUserId, linkedAt);
+}
+
+async function linkUser(userId: string, lineUserId: string, linkedAt: Date): Promise<void> {
+  await prisma.lineAccount.upsert({
+    where: { userId },
+    create: { userId, lineUserId, linkedAt },
+    update: { lineUserId, linkedAt },
+  });
 }
 
 /** Runs `fn` with the seeded user deactivated, then puts back the flag they had before. */
@@ -338,6 +352,21 @@ describe("dispatchLineOnce", () => {
     expect(await deliveredAt(cc)).toBeNull();
   });
 
+  it("does not push to a linked user without line.use, and leaves their row undelivered; a linked student is still pushed", async () => {
+    const linkedAt = new Date();
+    await prisma.user.create({ data: { email: HIDDEN_EMAIL, passwordHash: "not-a-login", name: "Dispatcher Test" } });
+    await link(HIDDEN_EMAIL, LINE_B, linkedAt);
+    const hidden = await addNotification(HIDDEN_EMAIL, new Date(linkedAt.getTime() + 1000));
+    await link(STUDENT, LINE_A, linkedAt);
+    const student = await addNotification(STUDENT, new Date(linkedAt.getTime() + 2000));
+
+    expect(await dispatch()).toEqual(tally({ sent: 1 }));
+    expect(line.sent.map((s) => s.to)).toEqual([LINE_A]);
+    expect(line.sent[0]!.retryKey).toBe(student);
+    expect(await deliveredAt(hidden)).toBeNull();
+    expect(await deliveredAt(student)).not.toBeNull();
+  });
+
   it("sends a booking row with an incomplete payload as its message, marks it delivered, and logs no message text", async () => {
     const linkedAt = new Date();
     await link(SOMCHAI, LINE_A, linkedAt);
@@ -470,8 +499,9 @@ describe("dispatchLineOnce", () => {
 
   it("caps a tick at 50 across users, taking the users round-robin", async () => {
     const linkedAt = new Date();
+    // Only users who hold line.use: the seed also has admin accounts that would be skipped and cut the count short.
     const staff = await prisma.user.findMany({
-      where: { isActive: true },
+      where: { isActive: true, id: { in: await usersWithPermission("line.use", prisma) } },
       select: { id: true },
       orderBy: { id: "asc" },
       take: 5,
@@ -479,7 +509,7 @@ describe("dispatchLineOnce", () => {
     const ids = [...staff.map((s) => s.id), await extraUser()];
     expect(ids).toHaveLength(6);
     for (const [i, id] of ids.entries()) {
-      await prisma.user.update({ where: { id }, data: { lineUserId: `${CAP_PREFIX}${i}`, lineLinkedAt: linkedAt } });
+      await linkUser(id, `${CAP_PREFIX}${i}`, linkedAt);
     }
     await prisma.notification.createMany({
       data: ids.flatMap((userId, u) =>
@@ -507,7 +537,7 @@ describe("dispatchLineOnce", () => {
     const now = new Date();
     const linkedAt = new Date(now.getTime() - 3 * DAY_MS);
     await extraUser();
-    await prisma.user.update({ where: { email: EXTRA_EMAIL }, data: { lineUserId: LINE_A, lineLinkedAt: linkedAt } });
+    await link(EXTRA_EMAIL, LINE_A, linkedAt);
     const old = await addNotification(EXTRA_EMAIL, new Date(now.getTime() - MAX_AGE_MS - 60_000));
     const recent = await addNotification(EXTRA_EMAIL, new Date(now.getTime() - MAX_AGE_MS + 60_000));
 

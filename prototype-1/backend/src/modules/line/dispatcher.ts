@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { config, lineEnabled } from "../../config.js";
+import { usersWithPermission } from "../../core/permissions.js";
 import type { NotifyPayload } from "../bookings/service.js";
 import type { LineClient } from "./client.js";
 import { fallbackTextFor, linkFor, lineTextFor } from "./messages.js";
@@ -152,8 +153,10 @@ function interleave<T>(queues: T[][], cap: number): T[] {
 
 /**
  * Sends one batch of due notifications and prunes old webhook dedupe rows. A notification is due when it is
- * undelivered, its recipient is an active user with a LINE ID, it was created at or after that recipient
- * linked (so a new link is not flooded with older notifications), and it is younger than MAX_AGE_MS.
+ * undelivered, its recipient is an active user who holds line.use (usersWithPermission: active roles, direct
+ * permissions, and the student role for a user with a student number) and has a LINE ID, it was created at or
+ * after that recipient linked (so a new link is not flooded with older notifications), and it is younger than MAX_AGE_MS.
+ * A linked user without line.use gets no push and their rows stay undelivered, as with other never-pushed rows.
  * Each user's oldest due rows are read separately and taken round-robin, up to BATCH_SIZE, so one user's
  * backlog cannot hold back another's. After a user's transient failure, that user's other rows wait for the next tick.
  */
@@ -172,27 +175,32 @@ export async function dispatchLineOnce(deps: DispatchDeps): Promise<DispatchCoun
     return counts;
   }
 
+  // Only users who hold line.use get pushes. Read per tick, so a permission change takes effect on the next tick.
+  // Filtered in memory, not with `userId in (...)`, so the query never binds one parameter per student.
+  const allowed = new Set(await usersWithPermission("line.use", full.prisma));
+
   // Ordered by id, then rotated by state.rotation below, so the users cut at BATCH_SIZE differ from tick to tick.
-  const users = await full.prisma.user.findMany({
-    where: { lineUserId: { not: null }, lineLinkedAt: { not: null }, isActive: true },
-    select: { id: true, lineUserId: true, lineLinkedAt: true, studentNo: true },
-    orderBy: { id: "asc" },
-  });
+  const accounts = (
+    await full.prisma.lineAccount.findMany({
+      where: { user: { isActive: true } },
+      select: { userId: true, lineUserId: true, linkedAt: true, user: { select: { studentNo: true } } },
+      orderBy: { userId: "asc" },
+    })
+  ).filter((a) => allowed.has(a.userId));
 
   // One query per linked user, so a user with a large backlog cannot crowd out the others. The createdAt bound
   // is in each query, not a filter after `take`, or old skipped rows would fill the take and block new ones.
   const queues: { row: DueRow; lineUserId: string }[][] = [];
-  for (const u of users) {
-    const { lineUserId, lineLinkedAt } = u;
-    if (!lineUserId || !lineLinkedAt) continue;
-    const earliest = Math.max(lineLinkedAt.getTime(), full.now.getTime() - MAX_AGE_MS);
+  for (const a of accounts) {
+    const { lineUserId, linkedAt } = a;
+    const earliest = Math.max(linkedAt.getTime(), full.now.getTime() - MAX_AGE_MS);
     const rows = await full.prisma.notification.findMany({
       where: {
-        userId: u.id,
+        userId: a.userId,
         deliveredLineAt: null,
         createdAt: { gte: new Date(earliest) },
         // Never pushed, never marked: the row stays in the bell and ages out of this window.
-        ...(u.studentNo !== null ? {} : { module: { notIn: STUDENT_ONLY_LINE_MODULES } }),
+        ...(a.user.studentNo !== null ? {} : { module: { notIn: STUDENT_ONLY_LINE_MODULES } }),
       },
       orderBy: { createdAt: "asc" },
       take: PER_USER,

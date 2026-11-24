@@ -119,12 +119,27 @@ export async function loginCookie(app: FastifyInstance, email: string, password:
   return `${config.SESSION_COOKIE_NAME}=${cookie!.value}`;
 }
 
+/**
+ * audit_logs is append-only, so tests cannot clean it. A test takes a mark first, then reads the LINE rows written after it.
+ */
+export async function auditMark(): Promise<bigint> {
+  const last = await prisma.auditLog.findFirst({ orderBy: { id: "desc" }, select: { id: true } });
+  return last?.id ?? 0n;
+}
+
+export async function lineAuditSince(mark: bigint) {
+  return prisma.auditLog.findMany({ where: { id: { gt: mark }, module: "line" }, orderBy: { id: "asc" } });
+}
+
+/** True when the row mentions a LINE user ID or one of the given secrets anywhere (JSON.stringify of the whole row). */
+export function auditRowLeaks(row: object, ...secrets: string[]): boolean {
+  const text = JSON.stringify(row, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+  return [LINE_A, LINE_B, ...secrets].some((s) => text.includes(s));
+}
+
 /** Removes every row a LINE test can create: fake-ID tokens, fake event IDs, and links to fake IDs. */
 export async function cleanLineState(): Promise<void> {
-  await prisma.user.updateMany({
-    where: { lineUserId: { in: [LINE_A, LINE_B] } },
-    data: { lineUserId: null, lineLinkedAt: null },
-  });
+  await prisma.lineAccount.deleteMany({ where: { lineUserId: { in: [LINE_A, LINE_B] } } });
   await prisma.lineLinkToken.deleteMany({ where: { lineUserId: { in: [LINE_A, LINE_B] } } });
   await prisma.lineWebhookEvent.deleteMany({ where: { webhookEventId: { startsWith: EVENT_PREFIX } } });
 }

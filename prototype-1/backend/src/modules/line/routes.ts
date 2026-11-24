@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { config, lineEnabled } from "../../config.js";
+import { audit } from "../../core/audit.js";
 import { prisma } from "../../db.js";
 import { AppError, badRequest, isUniqueViolation, unauthenticated } from "../../lib/errors.js";
 import { hashToken, requireUser } from "../../plugins/auth.js";
@@ -123,10 +124,27 @@ async function handleEvent(ctx: Ctx, event: LineEvent): Promise<void> {
   }
 
   if (event.type === "unfollow") {
-    await prisma.$transaction([
-      prisma.user.updateMany({ where: { lineUserId: userId }, data: { lineUserId: null, lineLinkedAt: null } }),
-      prisma.lineLinkToken.deleteMany({ where: { lineUserId: userId } }),
-    ]);
+    await prisma.$transaction(async (tx) => {
+      const account = await tx.lineAccount.findUnique({
+        where: { lineUserId: userId },
+        select: { userId: true, linkedAt: true },
+      });
+      if (account) {
+        // Gated on the delete count, so a concurrent unlink cannot leave a second audit row.
+        const removed = await tx.lineAccount.deleteMany({ where: { userId: account.userId, lineUserId: userId } });
+        if (removed.count === 1) {
+          await audit(tx, {
+            actorId: null,
+            action: "line.account.unlink",
+            subjectType: "user",
+            subjectId: account.userId,
+            before: { linkedAt: account.linkedAt },
+            note: "blocked on LINE",
+          });
+        }
+      }
+      await tx.lineLinkToken.deleteMany({ where: { lineUserId: userId } });
+    });
     return;
   }
 
@@ -134,12 +152,12 @@ async function handleEvent(ctx: Ctx, event: LineEvent): Promise<void> {
   const canAnswer = event.replyToken !== undefined || event.isRedelivery;
   if (event.type === "message" && event.messageType === "text" && canAnswer) {
     // A deactivated user counts as unlinked here: no name is shown, and a new link is offered.
-    const linked = await prisma.user.findUnique({
-      where: { lineUserId: userId, isActive: true },
-      select: { name: true },
+    const linked = await prisma.lineAccount.findFirst({
+      where: { lineUserId: userId, user: { isActive: true } },
+      select: { user: { select: { name: true } } },
     });
     if (linked) {
-      await send(ctx.client, event, userId, [{ type: "text", text: alreadyLinked(linked.name) }]);
+      await send(ctx.client, event, userId, [{ type: "text", text: alreadyLinked(linked.user.name) }]);
       return;
     }
     await offerLink(ctx, event, userId);
@@ -282,9 +300,42 @@ export const lineRoutes: FastifyPluginAsync<LineRouteOptions> = async (app: Fast
         data: { usedAt: now },
       });
       if (claimed.count !== 1) throw badRequest(LINK_INVALID);
-      // LINE IDs are unique: take it off whoever held it before (relinking moves it).
-      await tx.user.updateMany({ where: { lineUserId }, data: { lineUserId: null, lineLinkedAt: null } });
-      await tx.user.update({ where: { id: me.id }, data: { lineUserId, lineLinkedAt: now } });
+      // LINE IDs are unique: take it off whoever else held it before (relinking moves it).
+      const taken = await tx.lineAccount.findMany({
+        where: { lineUserId, userId: { not: me.id } },
+        select: { userId: true, linkedAt: true },
+      });
+      for (const other of taken) {
+        const removed = await tx.lineAccount.deleteMany({ where: { userId: other.userId, lineUserId } });
+        if (removed.count !== 1) continue;
+        await audit(tx, {
+          actorId: me.id,
+          action: "line.account.unlink",
+          subjectType: "user",
+          subjectId: other.userId,
+          before: { linkedAt: other.linkedAt },
+          note: "LINE account moved to another user",
+        });
+      }
+      const previous = await tx.lineAccount.findUnique({ where: { userId: me.id }, select: { linkedAt: true } });
+      await tx.lineAccount.upsert({
+        where: { userId: me.id },
+        create: { userId: me.id, lineUserId, linkedAt: now },
+        update: { lineUserId, linkedAt: now },
+      });
+      await audit(tx, {
+        actorId: me.id,
+        action: "line.account.link",
+        subjectType: "user",
+        subjectId: me.id,
+        ...(previous ? { before: { linkedAt: previous.linkedAt } } : {}),
+        after: { linkedAt: now },
+      });
+    }).catch((e: unknown) => {
+      // Two confirms racing for one LINE ID or one user: the loser hits the unique key and the whole
+      // transaction (token claim and audit rows included) rolls back, so answer like any spent link.
+      if (isUniqueViolation(e)) throw badRequest(LINK_INVALID);
+      throw e;
     });
 
     if (client) {
@@ -308,15 +359,12 @@ export const lineRoutes: FastifyPluginAsync<LineRouteOptions> = async (app: Fast
 
   app.get("/line/status", { config: { auth: "user", permission: "line.use" } }, async (req) => {
     const me = requireUser(req);
-    const user = await prisma.user.findUniqueOrThrow({
-      where: { id: me.id },
-      select: { lineUserId: true, lineLinkedAt: true },
-    });
+    const account = await prisma.lineAccount.findUnique({ where: { userId: me.id }, select: { linkedAt: true } });
     const oaId = config.LINE_OA_BASIC_ID;
     return {
       enabled: lineEnabled,
-      linked: user.lineUserId !== null,
-      linkedAt: user.lineLinkedAt?.toISOString() ?? null,
+      linked: account !== null,
+      linkedAt: account?.linkedAt.toISOString() ?? null,
       // Linking starts from LINE (the bot needs the LINE user ID), so the settings page links to the add-friend page.
       addFriendUrl: lineEnabled && oaId ? `https://line.me/R/ti/p/${encodeURIComponent(oaId)}` : null,
     };
@@ -324,11 +372,21 @@ export const lineRoutes: FastifyPluginAsync<LineRouteOptions> = async (app: Fast
 
   app.post("/line/unlink", { config: { auth: "user", permission: "line.use" } }, async (req, reply) => {
     const me = requireUser(req);
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: me.id }, select: { lineUserId: true } });
-    await prisma.$transaction([
-      ...(user.lineUserId ? [prisma.lineLinkToken.deleteMany({ where: { lineUserId: user.lineUserId } })] : []),
-      prisma.user.update({ where: { id: me.id }, data: { lineUserId: null, lineLinkedAt: null } }),
-    ]);
+    await prisma.$transaction(async (tx) => {
+      const account = await tx.lineAccount.findUnique({ where: { userId: me.id } });
+      if (!account) return;
+      await tx.lineLinkToken.deleteMany({ where: { lineUserId: account.lineUserId } });
+      // Gated on the delete count, so a concurrent unlink writes one audit row, not two.
+      const removed = await tx.lineAccount.deleteMany({ where: { userId: me.id } });
+      if (removed.count !== 1) return;
+      await audit(tx, {
+        actorId: me.id,
+        action: "line.account.unlink",
+        subjectType: "user",
+        subjectId: me.id,
+        before: { linkedAt: account.linkedAt },
+      });
+    });
     return reply.code(204).send();
   });
 };
