@@ -8,6 +8,15 @@ import { duplicate, isUniqueViolation, needsConfirm, notFound } from "../../lib/
 import { dateFromISO, hhmm, isoDate, todayISO } from "../../lib/time.js";
 import { requireUser } from "../../plugins/auth.js";
 
+/** Names of the user's active roles, as returned by GET /users. */
+async function activeRoleNames(userId: string): Promise<string[]> {
+  const rows = await prisma.userRoleAssignment.findMany({
+    where: { userId, role: { isActive: true } },
+    select: { role: { select: { name: true } } },
+  });
+  return rows.map((a) => a.role.name);
+}
+
 const idParam = z.object({ id: z.string().uuid() });
 
 /**
@@ -363,7 +372,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     const users = await prisma.user.findMany({
       where,
       orderBy: { name: "asc" },
-      include: { roles: { include: { role: { select: { name: true } } } } },
+      include: { roles: { where: { role: { isActive: true } }, include: { role: { select: { name: true } } } } },
     });
 
     return {
@@ -398,12 +407,14 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
         });
         return created;
       });
+      const roles = await activeRoleNames(user.id);
       return reply.code(201).send({
         user: {
           id: user.id,
           name: user.name,
           titlePrefix: user.titlePrefix,
           email: user.email,
+          roles,
           isActive: user.isActive,
         },
       });
@@ -447,6 +458,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
           name: user.name,
           titlePrefix: user.titlePrefix,
           email: user.email,
+          roles: await activeRoleNames(user.id),
           isActive: user.isActive,
         },
       };

@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { assignRole } from "../src/core/permissions.js";
 
 /** Dev and demo only (shared plan 2.11). Every test account ends with @test.local. */
 export const TEST_PASSWORD = "test1234";
@@ -12,17 +13,6 @@ export const TEST_ACCOUNTS = [
   { email: "audit@test.local", name: "Audit ทดสอบ", studentNo: null, roles: ["audit"] },
   { email: "norole@test.local", name: "ไม่มีบทบาท ทดสอบ", studentNo: null, roles: [] },
 ] as const;
-
-/** Gives a user a role by key. Idempotent; never stores the automatic "student" role. */
-export async function assignRole(prisma: PrismaClient, userId: string, roleKey: string): Promise<void> {
-  if (roleKey === "student") throw new Error("The student role is automatic; never assign it");
-  const role = await prisma.role.findUniqueOrThrow({ where: { key: roleKey } });
-  await prisma.userRoleAssignment.upsert({
-    where: { userId_roleId: { userId, roleId: role.id } },
-    create: { userId, roleId: role.id },
-    update: {},
-  });
-}
 
 export async function seedTestAccounts(prisma: PrismaClient, hash: (pw: string) => Promise<string>): Promise<void> {
   const passwordHash = await hash(TEST_PASSWORD);

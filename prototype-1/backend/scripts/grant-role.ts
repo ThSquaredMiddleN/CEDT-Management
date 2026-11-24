@@ -1,7 +1,7 @@
 // Gives a role to an existing account: npm run roles:grant -- <email> <roleKey>
 // Used once after deploying step 5a to give it_admin to the first administrator.
 import { PrismaClient } from "@prisma/client";
-import { assignRole } from "../prisma/seed-test-accounts.js";
+import { assignRole } from "../src/core/permissions.js";
 
 const [email, roleKey] = process.argv.slice(2);
 if (!email || !roleKey) {

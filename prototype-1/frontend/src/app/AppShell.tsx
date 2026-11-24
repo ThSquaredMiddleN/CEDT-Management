@@ -17,6 +17,7 @@ import {
 import { NotificationBell } from "@/features/notifications/NotificationBell";
 import { initials } from "@/lib/formatters";
 import { useAuth } from "./AuthProvider";
+import { isStaff } from "./permissions";
 import { signOut } from "./signOut";
 
 export function AppShell({
@@ -36,7 +37,7 @@ export function AppShell({
     .filter(Boolean)
     .join(" ");
   const sidebarName = user ? displayName : "Staff TA";
-  const sidebarRole = user ? (user.isStudent ? "นิสิต" : "เจ้าหน้าที่") : "admin";
+  const sidebarRole = user ? (user.isStudent ? "นิสิต" : isStaff(user) ? "เจ้าหน้าที่" : "ผู้ใช้") : "admin";
 
   return (
     <div className="flex min-h-screen bg-white">

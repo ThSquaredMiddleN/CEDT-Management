@@ -2,6 +2,8 @@ import { PortalDialogContent as DialogContent, PortalErrorState as ErrorCard } f
 import { useEffect, useState } from "react";
 import { requestErrorMessage } from "./requestTools";
 import { useCcSettings, useSaveCcSettings, type CcSettings } from "@/api/courseChange";
+import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { useToast } from "@/app/toast";
 import { SkeletonRow, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,8 @@ export function SettingsView({ onDirtyChange }: { onDirtyChange: (dirty: boolean
 
 function SettingsEditor({ initial, reload, onDirtyChange }: { initial: CcSettings; reload: () => void; onDirtyChange: (dirty: boolean) => void }) {
   const toast = useToast();
+  const { user } = useAuth();
+  const canManage = can(user, "course_change.manage");
   const save = useSaveCcSettings();
   const [windows, setWindows] = useState(initial.windows);
   const [courses, setCourses] = useState(initial.courses);
@@ -46,7 +50,7 @@ function SettingsEditor({ initial, reload, onDirtyChange }: { initial: CcSetting
     <div className="flex min-w-0 flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-lg font-semibold">ตั้งค่าลด / ถอนรายวิชา</h2><p className="text-sm text-neutral-500">{initial.term.label} · มีผลกับคำร้องใหม่ คำร้องเดิมใช้เส้นทางที่บันทึกไว้</p></div>
-        <Button disabled={!dirty || invalidWeeks || overlaps || reason.trim().length < 5 || save.isPending} onClick={() => { setError(""); setConfirming(true); }}>ตรวจสอบก่อนบันทึก</Button>
+        {canManage && <Button disabled={!dirty || invalidWeeks || overlaps || reason.trim().length < 5 || save.isPending} onClick={() => { setError(""); setConfirming(true); }}>ตรวจสอบก่อนบันทึก</Button>}
       </div>
       <Card className="flex flex-col gap-4 p-4 sm:p-6">
         <h3 className="font-medium">ช่วงเวลารับคำร้อง</h3>
@@ -105,8 +109,8 @@ function SettingsEditor({ initial, reload, onDirtyChange }: { initial: CcSetting
         <p id="cc-settings-help" className="text-xs text-neutral-500">อย่างน้อย 5 ตัวอักษร บันทึกพร้อมชื่อผู้แก้ไขและค่าก่อน/หลังเปลี่ยน</p>
         {error && <p role="alert" className="break-words text-sm font-medium">{error}</p>}
         <div className="flex flex-wrap gap-2">
-          <Button disabled={!dirty || invalidWeeks || overlaps || reason.trim().length < 5 || save.isPending} onClick={() => { setError(""); setConfirming(true); }}>ตรวจสอบก่อนบันทึก</Button>
-          <Button variant="outline" disabled={save.isPending} onClick={() => { setWindows(initial.windows); setCourses(initial.courses); setReason(""); setError(""); reload(); }}>ยกเลิกการแก้ไขและโหลดใหม่</Button>
+          {canManage && <Button disabled={!dirty || invalidWeeks || overlaps || reason.trim().length < 5 || save.isPending} onClick={() => { setError(""); setConfirming(true); }}>ตรวจสอบก่อนบันทึก</Button>}
+          {canManage && <Button variant="outline" disabled={save.isPending} onClick={() => { setWindows(initial.windows); setCourses(initial.courses); setReason(""); setError(""); reload(); }}>ยกเลิกการแก้ไขและโหลดใหม่</Button>}
         </div>
       </Card>
       <Card className="flex flex-col gap-3 p-4 sm:p-6">

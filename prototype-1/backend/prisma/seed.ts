@@ -8,7 +8,8 @@ import type { BookingInput } from "../src/modules/bookings/schemas.js";
 import { addNewsImages } from "../src/modules/news/service.js";
 import { dateFromISO } from "../src/lib/time.js";
 import { seedCourseChange } from "./seed-course-change.js";
-import { assignRole, seedTestAccounts } from "./seed-test-accounts.js";
+import { assignRole } from "../src/core/permissions.js";
+import { seedTestAccounts } from "./seed-test-accounts.js";
 
 /**
  * Seeds the dataset the wireframes were designed against (§9). Idempotent: every write is

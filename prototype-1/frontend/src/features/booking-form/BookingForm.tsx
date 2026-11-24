@@ -51,8 +51,8 @@ export function BookingForm() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
 
-  // Single `staff` role: every booking a staff user submits is auto-approved.
-  const isAdmin = true;
+  // Bookings from users with bookings.manage are auto-approved by the backend.
+  const isAdmin = can(user, "bookings.manage");
   const cloneId = params.get("clone");
 
   const terms = useTerms();

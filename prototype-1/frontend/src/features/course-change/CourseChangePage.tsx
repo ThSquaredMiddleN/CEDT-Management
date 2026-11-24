@@ -18,6 +18,7 @@ import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } fr
 export function CourseChangePage() {
   const { user } = useAuth();
   const ctx = useCcContext();
+  const canManage = can(user, "course_change.manage");
   const [view, setView] = useState<"inbox" | "settings" | "schedules">("inbox");
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [leavingSettings, setLeavingSettings] = useState(false);
@@ -70,7 +71,7 @@ export function CourseChangePage() {
 
 
         {ctx.data?.term &&
-          (user && !can(user, "course_change.view") ? <StudentView key={`${user.id}:${ctx.data.term.id}`} userId={user.id} ctx={ctx.data} /> : view === "schedules" ? <SchedulesView onDirtyChange={setSettingsDirty} /> : view === "settings" ? <SettingsView onDirtyChange={setSettingsDirty} /> : <StaffView ctx={ctx.data} />)}
+          (user && !can(user, "course_change.view") ? <StudentView key={`${user.id}:${ctx.data.term.id}`} userId={user.id} ctx={ctx.data} /> : view === "schedules" ? <fieldset disabled={!canManage} className="min-w-0 border-0 p-0"><SchedulesView onDirtyChange={setSettingsDirty} /></fieldset> : view === "settings" ? <fieldset disabled={!canManage} className="min-w-0 border-0 p-0"><SettingsView onDirtyChange={setSettingsDirty} /></fieldset> : <StaffView ctx={ctx.data} />)}
         <Dialog open={leavingSettings} onOpenChange={setLeavingSettings}>
           <DialogContent className="w-[calc(100%-2rem)]">
             <DialogHeader><DialogTitle>มีการตั้งค่าที่ยังไม่บันทึก</DialogTitle><DialogDescription>กลับไปแก้ไขต่อ หรือทิ้งการแก้ไขแล้วไปหน้าที่เลือก</DialogDescription></DialogHeader>

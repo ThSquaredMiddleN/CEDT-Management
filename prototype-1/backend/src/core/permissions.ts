@@ -94,6 +94,21 @@ export async function usersWithPermission(permission: string, db: Tx = prisma): 
   return users.map((u) => u.id);
 }
 
+/**
+ * Gives a user a role by key. Idempotent. The student role is automatic (studentNo) and
+ * inactive roles grant nothing, so both are refused instead of silently storing a dead row.
+ */
+export async function assignRole(db: Tx, userId: string, roleKey: string): Promise<void> {
+  if (roleKey === STUDENT_ROLE) throw new Error("The student role is automatic; never assign it");
+  const role = await db.role.findUniqueOrThrow({ where: { key: roleKey } });
+  if (!role.isActive) throw new Error(`Role "${roleKey}" is not active; activate it before assigning`);
+  await db.userRoleAssignment.upsert({
+    where: { userId_roleId: { userId, roleId: role.id } },
+    create: { userId, roleId: role.id },
+    update: {},
+  });
+}
+
 /** Logs (never throws) when the database holds permission names no module declares. */
 export async function warnUnknownPermissions(app: FastifyInstance, known: ReadonlySet<string>): Promise<void> {
   const [roleRows, userRows] = await Promise.all([

@@ -90,7 +90,9 @@ export function WorkflowPanel({ r }: { r: CcRequestDetail }) {
   const [second, setSecond] = useState("");
   const [mergeReview, setMergeReview] = useState(false);
   const plan = r.workflowPlan!;
+  // Three states: staff (course_change.manage), the request's own student, or read-only.
   const staff = can(user, "course_change.manage");
+  const owner = !staff && !!user && r.studentId === user.id;
   const busy = workflow.isPending || upload.isPending || merge.isPending;
   const active = ["pending_approval", "processing"].includes(r.status);
   const boundary = r.events
@@ -114,7 +116,9 @@ export function WorkflowPanel({ r }: { r: CcRequestDetail }) {
               : r.phase === "awaiting_result"
                 ? ["request_documents", "complete"]
                 : []
-      : r.phase === "student_revision"
+      : !owner
+        ? []
+        : r.phase === "student_revision"
         ? ["resubmit"]
         : r.phase === "student_external"
           ? [
@@ -146,9 +150,10 @@ export function WorkflowPanel({ r }: { r: CcRequestDetail }) {
   const canUpload =
     active &&
     (staff ||
-      ["staff_review", "student_revision", "student_external"].includes(
+      (owner &&
+        ["staff_review", "student_revision", "student_external"].includes(
         r.phase ?? "",
-      ));
+      )));
   const availableKinds = staff
     ? [
         ...(r.phase === "awaiting_signature" ? ["signed_petition"] : []),
@@ -358,7 +363,7 @@ export function WorkflowPanel({ r }: { r: CcRequestDetail }) {
           </p>
         </form>
       )}
-      {!staff &&
+      {owner &&
         active &&
         r.phase === "student_external" &&
         plan.needsMerge &&

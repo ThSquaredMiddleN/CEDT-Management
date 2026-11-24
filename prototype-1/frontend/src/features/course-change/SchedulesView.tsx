@@ -25,6 +25,8 @@ import {
   PortalEmptyState,
 } from "./PortalUI";
 import { SkeletonRow } from "@/components/states";
+import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { useToast } from "@/app/toast";
 import { requestErrorMessage } from "./requestTools";
 import { fmtDate, TYPE_LABEL } from "./shared";
@@ -34,6 +36,8 @@ export function SchedulesView({
 }: {
   onDirtyChange: (dirty: boolean) => void;
 }) {
+  const { user } = useAuth();
+  const canManage = can(user, "course_change.manage");
   const settings = useCcSettings();
   const schedules = useCcSchedules();
   const [editing, setEditing] = useState<CcSchedule | "new" | null>(null);
@@ -82,7 +86,7 @@ export function SchedulesView({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <Button onClick={() => setEditing("new")}>เพิ่มกำหนดรายวิชา</Button>
+            {canManage && <Button onClick={() => setEditing("new")}>เพิ่มกำหนดรายวิชา</Button>}
           </div>
           {!rows.length && (
             <PortalEmptyState
@@ -126,9 +130,11 @@ export function SchedulesView({
                         .filter(Boolean)
                         .join(" / ")}
                 </p>
-                <Button variant="outline" onClick={() => setEditing(s)}>
-                  แก้ไขกำหนด / หยุดประกาศ
-                </Button>
+                {canManage && (
+                  <Button variant="outline" onClick={() => setEditing(s)}>
+                    แก้ไขกำหนด / หยุดประกาศ
+                  </Button>
+                )}
               </Card>
             ))}
           </div>

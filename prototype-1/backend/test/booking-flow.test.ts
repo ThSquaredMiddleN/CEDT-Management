@@ -6,9 +6,9 @@ import { prisma } from "../src/db.js";
 /**
  * Critical-path integration test against the local Postgres. Assumes `npm run db:seed` has run.
  *
- * Model under test: a single `staff` role (every login can book AND manage; bookings
- * auto-approve on submit) plus an anonymous PUBLIC calendar that only ever shows approved
- * bookings. `staffA` / `staffB` below are just two seeded staff accounts.
+ * Model under test: accounts holding bookings.use and bookings.manage (the seeded staff role)
+ * can book AND manage, and their bookings auto-approve on submit; an anonymous PUBLIC calendar
+ * only ever shows approved bookings. `staffA` / `staffB` below are two seeded staff accounts.
  */
 
 let app: FastifyInstance;
