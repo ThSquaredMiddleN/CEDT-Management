@@ -2,6 +2,7 @@ import argon2 from "argon2";
 import type { Prisma } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { assertNotLastItAdmin } from "../../core/access.js";
 import { usersWithPermission } from "../../core/permissions.js";
 import { prisma } from "../../db.js";
 import { duplicate, isUniqueViolation, needsConfirm, notFound } from "../../lib/errors.js";
@@ -433,6 +434,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       const user = await prisma.$transaction(async (tx) => {
+        if (body.isActive === false) await assertNotLastItAdmin(tx, id);
         const updated = await tx.user.update({
           where: { id },
           data: {

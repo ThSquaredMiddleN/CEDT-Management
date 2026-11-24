@@ -1,4 +1,5 @@
 import { CORE_PERMISSIONS, CORE_ROW_LABELS, type PermissionDef } from "../core/permissions.js";
+import { accessModule } from "./access/index.js";
 import { announcementsModule } from "./announcements/index.js";
 import { authModule } from "./auth/index.js";
 import { bookingsModule } from "./bookings/index.js";
@@ -25,6 +26,7 @@ export const modules: AppModule[] = [
   courseChangeModule,
   lineModule,
   receiptsModule,
+  accessModule,
 ];
 
 /** Every permission the code knows: core's plus each module's. */

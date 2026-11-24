@@ -1,10 +1,12 @@
+import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createRole, getUserAccess, saveUserAccess, updateRole } from "../../src/core/access.js";
 import { buildCatalogRows, parsePermission } from "../../src/core/permission-layout.js";
 import { loadSessionUser, type SessionUser } from "../../src/core/permissions.js";
 import { prisma } from "../../src/db.js";
 import { permissionCatalog, permissionRowLabels } from "../../src/modules/index.js";
-import { idOf } from "../helpers/session.js";
+import { buildApp } from "../../src/app.js";
+import { idOf, loginAs } from "../helpers/session.js";
 
 describe("parsePermission", () => {
   it("splits row, level and part", () => {
@@ -144,5 +146,65 @@ describe("roles", () => {
     await expect(
       updateRole(itadmin, id, { name: "IT Admin", description: null, permissions: perms.filter((p) => p !== "core.permissions.manage"), isActive: true, reason: "x" }, known),
     ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+});
+
+describe("/api/v1/access", () => {
+  let app: FastifyInstance;
+  beforeAll(async () => {
+    app = await buildApp();
+    await app.ready();
+  });
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it("is only for core.permissions.manage", async () => {
+    const staff = await loginAs(app, "staff@test.local");
+    expect((await app.inject({ method: "GET", url: "/api/v1/access/catalog", headers: { cookie: staff } })).statusCode).toBe(403);
+    const admin = await loginAs(app, "itadmin@test.local");
+    const res = await app.inject({ method: "GET", url: "/api/v1/access/catalog", headers: { cookie: admin } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().rows.find((r: { row: string }) => r.row === "core.users").label).toBe("ผู้ใช้");
+  });
+
+  it("saves through PUT and takes effect on the user's next request", async () => {
+    const admin = await loginAs(app, "itadmin@test.local");
+    const target = await loginAs(app, "norole@test.local");
+    const getUsers = () => app.inject({ method: "GET", url: "/api/v1/users", headers: { cookie: target } });
+    expect((await getUsers()).statusCode).toBe(403);
+    const put = await app.inject({
+      method: "PUT",
+      url: `/api/v1/access/users/${norole}`,
+      headers: { cookie: admin, "x-requested-with": "XMLHttpRequest" },
+      payload: { roleIds: [], permissions: ["core.users.view"], reason: "ทดสอบ route" },
+    });
+    expect(put.statusCode).toBe(200);
+    expect((await getUsers()).statusCode).toBe(200);
+  });
+
+  it("searches users by name, email or student number", async () => {
+    const admin = await loginAs(app, "itadmin@test.local");
+    const res = await app.inject({ method: "GET", url: "/api/v1/access/users?q=6800000001", headers: { cookie: admin } });
+    expect(res.json().items.map((u: { email: string }) => u.email)).toContain("student@test.local");
+  });
+
+  it("refuses to deactivate the last IT Admin from Master Data", async () => {
+    const admins = await prisma.userRoleAssignment.findMany({ where: { role: { key: "it_admin" } } });
+    await prisma.userRoleAssignment.deleteMany({ where: { role: { key: "it_admin" }, userId: { not: itadmin.id } } });
+    try {
+      const staff = await loginAs(app, "staff@test.local");
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/api/v1/users/${itadmin.id}`,
+        headers: { cookie: staff, "x-requested-with": "XMLHttpRequest" },
+        payload: { isActive: false },
+      });
+      expect(res.statusCode).toBe(409);
+    } finally {
+      for (const a of admins) {
+        await prisma.userRoleAssignment.upsert({ where: { userId_roleId: { userId: a.userId, roleId: a.roleId } }, create: a, update: {} });
+      }
+    }
   });
 });

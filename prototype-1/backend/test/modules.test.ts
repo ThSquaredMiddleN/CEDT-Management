@@ -16,6 +16,7 @@ const SAMPLE_ROUTES: Record<string, [HTTPMethods, string]> = {
   course_change: ["GET", "/api/v1/course-change/requests"],
   line: ["POST", "/api/v1/line/webhook"],
   receipts: ["GET", "/api/v1/receipts"],
+  core: ["GET", "/api/v1/access/catalog"],
 };
 
 let app: FastifyInstance;

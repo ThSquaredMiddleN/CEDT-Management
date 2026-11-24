@@ -4,7 +4,7 @@ import multipart from "@fastify/multipart";
 import Fastify, { type FastifyInstance } from "fastify";
 import { config } from "./config.js";
 import { warnUnknownPermissions } from "./core/permissions.js";
-import { modules, permissionCatalog } from "./modules/index.js";
+import { modules, permissionCatalog, permissionRowLabels } from "./modules/index.js";
 import type { BuildOptions } from "./modules/types.js";
 import { registerAuth } from "./plugins/auth.js";
 import { registerErrorHandler } from "./plugins/errors.js";
@@ -27,9 +27,22 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
 
   app.get("/health", { config: { auth: "public" } }, async () => ({ ok: true }));
 
+  app.decorate("permissionCatalog", { catalog: permissionCatalog, rowLabels: permissionRowLabels, keys: knownPermissions });
+
   for (const mod of modules) {
     await mod.setup(app, opts);
   }
 
   return app;
+}
+
+declare module "fastify" {
+  interface FastifyInstance {
+    /** Declared permissions, attached here so modules need not import modules/index.ts. */
+    permissionCatalog: {
+      catalog: import("./core/permissions.js").PermissionDef[];
+      rowLabels: Record<string, string>;
+      keys: ReadonlySet<string>;
+    };
+  }
 }
