@@ -62,6 +62,22 @@ describe("LINE_DRY_RUN config", () => {
     await expect(import("../../src/config.js")).rejects.toThrow();
   });
 
+  it.each([
+    ["@073fmhna", true],
+    ["@my_oa-1.x", true],
+    ["", true],
+    ["073fmhna", false],
+    ["@", false],
+    ["@bad id", false],
+    ["@" + "a".repeat(41), false],
+  ])("LINE_OA_BASIC_ID=%s is accepted: %s", async (value, ok) => {
+    vi.stubEnv("LINE_OA_BASIC_ID", value);
+    vi.resetModules();
+    const load = import("../../src/config.js");
+    if (ok) await expect(load).resolves.toBeDefined();
+    else await expect(load).rejects.toThrow();
+  });
+
   it("refuses dry-run in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("LINE_CHANNEL_SECRET", "s");

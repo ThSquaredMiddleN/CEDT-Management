@@ -1,53 +1,22 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Home, Link2, RotateCcw } from "lucide-react";
-import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { ApiError } from "@/api/client";
 import { checkLineLinkToken, linkLineAccount } from "@/api/endpoints";
-import { roleLanding, useAuth } from "@/app/AuthProvider";
+import { useAuth } from "@/app/AuthProvider";
 import { Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Bilingual, StatusCard } from "./LineStatusUi";
 
 type View = "checking" | "login" | "confirm" | "success" | "invalid" | "error";
-
-/** Thai line first, English line second (muted). */
-function Bilingual({ th, en }: { th: string; en: string }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <p className="text-sm font-medium text-neutral-950">{th}</p>
-      <p className="text-sm text-neutral-500">{en}</p>
-    </div>
-  );
-}
-
-function StatusCard({
-  icon,
-  title,
-  children,
-}: {
-  icon: ReactNode;
-  title: ReactNode;
-  children?: ReactNode;
-}) {
-  return (
-    <Card className="flex w-full max-w-md flex-col items-center gap-6 p-6 text-center break-words sm:p-8">
-      <div className="flex size-12 items-center justify-center rounded-xl bg-neutral-900 text-neutral-50">
-        {icon}
-      </div>
-      <h1 className="flex flex-col gap-1 text-xl font-semibold tracking-tight">{title}</h1>
-      {children}
-    </Card>
-  );
-}
 
 export function LineLinkPage() {
   const [params] = useSearchParams();
   const location = useLocation();
   const { user } = useAuth();
-  // Where to go after linking (roleLanding: the portal home).
-  const home = roleLanding(user?.role);
+  // Where to go after linking: staff back to the admin home (roleLanding always gives the student portal).
+  const home = user?.role === "staff" ? "/admin" : "/";
 
   // Read the token once and keep it in state. Nothing is sent until the user confirms.
   const [token] = useState(() => params.get("token")?.trim() ?? "");

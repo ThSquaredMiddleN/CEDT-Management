@@ -38,6 +38,12 @@ const MasterDataPage = lazy(() =>
     default: module.MasterDataPage,
   })),
 );
+const LineSettingsPage = lazy(() =>
+  import("@/features/line-link/LineSettingsPage").then((module) => ({
+    default: module.LineSettingsPage,
+  })),
+);
+
 const CourseChangePage = lazy(() =>
   import("@/features/course-change/CourseChangePage").then((module) => ({
     default: module.CourseChangePage,
@@ -249,6 +255,15 @@ export function AppRoutes() {
           <Route path="news/:id" element={<StudentNewsDetailPage />} />
           {/* Token comes from the LINE chat link. Not wrapped in RequireAuth: the page checks the token before login. */}
           <Route path="line/link" element={<LineLinkPage />} />
+          {/* LINE settings (connect, unlink) for any signed-in user. */}
+          <Route
+            path="line"
+            element={
+              <RequireAuth roles={["staff", "student"]}>
+                <LineSettingsPage />
+              </RequireAuth>
+            }
+          />
           {/* Student storage. No RequireAuth yet: student auth is not decided (mock identity). */}
           <Route path="student/storage" element={<StudentStoragePage />} />
           <Route path="*" element={<NotFound />} />
@@ -273,6 +288,7 @@ export function AppRoutes() {
             }
           />
           <Route path="receipts" element={<ReceiptChecksPage />} />
+          <Route path="line" element={<LineSettingsPage />} />
           <Route path="announcements" element={<AnnouncementListPage />} />
           <Route path="announcements/create" element={<AnnouncementCreatePage />} />
           <Route path="announcements/:id" element={<AnnouncementDetailPage />} />

@@ -27,11 +27,11 @@ export function Topbar({
   return (
     <header
       className={cn(
-        "relative z-10 flex h-14 w-full shrink-0 items-center justify-between bg-white-50 px-4 shadow-topbar md:px-8",
+        "relative z-10 flex h-14 w-full shrink-0 items-center justify-between gap-4 bg-white-50 px-4 shadow-topbar md:px-8",
         className,
       )}
     >
-      <div className="flex h-full min-w-0 items-center gap-8 lg:gap-16">
+      <div className="flex h-full min-w-0 flex-1 items-center gap-8 lg:gap-16">
         {logoTo ? (
           <Link
             to={logoTo}
@@ -49,7 +49,7 @@ export function Topbar({
         {items.length > 0 && (
           <nav
             aria-label="Main navigation"
-            className="flex h-full items-center gap-6 lg:gap-8"
+            className="flex h-full min-w-0 items-center gap-6 overflow-x-auto [scrollbar-width:none] lg:gap-8 [&::-webkit-scrollbar]:hidden"
           >
             {items.map((item) => (
               <TopbarMenuItem

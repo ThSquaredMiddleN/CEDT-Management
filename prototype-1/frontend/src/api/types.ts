@@ -302,3 +302,11 @@ export interface ReceiptCheckResponse {
   check: ReceiptCheckRow;
   fields: Record<string, ReceiptField>;
 }
+
+/** The signed-in user's LINE link state. addFriendUrl is null until LINE_OA_BASIC_ID is set on the backend. */
+export interface LineStatus {
+  enabled: boolean;
+  linked: boolean;
+  linkedAt: string | null;
+  addFriendUrl: string | null;
+}
