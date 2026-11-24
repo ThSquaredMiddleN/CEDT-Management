@@ -40,7 +40,7 @@ model User {
   groupsCreated       Group[]
   auditLogs           AuditLog[]
 
-  advisor                      User?                        @relation("advisor", fields: [advisorId], references: [id])
+  advisor                      User?                        @relation("advisor", fields: [advisorId], references: [id], onDelete: Restrict)
   advisees                     User[]                       @relation("advisor")
   enrollments                  Enrollment[]
   courseChangeRequests         CourseChangeRequest[]        @relation("ccStudent")
