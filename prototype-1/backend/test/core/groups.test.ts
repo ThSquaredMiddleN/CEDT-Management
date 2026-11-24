@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../src/db.js";
-import { groupsOfStudent } from "../../src/core/groups.js";
+import { groupNameKey, groupsOfStudent } from "../../src/core/groups.js";
 
 /** Made-up student numbers and group names only. Every group this file creates ends with SUFFIX. */
 const SUFFIX = randomUUID().slice(0, 8);
@@ -29,6 +29,7 @@ beforeAll(async () => {
     data: {
       type: "course_section",
       name: NAME_TERM1,
+      nameKey: groupNameKey(NAME_TERM1),
       courseId: course.id,
       termId: term1.id,
       section: "01",
@@ -39,6 +40,7 @@ beforeAll(async () => {
     data: {
       type: "club",
       name: NAME_TERM2,
+      nameKey: groupNameKey(NAME_TERM2),
       termId: term2.id,
       members: { create: [{ studentNo: STUDENT, role: "member" }] },
     },
@@ -47,6 +49,7 @@ beforeAll(async () => {
     data: {
       type: "club",
       name: NAME_INACTIVE,
+      nameKey: groupNameKey(NAME_INACTIVE),
       isActive: false,
       members: { create: [{ studentNo: STUDENT, role: "member" }] },
     },
@@ -82,5 +85,18 @@ describe("groupsOfStudent", () => {
 
   it("returns an empty list for a student with no groups", async () => {
     expect(await groupsOfStudent(prisma, "6699990202")).toEqual([]);
+  });
+});
+
+describe("groupNameKey", () => {
+  it("trims, collapses inner whitespace and lower-cases", () => {
+    expect(groupNameKey("Group 09")).toBe("group 09");
+    expect(groupNameKey("  group   09 ")).toBe("group 09");
+    expect(groupNameKey("GROUP\t09\n")).toBe("group 09");
+  });
+
+  it("gives the same key for names that differ only in case or spacing", () => {
+    expect(groupNameKey("Group 09")).toBe(groupNameKey("group  09"));
+    expect(groupNameKey("Group 09")).not.toBe(groupNameKey("Group 10"));
   });
 });

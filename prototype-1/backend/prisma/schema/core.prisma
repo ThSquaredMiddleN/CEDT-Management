@@ -204,6 +204,8 @@ model Group {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   type        GroupType
   name        String
+  /// lower-cased, trimmed, inner spaces collapsed; unique per term/course/section
+  nameKey     String    @map("name_key")
   courseId    String?   @map("course_id") @db.Uuid
   termId      String?   @map("term_id") @db.Uuid
   section     String?
@@ -218,7 +220,7 @@ model Group {
   createdBy User?         @relation(fields: [createdById], references: [id], onDelete: Restrict)
   members   GroupMember[]
 
-  @@unique([termId, courseId, section, name])
+  @@unique([termId, courseId, section, nameKey])
   @@index([type, isActive])
   @@map("groups")
 }

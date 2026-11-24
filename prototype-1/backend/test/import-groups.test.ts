@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
+import { groupNameKey } from "../src/core/groups.js";
 
 /**
  * CSV import of course groups. All students are made up, except the seeded student@cedt.edu (6630000121).
@@ -210,8 +211,8 @@ describe("POST /import/groups", () => {
   it("rows for an inactive group or with a different type are errors", async () => {
     const nameI = name("inactive");
     const nameT = name("typed");
-    await prisma.group.create({ data: { type: "club", name: nameI, isActive: false } });
-    await prisma.group.create({ data: { type: "club", name: nameT } });
+    await prisma.group.create({ data: { type: "club", name: nameI, nameKey: groupNameKey(nameI), isActive: false } });
+    await prisma.group.create({ data: { type: "club", name: nameT, nameKey: groupNameKey(nameT) } });
     const csv = [
       HEADER,
       line("club", nameI, "", "", "", "", NO_ACCOUNT, "member"),
@@ -241,10 +242,36 @@ describe("POST /import/groups", () => {
     expect(groups[0]!.members).toHaveLength(3);
   });
 
+  it("two imports racing to create the same group (names differing only in case) leave one group", async () => {
+    const base = name("race");
+    const first = [HEADER, line("club", base, "", "", "", "", NO_ACCOUNT, "member")].join("\n");
+    const second = [HEADER, line("club", base.toLowerCase(), "", "", "", "", NO_ACCOUNT_2, "member")].join("\n");
+
+    const results = await Promise.all([upload(first), upload(second)]);
+    const statuses = results.map((r) => r.statusCode).sort();
+    // Either the second import saw the first group (both 200), or it lost the race on the unique key (409 CONFLICT).
+    expect([[200, 200], [200, 409]]).toContainEqual(statuses);
+    const loser = results.find((r) => r.statusCode === 409);
+    if (loser) expect(loser.json<ErrorBody>().error.code).toBe("CONFLICT");
+
+    const groups = await prisma.group.findMany({ where: { nameKey: groupNameKey(base) }, include: { members: true } });
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.members).toHaveLength(results.filter((r) => r.statusCode === 200).length);
+  });
+
+  it("the database refuses a second group whose name differs only in case (same nameKey)", async () => {
+    const n = name("case");
+    await prisma.group.create({ data: { type: "club", name: n, nameKey: groupNameKey(n) } });
+    const lower = n.toLowerCase();
+    await expect(
+      prisma.group.create({ data: { type: "club", name: lower, nameKey: groupNameKey(lower) } }),
+    ).rejects.toMatchObject({ code: "P2002" });
+  });
+
   it("the database refuses a second group with the same name and no term (NULLS NOT DISTINCT)", async () => {
     const n = name("nulls");
-    await prisma.group.create({ data: { type: "club", name: n } });
-    await expect(prisma.group.create({ data: { type: "club", name: n } })).rejects.toMatchObject({ code: "P2002" });
+    await prisma.group.create({ data: { type: "club", name: n, nameKey: groupNameKey(n) } });
+    await expect(prisma.group.create({ data: { type: "club", name: n, nameKey: groupNameKey(n) } })).rejects.toMatchObject({ code: "P2002" });
   });
 
   it("a student gets 403 FORBIDDEN", async () => {

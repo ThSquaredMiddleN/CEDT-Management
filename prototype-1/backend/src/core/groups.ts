@@ -5,6 +5,14 @@ import { conflict, isUniqueViolation, validation } from "../lib/errors.js";
 const GROUP_TYPES: readonly string[] = ["course_section", "club", "project", "personal"];
 const ROLES: readonly string[] = ["member", "leader"];
 
+/**
+ * The stored Group.nameKey: trimmed, inner whitespace collapsed to one space, lower-cased. Must match the SQL in
+ * migration 20261125130000_group_name_key (lower(btrim(regexp_replace(name, '\s+', ' ', 'g')))).
+ */
+export function groupNameKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 /** Active groups the student belongs to, optionally limited to one term, ordered by name. */
 export async function groupsOfStudent(tx: Tx, studentNo: string, termId?: string) {
   const memberships = await tx.groupMember.findMany({
@@ -61,7 +69,7 @@ interface GroupRef {
   /** Null for a new group until it is written. */
   id: string | null;
   isNew: boolean;
-  data: { type: GroupType; name: string; courseId: string | null; termId: string | null; section: string | null };
+  data: { type: GroupType; name: string; nameKey: string; courseId: string | null; termId: string | null; section: string | null };
 }
 
 interface MemberWrite {
@@ -100,7 +108,7 @@ async function parseRow(
 ): Promise<ParsedRow | string> {
   const get = (k: string) => (rec[k] ?? "").trim();
   const type = get("type");
-  // Collapse inner spaces so "Group  09" and "Group 09" are one group (matched case-insensitively below).
+  // Collapse inner spaces so "Group  09" and "Group 09" are one group (matched by nameKey below).
   const name = get("name").replace(/\s+/g, " ");
   const courseCode = get("courseCode");
   const academicYear = get("academicYear");
@@ -184,7 +192,7 @@ export async function importGroups(
   const lookups: Lookups = { terms: new Map(), courses: new Map(), accounts: await loadAccounts(tx, records) };
   /** groupId -> studentNo -> role, loaded once per existing group. */
   const members = new Map<string, Map<string, GroupMemberRole>>();
-  /** Keyed by (termId, courseId, section, name): existing groups and groups new in this file. */
+  /** Keyed by (termId, courseId, section, nameKey): existing groups and groups new in this file. */
   const groups = new Map<string, GroupRef>();
   const writes: MemberWrite[] = [];
   /** "groupKey|studentNo" of every valid row so far, to catch a student listed twice. */
@@ -200,7 +208,8 @@ export async function importGroups(
     }
 
     const { studentNo, role, name } = parsed;
-    const key = JSON.stringify([parsed.termId, parsed.courseId, parsed.section, name.toLowerCase()]);
+    const nameKey = groupNameKey(name);
+    const key = JSON.stringify([parsed.termId, parsed.courseId, parsed.section, nameKey]);
     if (seen.has(`${key}|${studentNo}`)) {
       rows.push({ row, action: "error", message: `${studentNo} is already listed in ${name} earlier in this file`, hasAccount: null });
       continue;
@@ -215,12 +224,12 @@ export async function importGroups(
           termId: parsed.termId,
           courseId: parsed.courseId,
           section: parsed.section,
-          name: { equals: name, mode: "insensitive" },
+          nameKey,
         },
       });
       group = found
-        ? { key, id: found.id, isNew: false, data: { type: found.type, name: found.name, courseId: found.courseId, termId: found.termId, section: found.section } }
-        : { key, id: null, isNew: true, data: { type: parsed.type, name, courseId: parsed.courseId, termId: parsed.termId, section: parsed.section } };
+        ? { key, id: found.id, isNew: false, data: { type: found.type, name: found.name, nameKey: found.nameKey, courseId: found.courseId, termId: found.termId, section: found.section } }
+        : { key, id: null, isNew: true, data: { type: parsed.type, name, nameKey, courseId: parsed.courseId, termId: parsed.termId, section: parsed.section } };
       groups.set(key, group);
       if (found && !found.isActive) inactiveKeys.add(key);
       if (found) {
