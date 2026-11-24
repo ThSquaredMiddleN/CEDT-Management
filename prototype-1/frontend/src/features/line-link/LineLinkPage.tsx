@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { ApiError } from "@/api/client";
 import { checkLineLinkToken, linkLineAccount } from "@/api/endpoints";
-import { useAuth } from "@/app/AuthProvider";
-import { isStaff } from "@/app/permissions";
+import { roleLanding, useAuth } from "@/app/AuthProvider";
 import { Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Bilingual, StatusCard } from "./LineStatusUi";
@@ -16,8 +15,8 @@ export function LineLinkPage() {
   const [params] = useSearchParams();
   const location = useLocation();
   const { user } = useAuth();
-  // Where to go after linking: staff back to the admin home, everyone else to the portal home.
-  const home = user && isStaff(user) ? "/admin" : "/";
+  // Where to go after linking: the same landing page as after login, so the two never drift apart.
+  const home = roleLanding();
 
   // Read the token once and keep it in state. Nothing is sent until the user confirms.
   const [token] = useState(() => params.get("token")?.trim() ?? "");

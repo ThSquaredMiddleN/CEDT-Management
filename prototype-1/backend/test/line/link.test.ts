@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.js";
-import { config } from "../../src/config.js";
 import { prisma } from "../../src/db.js";
 import { hashToken } from "../../src/plugins/auth.js";
 import {
@@ -15,6 +14,9 @@ import {
   postWebhook,
   tokenFrom,
   UUID,
+  auditMark,
+  auditRowLeaks,
+  lineAuditSince,
   webhookBody,
   type FakeLine,
 } from "./fixtures.js";
@@ -51,8 +53,10 @@ async function issueToken(lineUserId: string): Promise<string> {
   return raw!;
 }
 
-const linkedState = async (email: string) =>
-  prisma.user.findUniqueOrThrow({ where: { email }, select: { lineUserId: true, lineLinkedAt: true } });
+const linkedState = async (email: string) => {
+  const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true, lineAccount: true } });
+  return { id: user.id, lineUserId: user.lineAccount?.lineUserId ?? null, lineLinkedAt: user.lineAccount?.linkedAt ?? null };
+};
 
 beforeAll(async () => {
   line = fakeLine();
@@ -143,6 +147,23 @@ describe("POST /line/link", () => {
     expect((await linkedState(SOMCHAI.email)).lineUserId).toBeNull();
   });
 
+  it("relinking the same LINE ID leaves one audit row for the new owner and one for the user it was moved from", async () => {
+    const first = await issueToken(LINE_A);
+    await post("/api/v1/line/link", somchaiCookie, { token: first });
+    const second = await issueToken(LINE_A);
+    const mark = await auditMark();
+    await post("/api/v1/line/link", anuchaCookie, { token: second });
+
+    const somchai = await linkedState(SOMCHAI.email);
+    const anucha = await linkedState(ANUCHA.email);
+    const rows = await lineAuditSince(mark);
+    expect(rows.map((r) => [r.action, r.subjectId, r.actorId])).toEqual([
+      ["line.account.unlink", somchai.id, anucha.id],
+      ["line.account.link", anucha.id, anucha.id],
+    ]);
+    for (const row of rows) expect(auditRowLeaks(row, first, second)).toBe(false);
+  });
+
   it("a linked user messaging the bot gets the already-linked reply, not a new token", async () => {
     const raw = await issueToken(LINE_A);
     await post("/api/v1/line/link", somchaiCookie, { token: raw });
@@ -206,29 +227,91 @@ describe("GET /line/status and POST /line/unlink", () => {
     expect((await linkedState(STUDENT.email)).lineUserId).toBeNull();
   });
 
-  describe("addFriendUrl", () => {
-    // config is read per request, so the test sets LINE_OA_BASIC_ID on the shared config object and restores it.
-    const withOaId = async (value: string | undefined, run: () => Promise<void>) => {
-      const saved = config.LINE_OA_BASIC_ID;
-      config.LINE_OA_BASIC_ID = value;
-      try {
-        await run();
-      } finally {
-        config.LINE_OA_BASIC_ID = saved;
-      }
-    };
+  describe("audit rows", () => {
+    it("a first link writes one line.account.link row with after.linkedAt and no before", async () => {
+      const raw = await issueToken(LINE_A);
+      const mark = await auditMark();
+      const res = await post("/api/v1/line/link", somchaiCookie, { token: raw });
+      expect(res.statusCode).toBe(200);
 
-    it("is null when LINE_OA_BASIC_ID is unset", () =>
-      withOaId(undefined, async () => {
-        expect((await get("/api/v1/line/status", somchaiCookie)).json()).toMatchObject({ addFriendUrl: null });
-      }));
+      const somchai = await linkedState(SOMCHAI.email);
+      const rows = await lineAuditSince(mark);
+      expect(rows).toHaveLength(1);
+      const row = rows[0]!;
+      expect(row).toMatchObject({
+        actorId: somchai.id,
+        module: "line",
+        action: "line.account.link",
+        subjectType: "user",
+        subjectId: somchai.id,
+        before: null,
+        after: { linkedAt: somchai.lineLinkedAt!.toISOString() },
+      });
+      expect(auditRowLeaks(row, raw)).toBe(false);
+    });
 
-    it("is the add-friend link with the basic ID encoded when it is set", () =>
-      withOaId("@073fmhna", async () => {
-        expect((await get("/api/v1/line/status", somchaiCookie)).json()).toMatchObject({
-          addFriendUrl: "https://line.me/R/ti/p/%40073fmhna",
-        });
-      }));
+    it("linking again replaces the old link and records the old linkedAt in before", async () => {
+      const first = await issueToken(LINE_A);
+      await post("/api/v1/line/link", somchaiCookie, { token: first });
+      const old = (await linkedState(SOMCHAI.email)).lineLinkedAt!;
+
+      const second = await issueToken(LINE_B);
+      const mark = await auditMark();
+      expect((await post("/api/v1/line/link", somchaiCookie, { token: second })).statusCode).toBe(200);
+
+      const somchai = await linkedState(SOMCHAI.email);
+      expect(somchai.lineUserId).toBe(LINE_B);
+      const rows = await lineAuditSince(mark);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        action: "line.account.link",
+        subjectId: somchai.id,
+        before: { linkedAt: old.toISOString() },
+        after: { linkedAt: somchai.lineLinkedAt!.toISOString() },
+      });
+      expect(auditRowLeaks(rows[0]!, first, second)).toBe(false);
+    });
+
+    it("a rejected link (bad token) writes no audit row", async () => {
+      const mark = await auditMark();
+      expect((await post("/api/v1/line/link", somchaiCookie, { token: "no-such-token" })).statusCode).toBe(400);
+      expect(await lineAuditSince(mark)).toHaveLength(0);
+    });
+
+    it("unlink writes one line.account.unlink row by the user with before.linkedAt", async () => {
+      const raw = await issueToken(LINE_A);
+      await post("/api/v1/line/link", somchaiCookie, { token: raw });
+      const somchai = await linkedState(SOMCHAI.email);
+
+      const mark = await auditMark();
+      expect((await post("/api/v1/line/unlink", somchaiCookie, {})).statusCode).toBe(204);
+
+      const rows = await lineAuditSince(mark);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        actorId: somchai.id,
+        module: "line",
+        action: "line.account.unlink",
+        subjectType: "user",
+        subjectId: somchai.id,
+        before: { linkedAt: somchai.lineLinkedAt!.toISOString() },
+        after: null,
+      });
+      expect(auditRowLeaks(rows[0]!, raw)).toBe(false);
+    });
+
+    it("unlink when not linked writes no audit row", async () => {
+      const mark = await auditMark();
+      expect((await post("/api/v1/line/unlink", somchaiCookie, {})).statusCode).toBe(204);
+      expect(await lineAuditSince(mark)).toHaveLength(0);
+    });
+  });
+
+  it("the users table no longer has the LINE columns (they live in line_accounts)", async () => {
+    const cols = await prisma.$queryRaw<{ column_name: string }[]>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'users' AND column_name IN ('line_user_id', 'line_linked_at')`;
+    expect(cols).toEqual([]);
   });
 });
 

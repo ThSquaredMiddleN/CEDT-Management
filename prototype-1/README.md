@@ -243,8 +243,8 @@ refuses to start with `LINE_DRY_RUN` under `NODE_ENV=production`.
    - A quick tunnel gets a new URL on each run, so update the webhook URL and `APP_ORIGIN` each time.
    - Use your own free dev OA and channel. A channel has only one webhook URL, so two people's tunnels cannot both
      receive events.
-4. `npx prisma migrate deploy` (adds `users.line_user_id`, `users.line_linked_at`, `line_link_tokens`,
-   `line_webhook_events`), then `npm run dev`.
+4. `npx prisma migrate deploy` (adds `line_accounts`, `line_link_tokens`, `line_webhook_events`; moves any
+   existing `users.line_user_id` / `users.line_linked_at` into `line_accounts`), then `npm run dev`.
 
 **Team access**
 

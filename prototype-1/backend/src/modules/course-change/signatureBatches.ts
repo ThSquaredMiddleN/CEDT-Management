@@ -174,6 +174,7 @@ export async function createSignatureBatch(
           message: `${r.requestNo} · เจ้าหน้าที่บันทึกส่งขอลงนามแล้ว ยังรอเอกสารลงนามคืน`,
           requestId: r.id,
           requestNo: r.requestNo,
+          line: true,
         });
       }
     },

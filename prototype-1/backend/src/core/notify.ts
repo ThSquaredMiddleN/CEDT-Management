@@ -13,6 +13,8 @@ export interface NotifyInput {
   /** In-app path such as "/requests". Never a full URL. */
   link?: string | null;
   payload?: Prisma.InputJsonValue;
+  /** false keeps this notice in-app only; default true sends it to LINE too. */
+  line?: boolean;
 }
 
 /**
@@ -43,6 +45,7 @@ export async function notify(tx: Tx, input: NotifyInput): Promise<number> {
       message: input.message,
       link: input.link ?? null,
       payload: input.payload ?? {},
+      sendLine: input.line ?? true,
     })),
   });
   return result.count;

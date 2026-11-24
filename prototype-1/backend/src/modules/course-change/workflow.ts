@@ -418,6 +418,7 @@ export async function submitRequest(
       message: `${r.requestNo} รอเจ้าหน้าที่ตรวจคำร้อง`,
       requestId: r.id,
       requestNo: r.requestNo,
+      line: false,
     });
     return r.id;
   });
@@ -621,6 +622,8 @@ export async function action(
       message: `${r.requestNo} · ${body.action === "reject" ? `ไม่รับดำเนินการ: ${body.note}` : PHASES[phase]}`,
       requestId: id,
       requestNo: r.requestNo,
+      // The recipients are all staff (student acted) or all the student (staff acted), never both in one call.
+      line: me.id !== r.studentId,
     });
   });
   return getRequest(id, me);

@@ -1,3 +1,14 @@
+/// A user's linked LINE account (owned by the LINE module). One LINE ID belongs to at most one user.
+model LineAccount {
+  userId     String   @id @map("user_id") @db.Uuid
+  lineUserId String   @unique @map("line_user_id")
+  linkedAt   DateTime @map("linked_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("line_accounts")
+}
+
 /**
  * One-time link from a LINE user ID to the app login. Only the sha256 of the raw token is stored.
  */

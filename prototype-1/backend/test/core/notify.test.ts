@@ -66,6 +66,24 @@ describe("notify", () => {
     }
   });
 
+  it("writes sendLine true by default, and false when line is false", async () => {
+    const subjectId = randomUUID();
+    await notify(prisma, { userIds: [userA], type: "bookings.request_submitted", module: "bookings", subjectId, message: "default line" });
+    await notify(prisma, {
+      userIds: [userB],
+      type: "bookings.request_submitted",
+      module: "bookings",
+      subjectId,
+      message: "in app only",
+      line: false,
+    });
+
+    const a = await prisma.notification.findFirstOrThrow({ where: { subjectId, userId: userA } });
+    const b = await prisma.notification.findFirstOrThrow({ where: { subjectId, userId: userB } });
+    expect(a.sendLine).toBe(true);
+    expect(b.sendLine).toBe(false);
+  });
+
   it("stores null subjectId and link when they are omitted", async () => {
     const message = `no subject ${randomUUID()}`;
     await notify(prisma, { userIds: [userA], type: "course_change.submitted", module: "course_change", message });

@@ -13,9 +13,6 @@ model User {
   /// This user's id in MCV (set on first MCV login).
   mcvId            String?   @unique @map("mcv_id")
   advisorId        String?   @map("advisor_id") @db.Uuid
-  // LINE account linked to this user (one LINE ID belongs to at most one user).
-  lineUserId       String?   @unique @map("line_user_id")
-  lineLinkedAt     DateTime? @map("line_linked_at") @db.Timestamptz(6)
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -31,6 +28,7 @@ model User {
   newsArticles        NewsArticle[]
   groupsCreated       Group[]
   auditLogs           AuditLog[]
+  lineAccount         LineAccount?
 
   advisor                      User?                        @relation("advisor", fields: [advisorId], references: [id], onDelete: Restrict)
   advisees                     User[]                       @relation("advisor")
@@ -124,6 +122,8 @@ model Notification {
   /// In-app path such as "/requests", never a full URL.
   link             String?
   payload          Json      @default("{}")
+  /// false keeps the row in-app only: the LINE dispatcher skips it.
+  sendLine         Boolean   @default(true) @map("send_line")
   isRead           Boolean   @default(false) @map("is_read")
   readAt           DateTime? @map("read_at") @db.Timestamptz(6)
   deliveredLineAt  DateTime? @map("delivered_line_at") @db.Timestamptz(6)

@@ -13,6 +13,9 @@ import {
   LINE_A,
   loginCookie,
   newEventId,
+  auditMark,
+  auditRowLeaks,
+  lineAuditSince,
   postWebhook,
   tokenFrom,
   UUID,
@@ -25,6 +28,13 @@ let line: FakeLine;
 
 const countEvents = () =>
   prisma.lineWebhookEvent.count({ where: { webhookEventId: { startsWith: EVENT_PREFIX } } });
+/** Links the seeded user Somchai to LINE_A (cleanLineState removes it). */
+async function linkSomchai(): Promise<{ id: string; linkedAt: Date }> {
+  const { id } = await prisma.user.findUniqueOrThrow({ where: { email: "somchai@cedt.edu" }, select: { id: true } });
+  const linkedAt = new Date();
+  await prisma.lineAccount.create({ data: { userId: id, lineUserId: LINE_A, linkedAt } });
+  return { id, linkedAt };
+}
 const countTokensFor = (lineUserId: string) => prisma.lineLinkToken.count({ where: { lineUserId } });
 
 beforeAll(async () => {
@@ -223,10 +233,7 @@ describe("webhook events", () => {
   });
 
   it("linked user gets an already-linked reply to text, and no new token", async () => {
-    await prisma.user.update({
-      where: { email: "somchai@cedt.edu" },
-      data: { lineUserId: LINE_A, lineLinkedAt: new Date() },
-    });
+    await linkSomchai();
     const res = await postWebhook(app, webhookBody([lineEvent({ type: "message", userId: LINE_A, replyToken: "rt-msg" })]));
     expect(res.statusCode).toBe(200);
     expect(line.sent).toHaveLength(1);
@@ -240,10 +247,8 @@ describe("webhook events", () => {
       where: { email: "somchai@cedt.edu" },
       select: { id: true, name: true, isActive: true },
     });
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lineUserId: LINE_A, lineLinkedAt: new Date(), isActive: false },
-    });
+    await prisma.lineAccount.create({ data: { userId: user.id, lineUserId: LINE_A, linkedAt: new Date() } });
+    await prisma.user.update({ where: { id: user.id }, data: { isActive: false } });
     try {
       const res = await postWebhook(app, webhookBody([lineEvent({ type: "message", userId: LINE_A, replyToken: "rt-msg" })]));
       expect(res.statusCode).toBe(200);
@@ -258,10 +263,7 @@ describe("webhook events", () => {
   });
 
   it("unfollow clears the link and the user's tokens", async () => {
-    await prisma.user.update({
-      where: { email: "somchai@cedt.edu" },
-      data: { lineUserId: LINE_A, lineLinkedAt: new Date() },
-    });
+    await linkSomchai();
     await prisma.lineLinkToken.create({
       data: { tokenHash: hashToken("unused-test-token"), lineUserId: LINE_A, expiresAt: new Date(Date.now() + 60_000) },
     });
@@ -270,10 +272,37 @@ describe("webhook events", () => {
     expect(res.statusCode).toBe(200);
     expect(line.sent).toHaveLength(0);
 
-    const somchai = await prisma.user.findUniqueOrThrow({ where: { email: "somchai@cedt.edu" } });
-    expect(somchai.lineUserId).toBeNull();
-    expect(somchai.lineLinkedAt).toBeNull();
+    expect(await prisma.lineAccount.count({ where: { lineUserId: LINE_A } })).toBe(0);
     expect(await countTokensFor(LINE_A)).toBe(0);
+  });
+
+  it("unfollow of a linked user writes one system line.account.unlink audit row without the LINE ID", async () => {
+    const { id, linkedAt } = await linkSomchai();
+    const mark = await auditMark();
+
+    const res = await postWebhook(app, webhookBody([lineEvent({ type: "unfollow", userId: LINE_A })]));
+    expect(res.statusCode).toBe(200);
+
+    const rows = await lineAuditSince(mark);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorId: null,
+      module: "line",
+      action: "line.account.unlink",
+      subjectType: "user",
+      subjectId: id,
+      before: { linkedAt: linkedAt.toISOString() },
+      after: null,
+      note: "blocked on LINE",
+    });
+    expect(auditRowLeaks(rows[0]!)).toBe(false);
+  });
+
+  it("unfollow of someone who is not linked writes no audit row", async () => {
+    const mark = await auditMark();
+    const res = await postWebhook(app, webhookBody([lineEvent({ type: "unfollow", userId: LINE_A })]));
+    expect(res.statusCode).toBe(200);
+    expect(await lineAuditSince(mark)).toHaveLength(0);
   });
 });
 
