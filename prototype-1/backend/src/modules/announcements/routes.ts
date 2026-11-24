@@ -23,19 +23,19 @@ export async function announcementRoutes(app: FastifyInstance): Promise<void> {
     return getAnnouncement(id, { publishedOnly: !req.user });
   });
 
-  app.post("/announcements", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/announcements", { config: { auth: "user", permission: "announcements.manage" } }, async (req, reply) => {
     const input = announcementCreateSchema.parse(req.body);
     const user = requireUser(req);
     return reply.code(201).send(await createAnnouncement(user.id, input));
   });
 
-  app.patch("/announcements/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/announcements/:id", { config: { auth: "user", permission: "announcements.manage" } }, async (req) => {
     const { id } = announcementIdSchema.parse(req.params);
     const input = announcementUpdateSchema.parse(req.body);
     return updateAnnouncement(id, input);
   });
 
-  app.post("/announcements/:id/publish", { config: { auth: "admin" } }, async (req) => {
+  app.post("/announcements/:id/publish", { config: { auth: "user", permission: "announcements.manage" } }, async (req) => {
     const { id } = announcementIdSchema.parse(req.params);
     return publishAnnouncement(id);
   });

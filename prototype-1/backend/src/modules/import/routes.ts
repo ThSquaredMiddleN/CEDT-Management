@@ -26,7 +26,7 @@ const isDryRun = (req: FastifyRequest): boolean =>
   (req.query as { dryRun?: string }).dryRun === "true";
 
 export async function importRoutes(app: FastifyInstance): Promise<void> {
-  app.post("/import/courses", { config: { auth: "admin" } }, async (req) => {
+  app.post("/import/courses", { config: { auth: "user", permission: "core.import.manage" } }, async (req) => {
     const records = await readCsv(req);
     const dryRun = isDryRun(req);
 
@@ -93,7 +93,7 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
     return { dryRun: false, summary, rows };
   });
 
-  app.post("/import/rooms", { config: { auth: "admin" } }, async (req) => {
+  app.post("/import/rooms", { config: { auth: "user", permission: "core.import.manage" } }, async (req) => {
     const records = await readCsv(req);
     const dryRun = isDryRun(req);
 
@@ -180,7 +180,7 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
     return { dryRun: false, summary, rows };
   });
 
-  app.post("/import/groups", { config: { auth: "admin" } }, async (req) => {
+  app.post("/import/groups", { config: { auth: "user", permission: "core.import.manage" } }, async (req) => {
     const records = await readCsv(req);
     if (isDryRun(req)) return importGroups(prisma, records, { dryRun: true });
     // Lookups are batched (a few queries per group), so this stays well under the limit; 30 s covers a slow hosted DB.

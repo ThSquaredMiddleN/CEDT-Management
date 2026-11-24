@@ -125,7 +125,7 @@ const serializeTerm = (t: {
 
 export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
   // ------------------------------------------------------------------ courses
-  app.get("/courses", { config: { auth: "any" } }, async (req) => {
+  app.get("/courses", { config: { auth: "user" } }, async (req) => {
     const q = z
       .object({ q: z.string().optional(), active: z.string().optional() })
       .parse(req.query);
@@ -162,7 +162,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post("/courses", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/courses", { config: { auth: "user", permission: "masterdata.manage" } }, async (req, reply) => {
     const body = courseCreate.parse(req.body);
     try {
       const c = await prisma.course.create({
@@ -176,7 +176,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch("/courses/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/courses/:id", { config: { auth: "user", permission: "masterdata.manage" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     const { confirm, ...body } = coursePatch.parse(req.body);
 
@@ -233,7 +233,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post("/rooms", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/rooms", { config: { auth: "user", permission: "masterdata.manage" } }, async (req, reply) => {
     const body = roomCreate.parse(req.body);
     try {
       const room = await prisma.room.create({ data: body, include: { building: true } });
@@ -244,7 +244,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch("/rooms/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/rooms/:id", { config: { auth: "user", permission: "masterdata.manage" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     const { confirm, ...body } = roomPatch.parse(req.body);
 
@@ -269,7 +269,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     items: await prisma.building.findMany({ orderBy: { code: "asc" } }),
   }));
 
-  app.post("/buildings", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/buildings", { config: { auth: "user", permission: "masterdata.manage" } }, async (req, reply) => {
     const body = buildingCreate.parse(req.body);
     try {
       return reply.code(201).send({ building: await prisma.building.create({ data: body }) });
@@ -279,7 +279,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch("/buildings/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/buildings/:id", { config: { auth: "user", permission: "masterdata.manage" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = buildingPatch.parse(req.body);
     try {
@@ -298,7 +298,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     return { items: items.map(serializeTerm) };
   });
 
-  app.post("/terms", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/terms", { config: { auth: "user", permission: "masterdata.manage" } }, async (req, reply) => {
     const body = termCreate.parse(req.body);
     const term = await prisma.$transaction(async (tx) => {
       // Only one term may be active (partial unique index enforces it).
@@ -318,7 +318,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send({ term: serializeTerm(term) });
   });
 
-  app.patch("/terms/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/terms/:id", { config: { auth: "user", permission: "masterdata.manage" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = termPatch.parse(req.body);
 
@@ -345,7 +345,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // -------------------------------------------------------------------- users
-  app.get("/users", { config: { auth: "any" } }, async (req) => {
+  app.get("/users", { config: { auth: "user", permission: "core.users.view" } }, async (req) => {
     requireUser(req);
     const q = z
       .object({
@@ -377,7 +377,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.post("/users", { config: { auth: "admin" } }, async (req, reply) => {
+  app.post("/users", { config: { auth: "user", permission: "core.users.manage" } }, async (req, reply) => {
     const body = userCreate.parse(req.body);
     try {
       const user = await prisma.user.create({
@@ -405,7 +405,7 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch("/users/:id", { config: { auth: "admin" } }, async (req) => {
+  app.patch("/users/:id", { config: { auth: "user", permission: "core.users.manage" } }, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = userPatch.parse(req.body);
 

@@ -8,11 +8,3 @@ export async function findUserByStudentNo(tx: Tx, studentNo: string) {
   });
 }
 
-/** All active staff: the recipient set for submit/withdraw/cancel notifications. */
-export async function activeAdminIds(tx: Tx): Promise<string[]> {
-  const staff = await tx.user.findMany({
-    where: { role: "staff", isActive: true },
-    select: { id: true },
-  });
-  return staff.map((a) => a.id);
-}

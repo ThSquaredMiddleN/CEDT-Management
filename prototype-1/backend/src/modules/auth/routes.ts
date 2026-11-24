@@ -94,7 +94,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return { user: { ...sessionUser!, role: user.role } };
   });
 
-  app.post("/auth/logout", { config: { auth: "user" } }, async (req, reply) => {
+  app.post("/auth/logout", { config: { auth: "user", permission: null } }, async (req, reply) => {
     const raw = req.cookies[config.SESSION_COOKIE_NAME];
     if (raw) {
       await prisma.session.deleteMany({ where: { tokenHash: hashToken(raw) } });
@@ -107,7 +107,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // rather than a 401 (which would bounce the public calendar to the login page).
   app.get("/auth/me", { config: { auth: "public" } }, async (req) => ({ user: req.user ?? null }));
 
-  app.patch("/users/me/password", { config: { auth: "user" } }, async (req, reply) => {
+  app.patch("/users/me/password", { config: { auth: "user", permission: null } }, async (req, reply) => {
     const me = requireUser(req);
     const { currentPassword, newPassword } = passwordSchema.parse(req.body);
 

@@ -266,7 +266,7 @@ export const lineRoutes: FastifyPluginAsync<LineRouteOptions> = async (app: Fast
     await app.register(webhookPlugin, { client });
   }
 
-  app.post("/line/link", { config: { auth: "user" } }, async (req) => {
+  app.post("/line/link", { config: { auth: "user", permission: "line.use" } }, async (req) => {
     const me = requireUser(req);
     const { token } = linkBody.parse(req.body);
     const now = new Date();
@@ -306,7 +306,7 @@ export const lineRoutes: FastifyPluginAsync<LineRouteOptions> = async (app: Fast
     return { valid: row !== null && row.usedAt === null && row.expiresAt > new Date() };
   });
 
-  app.get("/line/status", { config: { auth: "user" } }, async (req) => {
+  app.get("/line/status", { config: { auth: "user", permission: "line.use" } }, async (req) => {
     const me = requireUser(req);
     const user = await prisma.user.findUniqueOrThrow({
       where: { id: me.id },
@@ -322,7 +322,7 @@ export const lineRoutes: FastifyPluginAsync<LineRouteOptions> = async (app: Fast
     };
   });
 
-  app.post("/line/unlink", { config: { auth: "user" } }, async (req, reply) => {
+  app.post("/line/unlink", { config: { auth: "user", permission: "line.use" } }, async (req, reply) => {
     const me = requireUser(req);
     const user = await prisma.user.findUniqueOrThrow({ where: { id: me.id }, select: { lineUserId: true } });
     await prisma.$transaction([
