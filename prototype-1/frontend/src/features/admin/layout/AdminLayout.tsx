@@ -5,6 +5,7 @@ import {
   DocumentMagnifyingGlassIcon,
   DocumentTextIcon,
   HomeIcon,
+  KeyIcon,
   MegaphoneIcon,
   NewspaperIcon,
 } from "@heroicons/react/24/outline";
@@ -26,6 +27,7 @@ const ADMIN_SIDEBAR_ITEMS: (SidebarItem & { permission?: string })[] = [
   { label: "จัดการคลังอุปกรณ์", icon: <CpuChipIcon />, to: "/admin/storage" },
   { label: "Receipt checks", icon: <DocumentMagnifyingGlassIcon />, to: RECEIPTS_PATH, permission: "receipts.view" },
   { label: "การแจ้งเตือน LINE", icon: <ChatBubbleLeftRightIcon />, to: "/admin/line", permission: "line.use" },
+  { label: "สิทธิ์ผู้ใช้", icon: <KeyIcon />, to: "/admin/access", permission: "core.permissions.manage" },
 ];
 
 export function AdminLayout() {
