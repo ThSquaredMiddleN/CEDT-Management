@@ -39,6 +39,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (courseId) {
+    const reqIds = (await prisma.courseChangeRequest.findMany({ where: { courseId }, select: { id: true } })).map((r) => r.id);
+    await prisma.notification.deleteMany({ where: { module: "course_change", subjectId: { in: reqIds } } });
     await prisma.courseChangeRequest.deleteMany({ where: { courseId } });
     await prisma.course.delete({ where: { id: courseId } });
   }

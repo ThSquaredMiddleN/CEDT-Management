@@ -127,7 +127,6 @@ model CourseChangeRequest {
   course        Course              @relation(fields: [courseId], references: [id])
   decidedBy     User?               @relation("ccDecidedBy", fields: [decidedById], references: [id])
   events        CourseChangeEvent[]
-  notifications Notification[]
 
   @@unique([studentId, clientRequestId])
   @@index([status, createdAt(sort: Desc)])

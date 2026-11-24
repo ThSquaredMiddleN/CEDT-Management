@@ -49,14 +49,16 @@ export function MyRequests() {
   const items = list.data?.items ?? [];
 
   // Opening the page clears the unread dots for the requests shown here.
+  const shownIds = new Set(items.map((b) => b.id));
   useEffect(() => {
     const unreadIds = (notifications.data?.items ?? [])
-      .filter((n) => !n.isRead && n.bookingId)
+      .filter((n) => !n.isRead && n.module === "bookings" && !!n.subjectId && shownIds.has(n.subjectId))
       .map((n) => n.id);
     if (unreadIds.length > 0) markRead.mutate({ ids: unreadIds });
     // Runs once per mount — re-running on every notification tick would fight the poll.
+    // The list dependency covers the case where the bookings load after the notifications.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notifications.isSuccess]);
+  }, [notifications.isSuccess, list.isSuccess]);
 
   const isWithdraw = confirming?.status === "pending";
 

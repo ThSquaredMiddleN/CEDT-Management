@@ -12,17 +12,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<string, typeof Check> = {
-  request_approved: Check,
-  request_rejected: X,
-  request_submitted: Clock,
-  booking_moved: MoveRight,
-  booking_cancelled_by_instructor: X,
-  request_withdrawn: X,
-  cc_submitted: Clock,
-  cc_approved: Check,
-  cc_rejected: X,
-  cc_completed: Check,
-  cc_cancelled: X,
+  "bookings.request_submitted": Clock,
+  "bookings.request_approved": Check,
+  "bookings.request_rejected": X,
+  "bookings.booking_moved": MoveRight,
+  "bookings.booking_cancelled_by_instructor": X,
+  "bookings.request_withdrawn": X,
+  "course_change.submitted": Clock,
+  "course_change.approved": Check,
+  "course_change.rejected": X,
+  "course_change.completed": Check,
+  "course_change.cancelled": X,
 };
 
 export function NotificationBell({
@@ -43,16 +43,10 @@ export function NotificationBell({
   const openNotification = (n: AppNotification) => {
     if (!n.isRead) markRead.mutate({ ids: [n.id] });
     setOpen(false);
-    if (n.type.startsWith("cc_")) {
-      void qc.invalidateQueries({ queryKey: ["course-change"] });
-      navigate(n.courseChangeRequestId ? `/course-change?view=tracking&request=${encodeURIComponent(n.courseChangeRequestId)}` : "/course-change?view=tracking");
-      return;
-    }
-    void qc.invalidateQueries({ queryKey: ["bookings"] });
-    // Decisions on the caller's own requests land on My Requests; everything else (new
-    // submissions, withdrawals, cancellations) is queue work on the Dashboard.
-    const toMyRequests = n.type === "request_approved" || n.type === "request_rejected";
-    navigate(toMyRequests ? "/requests" : "/admin/dashboard");
+    if (n.module === "course_change") void qc.invalidateQueries({ queryKey: ["course-change"] });
+    if (n.module === "bookings") void qc.invalidateQueries({ queryKey: ["bookings"] });
+    // The backend picks the target page per row; a null link leaves the user where they are.
+    if (n.link) navigate(n.link);
   };
 
   return (

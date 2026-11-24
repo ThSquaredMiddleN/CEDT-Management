@@ -36,9 +36,10 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       items: items.map((n) => ({
         id: n.id,
         type: n.type,
+        module: n.module,
+        subjectId: n.subjectId,
         message: n.message,
-        bookingId: n.bookingId,
-        courseChangeRequestId: n.courseChangeRequestId,
+        link: n.link,
         payload: n.payload,
         isRead: n.isRead,
         createdAt: n.createdAt.toISOString(),
@@ -56,8 +57,13 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
 
     await prisma.notification.updateMany({
       // Scoped to the caller's own notifications either way.
-      where: { userId: me.id, ...("all" in body ? {} : { id: { in: body.ids } }) },
-      data: { isRead: true },
+      where: {
+        userId: me.id,
+        isRead: false,
+        ...("all" in body ? {} : { id: { in: body.ids } }),
+      },
+      // Only rows not read yet get a readAt, so the first read time is kept.
+      data: { isRead: true, readAt: new Date() },
     });
 
     return reply.code(204).send();

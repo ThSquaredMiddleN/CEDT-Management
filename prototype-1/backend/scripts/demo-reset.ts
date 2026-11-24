@@ -39,7 +39,7 @@ async function main() {
 
   const targets = await prisma.courseChangeRequest.findMany({
     where: { studentId: student.id, courseId: course.id, termId: term.id },
-    include: { _count: { select: { events: true, notifications: true } } },
+    include: { _count: { select: { events: true } } },
     orderBy: { createdAt: "asc" },
   });
 
@@ -49,9 +49,13 @@ async function main() {
   }
 
   for (const r of targets) {
+    // Notifications have no FK to the request any more: match them by module + subjectId.
+    const notifications = await prisma.notification.count({
+      where: { module: "course_change", subjectId: r.id },
+    });
     console.log(
       `  ${r.requestNo}  ${r.requestType} ${DEMO_COURSE}  status=${r.status}  ` +
-        `events=${r._count.events}  notifications=${r._count.notifications}`,
+        `events=${r._count.events}  notifications=${notifications}`,
     );
   }
   if (!apply) {
@@ -63,7 +67,7 @@ async function main() {
   const result = await prisma.$transaction(async (tx) => {
     // Children first; only notifications that belong to these requests (never booking ones).
     const notifications = await tx.notification.deleteMany({
-      where: { courseChangeRequestId: { in: ids }, bookingId: null },
+      where: { module: "course_change", subjectId: { in: ids } },
     });
     const events = await tx.courseChangeEvent.deleteMany({ where: { requestId: { in: ids } } });
     const requests = await tx.courseChangeRequest.deleteMany({ where: { id: { in: ids } } });

@@ -103,7 +103,6 @@ model Booking {
   room          Room                @relation(fields: [roomId], references: [id])
   occurrences   BookingOccurrence[]
   events        BookingEvent[]
-  notifications Notification[]
 
   @@index([status, createdAt(sort: Desc)])
   @@index([requestedBy, createdAt(sort: Desc)])

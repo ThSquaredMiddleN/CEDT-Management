@@ -1,14 +1,14 @@
-import type { NotificationType, PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { config, lineEnabled } from "../../config.js";
-import type { NotifyPayload } from "../notifications/service.js";
+import type { NotifyPayload } from "../bookings/service.js";
 import type { LineClient } from "./client.js";
-import { lineTextFor } from "./messages.js";
+import { fallbackTextFor, linkFor, lineTextFor } from "./messages.js";
 
 /**
  * Pushes undelivered notifications to LINE. Each notification is pushed with its own id as the retry key, so a
- * retry after an accepted push comes back 409 and counts as sent. Nothing here reads or logs message text,
- * LINE user IDs or tokens: logs carry the notification ID, its type and a status only.
+ * retry after an accepted push comes back 409 and counts as sent. Message text is sent to LINE but never logged,
+ * nor are LINE user IDs or tokens: logs carry the notification ID, its type and a status only.
  */
 
 /** Most notifications pushed per tick, across all users. */
@@ -57,7 +57,7 @@ export interface DispatchDeps {
 export interface DispatchCounts {
   /** LINE accepted the push (2xx, or 409 for an earlier accepted attempt). */
   sent: number;
-  /** Rejected for good: LINE answered 4xx other than 429, or the payload cannot be rendered. Marked delivered. */
+  /** Rejected for good: LINE answered 4xx other than 429. Marked delivered. */
   permanent: number;
   /**
    * Transient failure or a thrown error. Left undelivered for the next tick. A 429 counts here too. The user's
@@ -76,7 +76,10 @@ type Outcome = "sent" | "permanent" | "retry" | "rateLimited";
 interface DueRow {
   id: string;
   userId: string;
-  type: NotificationType;
+  type: string;
+  module: string;
+  message: string;
+  link: string | null;
   payload: unknown;
 }
 
@@ -93,23 +96,26 @@ function errorCodeOf(err: unknown): string {
 }
 
 /**
- * One notification: render, push, then mark delivered on ok or permanent. A transient result returns before the
- * mark, so the row stays due. A render failure is marked and counted as permanent. A throw from the push or the
- * mark propagates to the caller, which counts it as a retry.
+ * One notification: build the text, push, then mark delivered on ok or permanent. A transient result returns before
+ * the mark, so the row stays due. Building the text never marks a row: a booking row that cannot be rendered is sent
+ * as its own message instead. A throw from the push or the mark propagates to the caller, which counts it as a retry.
  */
-async function deliver(
-  deps: Resolved,
-  n: { id: string; type: NotificationType; payload: unknown },
-  lineUserId: string,
-): Promise<Outcome> {
+async function deliver(deps: Resolved, n: DueRow, lineUserId: string): Promise<Outcome> {
+  const url = linkFor(deps.appOrigin, n.link);
   let text: string;
-  try {
-    text = lineTextFor(n.type, n.payload as NotifyPayload, deps.appOrigin);
-  } catch {
-    // Rendering is deterministic, so a retry would fail the same way. Only the ID and a status are logged.
-    deps.log.error({ notificationId: n.id, detail: "render_failed" }, "LINE notification could not be rendered; marked delivered");
-    await deps.prisma.notification.update({ where: { id: n.id }, data: { deliveredLineAt: deps.now } });
-    return "permanent";
+  if (n.module === "bookings") {
+    try {
+      text = lineTextFor(n.type, n.payload as NotifyPayload, url);
+    } catch {
+      // Rendering is deterministic, so a retry would fail the same way. Only the ID and type are logged.
+      deps.log.warn(
+        { notificationId: n.id, type: n.type, detail: "render_failed" },
+        "LINE booking text could not be rendered; sent the message instead",
+      );
+      text = fallbackTextFor(n.message, url);
+    }
+  } else {
+    text = fallbackTextFor(n.message, url);
   }
 
   const result = await deps.client.push(lineUserId, [{ type: "text", text }], n.id);
@@ -177,7 +183,7 @@ export async function dispatchLineOnce(deps: DispatchDeps): Promise<DispatchCoun
       where: { userId: u.id, deliveredLineAt: null, createdAt: { gte: new Date(earliest) } },
       orderBy: { createdAt: "asc" },
       take: PER_USER,
-      select: { id: true, userId: true, type: true, payload: true },
+      select: { id: true, userId: true, type: true, module: true, message: true, link: true, payload: true },
     });
     if (rows.length > 0) queues.push(rows.map((row) => ({ row, lineUserId })));
   }

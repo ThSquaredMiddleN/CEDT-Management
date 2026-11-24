@@ -38,6 +38,8 @@ beforeAll(async () => {
 
 afterEach(async () => {
   config.COURSE_CHANGE_TODAY = originalToday;
+  const reqIds = (await prisma.courseChangeRequest.findMany({ where: { courseId }, select: { id: true } })).map((r) => r.id);
+  await prisma.notification.deleteMany({ where: { module: "course_change", subjectId: { in: reqIds } } });
   await prisma.courseChangeRequest.deleteMany({ where: { courseId } });
 });
 afterAll(async () => {
@@ -60,7 +62,7 @@ describe("submission recovery", () => {
     expect(results[1].json().request.id).toBe(id);
     expect(await prisma.courseChangeRequest.count({ where: { courseId } })).toBe(1);
     expect(await prisma.courseChangeEvent.count({ where: { requestId: id, eventType: "submitted" } })).toBe(1);
-    expect(await prisma.notification.count({ where: { courseChangeRequestId: id, type: "cc_submitted" } })).toBe(await prisma.user.count({where:{role:"staff",isActive:true}}));
+    expect(await prisma.notification.count({ where: { module: "course_change", subjectId: id, type: "course_change.submitted" } })).toBe(await prisma.user.count({where:{role:"staff",isActive:true}}));
   });
   it("recovers the same request after the deadline instead of submitting again", async () => {
     const body = payload();
