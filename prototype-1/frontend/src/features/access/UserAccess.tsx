@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   useAccessCatalog,
   useAccessUserSearch,
@@ -31,6 +32,7 @@ export function UserAccess({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
   // Bumped on every pick so re-selecting the same user also starts from the saved state.
   const [epoch, setEpoch] = useState(0);
   const [dirty, setDirty] = useState(false);
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
   const search = useAccessUserSearch(useDebounced(query));
   const catalog = useAccessCatalog();
   const roles = useRoles();
@@ -44,6 +46,8 @@ export function UserAccess({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
     [onDirtyChange],
   );
 
+  const editorShown = !!(userId && access.data && catalog.data && roles.data);
+
   function choose(id: string) {
     if (dirty && !window.confirm("มีการเปลี่ยนแปลงที่ยังไม่บันทึก ต้องการทิ้งการเปลี่ยนแปลงหรือไม่")) return;
     setUserId(id);
@@ -53,7 +57,8 @@ export function UserAccess({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
 
   return (
     <div className="space-y-4">
-      <div className="relative">
+      <div className="flex items-start gap-2">
+      <div className="relative flex-1">
         <Input aria-label="ค้นหาผู้ใช้" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ค้นหาชื่อ อีเมล รหัสนิสิต" />
         {query && search.data && (
           <ul className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow">
@@ -68,9 +73,12 @@ export function UserAccess({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
           </ul>
         )}
       </div>
+      <div ref={setSlot}>{!editorShown && <Button disabled>บันทึก (0)</Button>}</div>
+      </div>
 
-      {userId && access.data && catalog.data && roles.data && (
+      {editorShown && (
         <UserEditor
+          saveSlot={slot}
           key={`${userId}:${epoch}`}
           data={access.data}
           rows={catalog.data.rows}
@@ -88,7 +96,9 @@ function UserEditor({
   rows,
   allRoles,
   onDirtyChange,
+  saveSlot,
 }: {
+  saveSlot: HTMLElement | null;
   data: UserAccessView;
   rows: CatalogRow[];
   allRoles: RoleView[];
@@ -132,13 +142,13 @@ function UserEditor({
 
   return (
     <>
+      {saveSlot && createPortal(<Button disabled={diff.count === 0} onClick={() => setSaving(true)}>บันทึก ({diff.count})</Button>, saveSlot)}
       <section className="space-y-2 border-t pt-3">
-        <div className="flex items-start justify-between gap-2">
+        <div>
           <p className="text-sm">
             <b>{data.user.name}</b> · {data.user.email} · {data.user.isActive ? "ใช้งานอยู่" : "ปิดใช้งาน"}
             {data.user.studentNo && ` · ${data.user.studentNo} · นิสิต (อัตโนมัติ)`}
           </p>
-          <Button disabled={diff.count === 0} onClick={() => setSaving(true)}>บันทึก ({diff.count})</Button>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span>บทบาท:</span>
