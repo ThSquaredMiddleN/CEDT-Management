@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CATALOG_SOURCE, CEDT_COURSE_CATALOG } from "../prisma/data/cedt-course-catalog.js";
 import { SYNTHETIC_ENROLLMENT, seedCourseCatalog } from "../prisma/seed-course-change.js";
 import { buildApp } from "../src/app.js";
+import { loadSessionUser } from "../src/core/permissions.js";
 import { prisma } from "../src/db.js";
 import { eligibleCourses } from "../src/modules/course-change/service.js";
 import type { SessionUser } from "../src/plugins/auth.js";
@@ -59,7 +60,7 @@ beforeAll(async () => {
   for(const enrollment of enrolled) for(const requestType of ["drop","withdraw"] as const) {
     await prisma.courseChangeSchedule.create({data:{termId:term.id,courseId:enrollment.courseId,section:"*",requestType,label:"TEST catalog published dates",format:"block",opensOn:new Date("2026-09-01"),closesOn:new Date("2026-10-25"),flow:requestType==="drop"?"program_registrar":"advisor_pi",needsSignature:true,needsReg:false,needsPi:requestType==="withdraw",needsMerge:false,published:true}});
   }
-  s3 = { id: u.id, name: u.name, email: u.email, role: u.role, titlePrefix: u.titlePrefix, studentNo: u.studentNo };
+  s3 = { ...(await loadSessionUser(u.id))!, role: u.role };
 });
 
 afterAll(async () => {

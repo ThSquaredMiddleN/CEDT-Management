@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import type { Term } from "@prisma/client";
+import { loadSessionUser } from "../src/core/permissions.js";
 import { prisma } from "../src/db.js";
 import { isoDate, addDaysISO } from "../src/lib/time.js";
 import type { SessionUser } from "../src/plugins/auth.js";
@@ -37,9 +38,10 @@ export async function createDemoScenarios(
   student: SessionUser,
 ) {
   const run = randomUUID().slice(0, 6).toUpperCase();
-  const other = await prisma.user.findUniqueOrThrow({
+  const otherRow = await prisma.user.findUniqueOrThrow({
     where: { email: "student2@cedt.edu" },
   });
+  const other: SessionUser = { ...(await loadSessionUser(otherRow.id))!, role: otherRow.role };
   const original = await demoPdf("Programme petition test document");
   const reg = await demoPdf("Reg Chula test document");
   const directory = new URL(

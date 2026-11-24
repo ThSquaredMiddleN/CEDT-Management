@@ -2,6 +2,7 @@ import { submitLegacyRequest } from "../src/modules/course-change/service.js";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
+import { loadSessionUser } from "../src/core/permissions.js";
 import { prisma } from "../src/db.js";
 import { config } from "../src/config.js";
 
@@ -47,7 +48,8 @@ const get = (url: string, cookie: string) =>
 async function submit(cookie: string, requestType: "drop" | "withdraw", code: string, reason: string): Promise<{statusCode:number;json:()=>any}> {
   // Historical v1 engine compatibility. New HTTP submissions are covered in workflow.test.ts.
   const email = cookie === student ? "student3@cedt.edu" : "student2@cedt.edu";
-  const me = await prisma.user.findUniqueOrThrow({ where: { email } });
+  const row = await prisma.user.findUniqueOrThrow({ where: { email } });
+  const me = { ...(await loadSessionUser(row.id))!, role: row.role };
   let res: {statusCode:number;json:()=>any};
   try { const request = await submitLegacyRequest({requestType,courseId:courses[code]!,reason},me,config.COURSE_CHANGE_TODAY!); res = { statusCode:201, json:()=>({request}) }; }
   catch(e) { const error=e as {statusCode:number;code:string;message:string}; res={statusCode:error.statusCode,json:()=>({error:{code:error.code,message:error.message}})}; }

@@ -1,4 +1,5 @@
 import type { CourseChangeFlow, CourseChangeType } from "@prisma/client";
+import { loadSessionUser } from "../src/core/permissions.js";
 import { prisma } from "../src/db.js";
 import type { SessionUser } from "../src/plugins/auth.js";
 import {
@@ -98,10 +99,7 @@ export async function seedCourseChange(args: {
         passwordHash: await args.hash("student1234"),
       },
     });
-    students[s.email] = {
-      id: row.id, name: row.name, email: row.email, role: row.role,
-      titlePrefix: row.titlePrefix, studentNo: row.studentNo,
-    };
+    students[s.email] = { ...(await loadSessionUser(row.id))!, role: row.role };
 
     for (const code of s.courses) {
       const courseId = catalog.ids[code]!;

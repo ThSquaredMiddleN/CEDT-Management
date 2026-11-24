@@ -1,3 +1,4 @@
+import { CORE_PERMISSIONS, CORE_ROW_LABELS, type PermissionDef } from "../core/permissions.js";
 import { announcementsModule } from "./announcements/index.js";
 import { authModule } from "./auth/index.js";
 import { bookingsModule } from "./bookings/index.js";
@@ -25,3 +26,12 @@ export const modules: AppModule[] = [
   lineModule,
   receiptsModule,
 ];
+
+/** Every permission the code knows: core's plus each module's. */
+export const permissionCatalog: PermissionDef[] = [...CORE_PERMISSIONS, ...modules.flatMap((m) => m.permissions ?? [])];
+
+/** Thai row labels for the permission table, by row (module name or core row). */
+export const permissionRowLabels: Record<string, string> = {
+  ...CORE_ROW_LABELS,
+  ...Object.fromEntries(modules.filter((m) => m.label).map((m) => [m.name, m.label!])),
+};

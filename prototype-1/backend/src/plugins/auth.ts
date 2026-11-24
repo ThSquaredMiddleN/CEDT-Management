@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config, isProd } from "../config.js";
 import { prisma } from "../db.js";
+import { can, loadSessionUser, type SessionUser as CoreSessionUser } from "../core/permissions.js";
 import { forbidden, unauthenticated } from "../lib/errors.js";
 
 // "any" and "admin" both mean "staff": they predate the `student` role (Course Change) and
@@ -11,14 +12,8 @@ export type AuthLevel = "public" | "user" | "student" | "any" | "admin";
 
 export type Role = "staff" | "student";
 
-export interface SessionUser {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  titlePrefix: string | null;
-  studentNo: string | null;
-}
+/** Until Task A7 the old role rides along; new code must use permissions. */
+export type SessionUser = CoreSessionUser & { role: Role };
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -26,6 +21,11 @@ declare module "fastify" {
   }
   interface FastifyContextConfig {
     auth?: AuthLevel;
+    /**
+     * Permission the caller must hold. `null` = any signed-in user; the handler checks ownership
+     * itself. Required (string or null) on every non-public route that changes data.
+     */
+    permission?: string | null;
     /** Set `csrf: false` only on routes with their own request authentication (the LINE webhook). */
     csrf?: boolean;
   }
@@ -60,28 +60,24 @@ async function resolveUser(req: FastifyRequest): Promise<SessionUser | undefined
 
   const session = await prisma.session.findUnique({
     where: { tokenHash: hashToken(raw) },
-    include: { user: true },
+    select: { expiresAt: true, userId: true, user: { select: { role: true, isActive: true } } },
   });
   if (!session || session.expiresAt <= new Date() || !session.user.isActive) return undefined;
-
-  const u = session.user;
-  return {
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    role: u.role,
-    titlePrefix: u.titlePrefix,
-    studentNo: u.studentNo,
-  };
+  const user = await loadSessionUser(session.userId);
+  return user ? { ...user, role: session.user.role } : undefined;
 }
 
-export function registerAuth(app: FastifyInstance): void {
+export function registerAuth(app: FastifyInstance, knownPermissions: ReadonlySet<string>): void {
   // Every route must declare its auth level; an undeclared route is a startup error (§6.2).
   app.addHook("onRoute", (route) => {
     if (route.method === "HEAD" || route.method === "OPTIONS") return;
     if (!route.url.startsWith("/api/v1")) return;
     if (!route.config?.auth) {
       throw new Error(`Route ${route.method} ${route.url} does not declare config.auth`);
+    }
+    const p = route.config.permission;
+    if (typeof p === "string" && !knownPermissions.has(p)) {
+      throw new Error(`Route ${route.method} ${route.url} uses unknown permission "${p}"`);
     }
   });
 
@@ -103,6 +99,8 @@ export function registerAuth(app: FastifyInstance): void {
 
     if (level === "public") return;
     if (!req.user) throw unauthenticated();
+    const permission = req.routeOptions.config?.permission;
+    if (permission && !can(req.user, permission)) throw forbidden();
     if (level === "user") return;
     if (level === "student") {
       if (req.user.role !== "student") throw forbidden();

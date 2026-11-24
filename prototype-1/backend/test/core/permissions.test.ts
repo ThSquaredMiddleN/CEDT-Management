@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { can, loadPermissions, loadSessionUser, usersWithPermission } from "../../src/core/permissions.js";
 import { prisma } from "../../src/db.js";
+import { permissionCatalog } from "../../src/modules/index.js";
 import { idOf } from "../helpers/session.js";
 
 let norole: string;
@@ -79,5 +80,18 @@ describe("usersWithPermission", () => {
     const users = await usersWithPermission("course_change.use");
     expect(users).toContain(await idOf(prisma, "student@test.local"));
     expect(users).not.toContain(norole);
+  });
+});
+
+describe("permission catalog", () => {
+  it("has unique names", () => {
+    const keys = permissionCatalog.map((p) => p.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("covers every permission the default roles use", async () => {
+    const known = new Set(permissionCatalog.map((p) => p.key));
+    const rows = await prisma.rolePermission.findMany({ select: { permission: true } });
+    expect(rows.map((r) => r.permission).filter((p) => !known.has(p))).toEqual([]);
   });
 });

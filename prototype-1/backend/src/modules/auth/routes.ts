@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { config } from "../../config.js";
 import { prisma } from "../../db.js";
+import { loadSessionUser } from "../../core/permissions.js";
 import { badRequest, locked, unauthenticated } from "../../lib/errors.js";
 import {
   clearSessionCookie,
@@ -89,16 +90,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     });
     setSessionCookie(reply, raw);
 
-    return {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        titlePrefix: user.titlePrefix,
-        studentNo: user.studentNo,
-      },
-    };
+    const sessionUser = await loadSessionUser(user.id);
+    return { user: { ...sessionUser!, role: user.role } };
   });
 
   app.post("/auth/logout", { config: { auth: "user" } }, async (req, reply) => {

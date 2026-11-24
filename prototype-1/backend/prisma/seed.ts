@@ -1,5 +1,6 @@
 import { deflateSync } from "node:zlib";
 import argon2 from "argon2";
+import { loadSessionUser } from "../src/core/permissions.js";
 import { prisma } from "../src/db.js";
 import type { SessionUser } from "../src/plugins/auth.js";
 import { approveBooking, createBooking, rejectBooking } from "../src/modules/bookings/service.js";
@@ -92,6 +93,7 @@ async function main() {
     { name: "Krit W.", titlePrefix: "Dr.", email: "krit@cedt.edu", password: "instr1234", role: "staff" as const },
   ];
 
+  const userRows: Record<string, { id: string; role: SessionUser["role"] }> = {};
   const userByEmail: Record<string, SessionUser> = {};
   for (const u of users) {
     const row = await prisma.user.upsert({
@@ -105,20 +107,17 @@ async function main() {
         passwordHash: await hash(u.password),
       },
     });
-    userByEmail[u.email] = {
-      id: row.id,
-      name: row.name,
-      email: row.email,
-      role: row.role,
-      titlePrefix: row.titlePrefix,
-      studentNo: row.studentNo,
-    };
+    userRows[u.email] = { id: row.id, role: row.role };
   }
 
   // Roles (step 5a): the demo admin is staff + IT admin; instructors keep the legacy staff role.
-  for (const u of users) await assignRole(prisma, userByEmail[u.email]!.id, "staff");
-  await assignRole(prisma, userByEmail["admin@cedt.edu"]!.id, "it_admin");
+  for (const u of users) await assignRole(prisma, userRows[u.email]!.id, "staff");
+  await assignRole(prisma, userRows["admin@cedt.edu"]!.id, "it_admin");
   await seedTestAccounts(prisma, hash);
+  for (const u of users) {
+    const r = userRows[u.email]!;
+    userByEmail[u.email] = { ...(await loadSessionUser(r.id))!, role: r.role };
+  }
 
   const admin = userByEmail["admin@cedt.edu"]! as SessionUser;
   const somchai = userByEmail["somchai@cedt.edu"]! as SessionUser;
