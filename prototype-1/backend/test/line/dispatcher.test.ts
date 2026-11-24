@@ -16,7 +16,7 @@ import { cleanLineState, fakeLine, LINE_A, LINE_B, newEventId, UUID } from "./fi
 /** Seeded staff accounts. Their LINE fields are reset to null after every test. */
 const SOMCHAI = "somchai@cedt.edu";
 const ANUCHA = "anucha@cedt.edu";
-/** Seeded student (seed-course-change.ts): course change rows go to LINE for students only. */
+/** Seeded student (seed-course-change.ts). Its rows default to sendLine true, so LINE sends them. */
 const STUDENT = "student@cedt.edu";
 
 /** Marks every notification this file creates, so cleanup can find them. */
@@ -105,6 +105,7 @@ interface RowFields {
   message: string;
   link: string | null;
   payload: Record<string, string>;
+  sendLine: boolean;
 }
 
 async function addRow(email: string, createdAt: Date, over: Partial<RowFields> = {}): Promise<string> {
@@ -333,7 +334,7 @@ describe("dispatchLineOnce", () => {
     expect(await deliveredAt(id)).not.toBeNull();
   });
 
-  it("does not push a course_change row to a staff user: it stays undelivered, and their booking row is still sent", async () => {
+  it("does not push a row marked sendLine false, even to a staff user with line.use: it stays undelivered, and their booking row is still sent", async () => {
     const linkedAt = new Date();
     await link(SOMCHAI, LINE_A, linkedAt);
     const cc = await addRow(SOMCHAI, new Date(linkedAt.getTime() + 1000), {
@@ -342,6 +343,7 @@ describe("dispatchLineOnce", () => {
       message: `${MARK} new course change request`,
       link: "/course-change?view=tracking&request=fake-request",
       payload: { requestNo: "CC-0003" },
+      sendLine: false,
     });
     const booking = await addNotification(SOMCHAI, new Date(linkedAt.getTime() + 2000));
 
@@ -350,6 +352,24 @@ describe("dispatchLineOnce", () => {
     expect(line.sent[0]!.text).not.toContain("new course change request");
     expect(await deliveredAt(booking)).not.toBeNull();
     expect(await deliveredAt(cc)).toBeNull();
+  });
+
+  it("pushes a course_change row marked sendLine true to a non-student user with line.use, then marks it delivered", async () => {
+    const linkedAt = new Date();
+    await link(SOMCHAI, LINE_A, linkedAt);
+    const cc = await addRow(SOMCHAI, new Date(linkedAt.getTime() + 1000), {
+      type: "course_change.submitted",
+      module: "course_change",
+      message: `${MARK} staff course change request`,
+      link: "/course-change?view=tracking&request=fake-request",
+      payload: { requestNo: "CC-0004" },
+      sendLine: true,
+    });
+
+    expect(await dispatch()).toEqual(tally({ sent: 1 }));
+    expect(line.sent).toHaveLength(1);
+    expect(line.sent[0]!.retryKey).toBe(cc);
+    expect(await deliveredAt(cc)).not.toBeNull();
   });
 
   it("does not push to a linked user without line.use, and leaves their row undelivered; a linked student is still pushed", async () => {

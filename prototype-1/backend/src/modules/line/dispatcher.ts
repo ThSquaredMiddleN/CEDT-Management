@@ -22,12 +22,6 @@ const PER_USER = 10;
  */
 export const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-/**
- * Modules whose notifications go to LINE for students only. Staff still see these rows in the web bell; on LINE
- * they would get one push per request from every student (owner's decision, 2026-11-24).
- * A student is a user with a student number.
- */
-export const STUDENT_ONLY_LINE_MODULES = ["course_change"];
 /** Webhook dedupe rows only matter while LINE may redeliver an event, so older ones are pruned. */
 const WEBHOOK_EVENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 /** After LINE answers 429, no push is sent until this much time has passed. */
@@ -183,7 +177,7 @@ export async function dispatchLineOnce(deps: DispatchDeps): Promise<DispatchCoun
   const accounts = (
     await full.prisma.lineAccount.findMany({
       where: { user: { isActive: true } },
-      select: { userId: true, lineUserId: true, linkedAt: true, user: { select: { studentNo: true } } },
+      select: { userId: true, lineUserId: true, linkedAt: true },
       orderBy: { userId: "asc" },
     })
   ).filter((a) => allowed.has(a.userId));
@@ -199,8 +193,8 @@ export async function dispatchLineOnce(deps: DispatchDeps): Promise<DispatchCoun
         userId: a.userId,
         deliveredLineAt: null,
         createdAt: { gte: new Date(earliest) },
-        // Never pushed, never marked: the row stays in the bell and ages out of this window.
-        ...(a.user.studentNo !== null ? {} : { module: { notIn: STUDENT_ONLY_LINE_MODULES } }),
+        // Rows the sender marked in-app only (notify line: false) are never pushed or marked: they stay in the bell.
+        sendLine: true,
       },
       orderBy: { createdAt: "asc" },
       take: PER_USER,

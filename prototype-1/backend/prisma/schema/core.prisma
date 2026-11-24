@@ -122,6 +122,8 @@ model Notification {
   /// In-app path such as "/requests", never a full URL.
   link             String?
   payload          Json      @default("{}")
+  /// false keeps the row in-app only: the LINE dispatcher skips it.
+  sendLine         Boolean   @default(true) @map("send_line")
   isRead           Boolean   @default(false) @map("is_read")
   readAt           DateTime? @map("read_at") @db.Timestamptz(6)
   deliveredLineAt  DateTime? @map("delivered_line_at") @db.Timestamptz(6)

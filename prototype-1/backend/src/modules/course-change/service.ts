@@ -208,10 +208,13 @@ export async function eligibleCourses(me: SessionUser, type: CourseChangeType, t
 /** Course change events: the row type is `course_change.<event>`. */
 export type CcEvent = "submitted" | "approved" | "rejected" | "completed" | "cancelled";
 
-/** One in-app row per recipient, linked to the request's tracking view. LINE dispatch is separate (step 3c). */
+/**
+ * One row per recipient, linked to the request's tracking view. `line: false` keeps the rows in-app only: pass it
+ * when the recipients are staff, so LINE does not push one message per student request to every staff member.
+ */
 export async function notifyCc(
   tx: Tx,
-  args: { userIds: string[]; event: CcEvent; message: string; requestId: string; requestNo: string },
+  args: { userIds: string[]; event: CcEvent; message: string; requestId: string; requestNo: string; line: boolean },
 ): Promise<void> {
   await notify(tx, {
     userIds: args.userIds,
@@ -221,6 +224,7 @@ export async function notifyCc(
     message: args.message,
     link: `/course-change?view=tracking&request=${args.requestId}`,
     payload: { requestNo: args.requestNo },
+    line: args.line,
   });
 }
 
@@ -387,6 +391,7 @@ export async function submitLegacyRequest(input: SubmitInput, me: SessionUser, t
         message: `${req.requestNo} ${subject} จำลองส่งเข้า Reg Chula แล้ว — รอเจ้าหน้าที่บันทึกผล`,
         requestId: req.id,
         requestNo: req.requestNo,
+        line: true,
       });
     } else {
       await notifyCc(tx, {
@@ -395,6 +400,7 @@ export async function submitLegacyRequest(input: SubmitInput, me: SessionUser, t
         message: `${snapshot.studentName} ยื่นคำร้อง${subject} (${req.requestNo}) — รออนุมัติ`,
         requestId: req.id,
         requestNo: req.requestNo,
+        line: false,
       });
     }
 
@@ -675,6 +681,7 @@ export async function approveRequest(id: string, me: SessionUser) {
       message: `${r.requestNo} ${TYPE_TH[r.requestType]} ${snap.courseCode} ได้รับการอนุมัติแล้ว — ระบบบันทึกการส่งต่อแบบจำลอง`,
       requestId: id,
       requestNo: r.requestNo,
+      line: true,
     });
   });
 
@@ -713,6 +720,7 @@ export async function rejectRequest(id: string, reason: string, me: SessionUser)
       message: `${r.requestNo} ${TYPE_TH[r.requestType]} ${snap.courseCode} ไม่ได้รับการอนุมัติ: ${reason}`,
       requestId: id,
       requestNo: r.requestNo,
+      line: true,
     });
   });
   return getRequest(id, me);
@@ -733,6 +741,7 @@ export async function cancelRequest(id: string, me: SessionUser) {
       message: `${snap.studentName} ยกเลิกคำร้อง ${r.requestNo} (${TYPE_TH[r.requestType]} ${snap.courseCode})`,
       requestId: id,
       requestNo: r.requestNo,
+      line: false,
     });
   });
   return getRequest(id, me);
@@ -755,6 +764,7 @@ export async function completeRequest(id: string, note: string | null, me: Sessi
       message: `${r.requestNo} ${TYPE_TH[r.requestType]} ${snap.courseCode} ดำเนินการสำเร็จ — เจ้าหน้าที่บันทึกผลในระบบสาธิตแล้ว`,
       requestId: id,
       requestNo: r.requestNo,
+      line: true,
     });
   });
   return getRequest(id, me);

@@ -344,6 +344,14 @@ describe("Version 2 review and correction", () => {
     const replay = await submit({ clientRequestId: key });
     expect(replay.json().request.id).toBe(r.id);
     expect(replay.json().request.reason).toBe("แก้ไขรายละเอียดแล้ว");
+    // Staff acting notified the student (LINE); the student resubmitting notified staff (in-app only).
+    const rows = await prisma.notification.findMany({
+      where: { module: "course_change", subjectId: r.id },
+      include: { user: { select: { studentNo: true } } },
+    });
+    expect(rows.some((n) => n.user.studentNo !== null)).toBe(true);
+    expect(rows.some((n) => n.user.studentNo === null)).toBe(true);
+    for (const n of rows) expect(n.sendLine).toBe(n.user.studentNo !== null);
   });
   it("protects against concurrent or stale staff actions", async () => {
     await publish();
@@ -456,6 +464,7 @@ describe("Private PDF documents and human evidence", () => {
     const notification = await prisma.notification.findFirst({
       where: { module: "course_change", subjectId: r.id, type: "course_change.completed" },
     });
+    expect(notification?.sendLine).toBe(true);
     expect(notification?.deliveredLineAt).toBeNull();
     expect(notification?.link).toBe(`/course-change?view=tracking&request=${r.id}`);
     expect((await upload(r, "evidence", staff)).statusCode).toBe(409);

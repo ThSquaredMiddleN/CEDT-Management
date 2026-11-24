@@ -118,7 +118,8 @@ describe("Historical v1 Flow B — withdraw in week 9", () => {
       include: { user: true },
     });
     expect(n?.user.email).toBe("anucha@cedt.edu");
-    // Created as an in-app row only: the LINE dispatcher sets deliveredLineAt later.
+    // Staff row: in-app only, so the LINE dispatcher never pushes it. The dispatcher sets deliveredLineAt on student rows.
+    expect(n?.sendLine).toBe(false);
     expect(n?.deliveredLineAt).toBeNull();
     expect(n?.link).toBe(`/course-change?view=tracking&request=${id}`);
   });
@@ -147,10 +148,11 @@ describe("Historical v1 Flow B — withdraw in week 9", () => {
       "done", "done", "done", "done", "current",
     ]);
 
-    // The student got an in-app row; LINE delivery is not marked here (the dispatcher does it).
+    // The student got a row that LINE sends; LINE delivery is not marked here (the dispatcher does it).
     const n = await prisma.notification.findFirst({
       where: { module: "course_change", subjectId: id, type: "course_change.approved" },
     });
+    expect(n?.sendLine).toBe(true);
     expect(n?.deliveredLineAt).toBeNull();
   });
 
@@ -203,6 +205,12 @@ describe("cancel (CC-BR-5)", () => {
     const res = await post(`/course-change/requests/${target.id}/cancel`, student);
     expect(res.json().request.status).toBe("cancelled");
     expect((await post(`/course-change/requests/${target.id}/cancel`, student)).statusCode).toBe(409);
+    // The cancel notice goes to staff: in-app only, never to LINE.
+    const cancelled = await prisma.notification.findMany({
+      where: { module: "course_change", subjectId: target.id, type: "course_change.cancelled" },
+    });
+    expect(cancelled.length).toBeGreaterThan(0);
+    for (const n of cancelled) expect(n.sendLine).toBe(false);
   });
 });
 
