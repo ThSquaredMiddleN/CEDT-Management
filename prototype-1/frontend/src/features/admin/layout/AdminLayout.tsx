@@ -1,5 +1,6 @@
 import {
   CalendarIcon,
+  ChatBubbleLeftRightIcon,
   CpuChipIcon,
   DocumentMagnifyingGlassIcon,
   DocumentTextIcon,
@@ -21,6 +22,7 @@ const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
   { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon />, to: "/admin/course-change" },
   { label: "จัดการคลังอุปกรณ์", icon: <CpuChipIcon />, to: "/admin/storage" },
   { label: "Receipt checks", icon: <DocumentMagnifyingGlassIcon />, to: RECEIPTS_PATH },
+  { label: "การแจ้งเตือน LINE", icon: <ChatBubbleLeftRightIcon />, to: "/admin/line" },
 ];
 
 export function AdminLayout() {

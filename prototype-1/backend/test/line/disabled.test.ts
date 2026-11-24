@@ -14,6 +14,8 @@ let cookie = "";
 beforeAll(async () => {
   vi.stubEnv("LINE_CHANNEL_SECRET", "");
   vi.stubEnv("LINE_CHANNEL_ACCESS_TOKEN", "");
+  // A basic ID alone does not enable the add-friend link: LINE itself is off.
+  vi.stubEnv("LINE_OA_BASIC_ID", "@073fmhna");
   vi.resetModules();
   const { buildApp } = await import("../../src/app.js");
   app = await buildApp();
@@ -51,7 +53,7 @@ describe("LINE disabled", () => {
     expect(app!.hasRoute({ method: "GET", url: "/api/v1/line/status" })).toBe(true);
     const res = await app!.inject({ method: "GET", url: "/api/v1/line/status", headers: { cookie } });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ enabled: false });
+    expect(res.json()).toMatchObject({ enabled: false, addFriendUrl: null });
   });
 
   it("registers the link check route, which answers valid: false for any token", async () => {

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.js";
+import { config } from "../../src/config.js";
 import { prisma } from "../../src/db.js";
 import { hashToken } from "../../src/plugins/auth.js";
 import {
@@ -21,11 +22,14 @@ import {
 /** Seeded staff accounts. Their LINE fields are reset to null after every test. */
 const SOMCHAI = { email: "somchai@cedt.edu", password: "instr1234" };
 const ANUCHA = { email: "anucha@cedt.edu", password: "instr1234" };
+/** A student (Course Change seed). Students may link LINE too: /line/link, /line/status and /line/unlink are "user" routes. */
+const STUDENT = { email: "student3@cedt.edu", password: "student1234" };
 
 let app: FastifyInstance;
 let line: FakeLine;
 let somchaiCookie: string;
 let anuchaCookie: string;
+let studentCookie: string;
 
 const post = (url: string, cookie: string | undefined, payload: unknown) =>
   app.inject({
@@ -57,6 +61,7 @@ beforeAll(async () => {
   await cleanLineState();
   somchaiCookie = await loginCookie(app, SOMCHAI.email, SOMCHAI.password);
   anuchaCookie = await loginCookie(app, ANUCHA.email, ANUCHA.password);
+  studentCookie = await loginCookie(app, STUDENT.email, STUDENT.password);
 });
 
 beforeEach(async () => {
@@ -187,6 +192,43 @@ describe("GET /line/status and POST /line/unlink", () => {
 
   it("status requires a login", async () => {
     expect((await app.inject({ method: "GET", url: "/api/v1/line/status" })).statusCode).toBe(401);
+  });
+
+  it("a student can link, read status and unlink (signed-in user routes, not staff only)", async () => {
+    const raw = await issueToken(LINE_A);
+    expect((await post("/api/v1/line/link", studentCookie, { token: raw })).statusCode).toBe(200);
+
+    const linked = await get("/api/v1/line/status", studentCookie);
+    expect(linked.statusCode).toBe(200);
+    expect(linked.json()).toMatchObject({ enabled: true, linked: true });
+
+    expect((await post("/api/v1/line/unlink", studentCookie, {})).statusCode).toBe(204);
+    expect((await linkedState(STUDENT.email)).lineUserId).toBeNull();
+  });
+
+  describe("addFriendUrl", () => {
+    // config is read per request, so the test sets LINE_OA_BASIC_ID on the shared config object and restores it.
+    const withOaId = async (value: string | undefined, run: () => Promise<void>) => {
+      const saved = config.LINE_OA_BASIC_ID;
+      config.LINE_OA_BASIC_ID = value;
+      try {
+        await run();
+      } finally {
+        config.LINE_OA_BASIC_ID = saved;
+      }
+    };
+
+    it("is null when LINE_OA_BASIC_ID is unset", () =>
+      withOaId(undefined, async () => {
+        expect((await get("/api/v1/line/status", somchaiCookie)).json()).toMatchObject({ addFriendUrl: null });
+      }));
+
+    it("is the add-friend link with the basic ID encoded when it is set", () =>
+      withOaId("@073fmhna", async () => {
+        expect((await get("/api/v1/line/status", somchaiCookie)).json()).toMatchObject({
+          addFriendUrl: "https://line.me/R/ti/p/%40073fmhna",
+        });
+      }));
   });
 });
 

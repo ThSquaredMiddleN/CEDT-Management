@@ -20,6 +20,7 @@ import type {
   CheckConflictsResponse,
   Course,
   DirectoryUser,
+  LineStatus,
   NotificationsResponse,
   ReceiptCheckResponse,
   ReceiptCheckRow,
@@ -405,10 +406,16 @@ export function useDeleteReceiptCheck() {
 }
 // --------------------------------------------------------------------------- line
 
-/** Links the signed-in staff member's LINE account. 400 = invalid, expired or used token. */
+/** Links the signed-in user's LINE account. 400 = invalid, expired or used token. */
 export const linkLineAccount = (token: string) =>
   post<{ linked: true }>("/line/link", { token });
 
 /** Read-only check run when the link page opens, before login. Only says whether Confirm would work. */
 export const checkLineLinkToken = (token: string) =>
   post<{ valid: boolean }>("/line/link/check", { token });
+
+/** Any signed-in user. Used by the LINE settings page. */
+export const getLineStatus = () => api<LineStatus>("/line/status");
+
+/** Removes the LINE link and any pending link tokens. 204. */
+export const unlinkLine = () => post<void>("/line/unlink");

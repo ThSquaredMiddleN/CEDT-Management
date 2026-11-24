@@ -22,6 +22,14 @@ const schema = z.object({
   LINE_DRY_RUN: flag.transform((v) => v === "true" || v === "1"),
   LINE_LINK_TTL_MINUTES: positiveNumber(15),
   LINE_DISPATCH_INTERVAL_MS: positiveNumber(5000),
+  // The Official Account's basic ID (e.g. @073fmhna). Only used to build the "add friend" link on the LINE settings page.
+  LINE_OA_BASIC_ID: z.preprocess(
+    emptyAsUnset,
+    z
+      .string()
+      .regex(/^@[0-9A-Za-z._-]{1,40}$/, { message: "LINE_OA_BASIC_ID must look like @073fmhna" })
+      .optional(),
+  ),
   // Receipts carry names and student IDs (PDPA): the OCR sidecar must run on this machine.
   OCR_SERVICE_URL: z
     .string()
