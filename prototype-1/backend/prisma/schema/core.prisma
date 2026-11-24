@@ -24,14 +24,18 @@ enum NotificationType {
 model User {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email            String    @unique @db.Citext
-  passwordHash     String    @map("password_hash")
+  /// Null for accounts that sign in through MCV only; password login then fails.
+  passwordHash     String?   @map("password_hash")
   name             String
   titlePrefix      String?   @map("title_prefix")
   role             UserRole
   isActive         Boolean   @default(true) @map("is_active")
   failedLoginCount Int       @default(0) @map("failed_login_count")
   lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(6)
-  studentNo        String?   @unique @map("student_no")
+  /// Set = this user is a student. 10 digits (CHECK in migration).
+  studentNo        String?   @unique @map("student_no") @db.Char(10)
+  /// This user's id in MCV (set on first MCV login).
+  mcvId            String?   @unique @map("mcv_id")
   advisorId        String?   @map("advisor_id") @db.Uuid
   // LINE account linked to this user (one LINE ID belongs to at most one user).
   lineUserId       String?   @unique @map("line_user_id")
@@ -49,6 +53,7 @@ model User {
   receiptChecks       ReceiptCheck[]
   announcements       Announcement[]
   newsArticles        NewsArticle[]
+  groupsCreated       Group[]
 
   advisor                      User?                        @relation("advisor", fields: [advisorId], references: [id])
   advisees                     User[]                       @relation("advisor")
@@ -92,6 +97,7 @@ model Course {
   defaultInstructor            User?                        @relation(fields: [defaultInstructorId], references: [id])
   bookings                     Booking[]
   enrollments                  Enrollment[]
+  groups                       Group[]
   allowedCourses               AllowedCourse[]
   courseChangeRequests         CourseChangeRequest[]
   courseChangeSchedules        CourseChangeSchedule[]
@@ -111,6 +117,7 @@ model Term {
   bookings                     Booking[]
   courseChangeWindows          CourseChangeWindow[]
   enrollments                  Enrollment[]
+  groups                       Group[]
   allowedCourses               AllowedCourse[]
   courseChangeRequests         CourseChangeRequest[]
   courseChangeSettingsEvents   CourseChangeSettingsEvent[]
@@ -143,22 +150,80 @@ model Notification {
   @@map("notifications")
 }
 
-/// A student's registration in a course (mirrors Reg Chula; seeded in the prototype).
+/// A student's registration in a course (mirrors Reg Chula; seeded in the prototype). Shared by every module.
 model Enrollment {
-  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  studentId String  @map("student_id") @db.Uuid
-  termId    String  @map("term_id") @db.Uuid
-  courseId  String  @map("course_id") @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  termId    String   @map("term_id") @db.Uuid
+  courseId  String   @map("course_id") @db.Uuid
   /// Null when unknown — demo data never invents official sections or credits.
   section   String?
-  credits   Int?    @db.SmallInt
+  credits   Int?     @db.SmallInt
   /// Provenance, e.g. "synthetic-demo". A future Reg Chula sync would write its own value.
   source    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  student User   @relation(fields: [studentId], references: [id])
-  term    Term   @relation(fields: [termId], references: [id], onDelete: Cascade)
-  course  Course @relation(fields: [courseId], references: [id])
+  student User   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  term    Term   @relation(fields: [termId], references: [id], onDelete: Restrict)
+  course  Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
 
   @@unique([studentId, termId, courseId])
+  @@index([termId, courseId, section])
   @@map("enrollments")
+}
+
+enum GroupType {
+  /// A group inside a course section, e.g. "Group 09". Needs course and term (CHECK in migration).
+  course_section
+  club
+  project
+  personal
+
+  @@map("group_type")
+}
+
+enum GroupMemberRole {
+  member
+  leader
+
+  @@map("group_member_role")
+}
+
+model Group {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type        GroupType
+  name        String
+  courseId    String?   @map("course_id") @db.Uuid
+  termId      String?   @map("term_id") @db.Uuid
+  section     String?
+  /// Null when the group came from a CSV import.
+  createdById String?   @map("created_by") @db.Uuid
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  course    Course?       @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  term      Term?         @relation(fields: [termId], references: [id], onDelete: Restrict)
+  createdBy User?         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  members   GroupMember[]
+
+  @@unique([termId, courseId, section, name])
+  @@index([type, isActive])
+  @@map("groups")
+}
+
+/// Members are stored by student number, not user id: CSV imports come before the student's first login.
+/// Match to users.student_no on read (no FK).
+model GroupMember {
+  groupId   String          @map("group_id") @db.Uuid
+  studentNo String          @map("student_no") @db.Char(10)
+  role      GroupMemberRole @default(member)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Restrict)
+
+  @@id([groupId, studentNo])
+  @@index([studentNo])
+  @@map("group_members")
 }

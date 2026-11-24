@@ -37,7 +37,7 @@
 1. `backend/src/modules/course-change/service.ts`: เส้นทาง `reg_direct` สร้างคำร้องสถานะ processing และเรียก mock Reg Chula ทันที ข้ามเจ้าหน้าที่ตรวจ ซึ่งไม่ตรงข้อมูลใหม่
 2. `backend/src/modules/course-change/timeline.ts`: ใช้ flow A/B/C และ event เส้นทางเดิม ยังไม่มีขั้นตรวจเจ้าหน้าที่/ส่งแก้ไข/รอลงนาม/คืนเอกสาร/รอนิสิตทำภายนอกแยกกัน
 3. `backend/src/modules/course-change/settings.ts` และ `frontend/src/features/course-change/SettingsView.tsx`: ตั้งช่วงระดับเทอมและเปิดสิทธิ์รายวิชา ยังไม่มีปฏิทิน Block/Final/กำหนดรายตอนเรียน
-4. `backend/prisma/schema.prisma`: Enrollment มี Section เป็นข้อมูลประกอบ แต่กฎรายวิชาใช้คู่ term/course ยังไม่ได้แยก offering/Section ที่อาจมีรูปแบบและวันสอบต่างกัน
+4. `backend/prisma/schema/core.prisma` (then `schema.prisma`): Enrollment มี Section เป็นข้อมูลประกอบ แต่กฎรายวิชาใช้คู่ term/course ยังไม่ได้แยก offering/Section ที่อาจมีรูปแบบและวันสอบต่างกัน
 5. หน้ารายละเอียดมีเอกสาร HTML ตัวอย่าง ไม่ใช่ระบบรับไฟล์ลงนาม ส่งคืน ตรวจฉบับแก้ไข หรือรวม PDF จริง
 6. การ approve ในเดโมอาจเรียก mock Reg/PI และสร้างตัวอย่างทันที ยังไม่ใช่ขั้นงานที่เจ้าหน้าที่และนิสิตทำตามกระบวนการใหม่
 7. completed เป็นเจ้าหน้าที่บันทึกเอง ยังไม่มีการแยกผล “เอกสารครบ” กับ “ทะเบียนดำเนินการแล้ว” ตามหลักฐานจริง

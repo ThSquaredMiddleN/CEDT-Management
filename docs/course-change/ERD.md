@@ -1,6 +1,6 @@
 # Course Change — Entity Relationship Diagram (as implemented)
 
-> Generated for DATA-001 from `prototype-1/backend/prisma/schema.prisma` and checked against
+> Generated for DATA-001 from `prototype-1/backend/prisma/schema/` (then one `schema.prisma`) and checked against
 > the live local database (`information_schema` / `pg_indexes` / `pg_constraint`, 2026-10-09,
 > after migration `20261009120000_course_catalog`). It shows **only tables that exist**.
 > Things that are conceptual but not implemented are listed separately in §I.
@@ -20,7 +20,7 @@ adds 5 of them and reuses 5 shared LabSync tables:
 ## B. Mermaid ER diagram
 
 Column types are PostgreSQL types. `PK` primary key, `FK` foreign key, `UK` unique.
-The booking tables are drawn with their keys only (full columns: `schema.prisma`).
+The booking tables are drawn with their keys only (full columns: `prisma/schema/bookings.prisma`).
 
 ```mermaid
 erDiagram
