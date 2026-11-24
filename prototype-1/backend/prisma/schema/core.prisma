@@ -38,6 +38,7 @@ model User {
   announcements       Announcement[]
   newsArticles        NewsArticle[]
   groupsCreated       Group[]
+  auditLogs           AuditLog[]
 
   advisor                      User?                        @relation("advisor", fields: [advisorId], references: [id], onDelete: Restrict)
   advisees                     User[]                       @relation("advisor")
@@ -138,6 +139,28 @@ model Notification {
   @@index([module, subjectId])
   @@index([deliveredLineAt])
   @@map("notifications")
+}
+
+/// Append-only history of business changes (team plan 3.6). UPDATE, DELETE and TRUNCATE are blocked by triggers
+/// in the migration. `action` is "<module>.<thing>.<verb>" (checked in core/audit.ts); secrets are stripped there too.
+model AuditLog {
+  id          BigInt   @id @default(autoincrement())
+  actorId     String?  @map("actor_id") @db.Uuid    // ว่างถ้าระบบเป็นผู้ทำ เช่น งานลบตาม retention
+  module      String
+  action      String                                // "<module>.<สิ่งของ>.<การกระทำ>" เช่น "storage.request.approved"
+  subjectType String   @map("subject_type")         // "storage_request"
+  subjectId   String   @map("subject_id")
+  before      Json?
+  after       Json?
+  note        String?                               // เช่น จำนวนแถวที่ลบตาม retention
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([subjectType, subjectId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([module, createdAt])
+  @@map("audit_logs")
 }
 
 /// A student's registration in a course (mirrors Reg Chula; seeded in the prototype). Shared by every module.
