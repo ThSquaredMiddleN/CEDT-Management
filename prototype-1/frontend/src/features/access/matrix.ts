@@ -1,4 +1,4 @@
-import type { CatalogRow, RoleView } from "@/api/access";
+import type { CatalogCell, CatalogRow, RoleView } from "@/api/access";
 
 export interface Draft {
   roleIds: string[];
@@ -135,4 +135,16 @@ export function cellTip(s: CellState, fallback: string): string {
     return [fromRoles, direct].filter(Boolean).join(" · ") || fallback;
   }
   return s.disabled ? "ให้ได้เฉพาะสิทธิ์ที่คุณมี" : fallback;
+}
+
+export type DisplayRow =
+  | { kind: "module"; id: string; row: CatalogRow }
+  | { kind: "part"; id: string; row: CatalogRow; part: CatalogCell };
+
+/** Flatten catalog rows into table rows: each module row is followed by one sub-row per manage part. */
+export function displayRows(rows: CatalogRow[]): DisplayRow[] {
+  return rows.flatMap((row): DisplayRow[] => [
+    { kind: "module", id: row.row, row },
+    ...(row.manage?.parts ?? []).map((part): DisplayRow => ({ kind: "part", id: part.key, row, part })),
+  ]);
 }

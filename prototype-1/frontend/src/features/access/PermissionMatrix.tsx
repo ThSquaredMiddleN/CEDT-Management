@@ -1,18 +1,18 @@
 import { useId, type ReactNode } from "react";
-import { Check, Lock, Minus, Plus } from "lucide-react";
+import { Check, CornerDownRight, Lock, Minus, Plus } from "lucide-react";
 import type { CatalogCell, CatalogRow } from "@/api/access";
 import { Card } from "@/components/ui/card";
-import { cellLook, cellTip, roleSources, type CellLook, type CellState } from "./matrix";
+import { cellLook, cellTip, displayRows, roleSources, type CellLook, type CellState } from "./matrix";
 
-/** CSS-only popover above its child; shown on hover and keyboard focus. */
-function Tip({ id, text, children }: { id: string; text: string; children: ReactNode }) {
+/** CSS-only popover above its child (below it near the top of the scroll area); shown on hover and keyboard focus. */
+function Tip({ id, text, below = false, children }: { id: string; text: string; below?: boolean; children: ReactNode }) {
   return (
     <span className="group/tip relative inline-flex">
       {children}
       <span
         id={id}
         role="tooltip"
-        className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 w-max max-w-[260px] -translate-x-1/2 whitespace-normal rounded-md bg-neutral-900 px-2 py-1 text-center text-xs font-normal leading-snug text-white opacity-0 shadow transition-opacity group-focus-within/tip:opacity-100 group-hover/tip:opacity-100"
+        className={`pointer-events-none absolute left-1/2 z-20 w-max ${below ? "top-full mt-1.5" : "bottom-full mb-1.5"} max-w-[260px] -translate-x-1/2 whitespace-normal rounded-md bg-neutral-900 px-2 py-1 text-center text-xs font-normal leading-snug text-white opacity-0 shadow transition-opacity group-focus-within/tip:opacity-100 group-hover/tip:opacity-100`}
       >
         {text}
       </span>
@@ -35,13 +35,13 @@ function Glyph({ look, size }: { look: CellLook; size: number }) {
   return null;
 }
 
-function Cell({ cell, state, onToggle }: { cell: CatalogCell; state: CellState; onToggle: (key: string) => void }) {
+function Cell({ cell, state, onToggle, below }: { cell: CatalogCell; state: CellState; onToggle: (key: string) => void; below: boolean }) {
   const tipId = useId();
   const look = cellLook(state);
   const tip = cellTip(state, cell.label);
   if (look === "locked") {
     return (
-      <Tip id={tipId} text={tip}>
+      <Tip id={tipId} text={tip} below={below}>
         <span
           tabIndex={0}
           role="img"
@@ -54,7 +54,7 @@ function Cell({ cell, state, onToggle }: { cell: CatalogCell; state: CellState; 
     );
   }
   return (
-    <Tip id={tipId} text={tip}>
+    <Tip id={tipId} text={tip} below={below}>
       <button
         type="button"
         role="checkbox"
@@ -84,7 +84,7 @@ function Legend({ withLock, savedLabel }: { withLock: boolean; savedLabel: strin
     </span>
   );
   return (
-    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-neutral-100 pt-3 text-xs text-neutral-500">
+    <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-neutral-100 px-4 py-3 text-xs text-neutral-500">
       {withLock &&
         item(
           <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-[#E6F1FB] text-[#185FA5]">
@@ -108,54 +108,68 @@ export function PermissionMatrix({
   stateOf,
   onToggle,
   forRole = false,
+  maxHeightClass = "max-h-[calc(100vh-360px)]",
 }: {
   rows: CatalogRow[];
   stateOf: (key: string) => CellState;
   onToggle: (key: string) => void;
   /** Cells are role permissions rather than per-user grants (affects the legend only). */
   forRole?: boolean;
+  /** Tailwind max-height class of the scroll area; reserve room for whatever sits above the table. */
+  maxHeightClass?: string;
 }) {
-  const cell = (c: CatalogCell | undefined) => (c ? <Cell cell={c} state={stateOf(c.key)} onToggle={onToggle} /> : DASH);
   const hasLocks = rows.some((r) =>
     [r.use, r.view, r.manage?.key ? { key: r.manage.key } : undefined, ...(r.manage?.parts ?? [])].some((c) => c && roleSources(stateOf(c.key)).length > 0),
   );
-  const th = "px-2 py-1 text-center text-xs font-medium text-neutral-500";
+  const th = "bg-blue-50 px-2 py-2 text-center text-xs font-medium text-blue-900";
+  const td = "px-2 py-2.5 text-center";
+  const list = displayRows(rows);
   return (
-    <Card className="p-4">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="px-2 py-1 text-left text-xs font-medium text-neutral-500">หมวด</th>
-            <th className={th}>ใช้งาน</th>
-            <th className={th}>ดู</th>
-            <th className={th}>จัดการ</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.row} className="border-t border-neutral-100 align-top">
-              <td className="px-2 py-2.5">{r.label}</td>
-              <td className="px-2 py-2.5 text-center">{cell(r.use)}</td>
-              <td className="px-2 py-2.5 text-center">{cell(r.view)}</td>
-              <td className="px-2 py-2.5 text-center">
-                {r.manage ? (
-                  <div className="flex flex-col items-center gap-1.5">
-                    {r.manage.key && cell({ key: r.manage.key, label: r.manage.label ?? r.manage.key })}
-                    {r.manage.parts.map((p) => (
-                      <div key={p.key} className="flex flex-col items-center gap-1">
-                        <span className="text-[11px] leading-tight text-neutral-500">{p.label}</span>
-                        {cell(p)}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  DASH
-                )}
-              </td>
+    <Card className="overflow-hidden p-0">
+      <div className={`overflow-y-auto ${maxHeightClass}`}>
+        <table className="w-full border-collapse text-sm">
+          <thead className="sticky top-0 z-30">
+            <tr>
+              <th className={`${th} pl-4 text-left`}>หมวด</th>
+              <th className={th}>ใช้งาน</th>
+              <th className={th}>ดู</th>
+              <th className={th}>จัดการ</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {list.map((d, i) => {
+              // Tooltips open downward in the first rows so the sticky header / scroll edge never clips them.
+              const below = i < 2;
+              const cell = (c: CatalogCell | undefined) => (c ? <Cell cell={c} state={stateOf(c.key)} onToggle={onToggle} below={below} /> : DASH);
+              if (d.kind === "part") {
+                return (
+                  <tr key={d.id} className="border-t border-dashed border-neutral-200 bg-neutral-50 align-middle">
+                    <td className="py-2 pl-9 pr-2 text-[13px] text-neutral-500">
+                      <span className="inline-flex items-center gap-1.5">
+                        <CornerDownRight size={13} aria-hidden className="shrink-0" />
+                        {d.part.label}
+                      </span>
+                    </td>
+                    <td className={td}>{DASH}</td>
+                    <td className={td}>{DASH}</td>
+                    <td className={td}>{cell(d.part)}</td>
+                  </tr>
+                );
+              }
+              const r = d.row;
+              const manage = r.manage?.key ? { key: r.manage.key, label: r.manage.label ?? r.manage.key } : undefined;
+              return (
+                <tr key={d.id} className="border-t border-neutral-100 align-middle first:border-t-0">
+                  <td className="py-2.5 pl-4 pr-2">{r.label}</td>
+                  <td className={td}>{cell(r.use)}</td>
+                  <td className={td}>{cell(r.view)}</td>
+                  <td className={td}>{cell(manage)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       <Legend withLock={!forRole && hasLocks} savedLabel={forRole ? "ในบทบาท" : "ให้รายคนแล้ว"} />
     </Card>
   );

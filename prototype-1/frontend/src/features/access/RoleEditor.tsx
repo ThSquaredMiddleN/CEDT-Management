@@ -95,6 +95,7 @@ export function RoleEditor({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
 
           <PermissionMatrix
             forRole
+            maxHeightClass="max-h-[calc(100vh-520px)]"
             rows={catalog.data.rows}
             onToggle={(key) =>
               setDraft((d) => ({ ...d, permissions: d.permissions.includes(key) ? d.permissions.filter((p) => p !== key) : [...d.permissions, key] }))

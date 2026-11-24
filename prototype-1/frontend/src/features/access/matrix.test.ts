@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogRow, RoleView } from "@/api/access";
-import { cellKeys, cellLook, cellState, cellTip, diffDraft, directNote, draftSources, isGivable, keyLabels, type CellState, type Draft } from "./matrix";
+import { cellKeys, displayRows, cellLook, cellState, cellTip, diffDraft, directNote, draftSources, isGivable, keyLabels, type CellState, type Draft } from "./matrix";
 
 const role = (id: string, name: string, permissions: string[], key = id): RoleView => ({
   id, key, name, description: null, isSystem: false, isActive: true, permissions, userCount: 0,
@@ -151,5 +151,32 @@ describe("cellLook and cellTip", () => {
     expect(cellTip(st({ change: "removed" }), "x")).toBe("จะถอนเมื่อบันทึก");
     expect(cellTip(st({ disabled: true }), "x")).toBe("ให้ได้เฉพาะสิทธิ์ที่คุณมี");
     expect(cellTip(st({}), "x")).toBe("x");
+  });
+});
+
+describe("displayRows", () => {
+  it("puts each manage part in a sub-row right after its module row", () => {
+    const rows: CatalogRow[] = [
+      {
+        row: "course_change",
+        label: "ลด-ถอนรายวิชา",
+        use: { key: "course_change.use", label: "" },
+        manage: { key: "course_change.manage", label: "", parts: [{ key: "course_change.manage.advise", label: "a" }, { key: "course_change.manage.head", label: "h" }] },
+      },
+      { row: "receipts", label: "ใบเสร็จ", view: { key: "receipts.view", label: "" } },
+    ];
+    expect(displayRows(rows).map((r) => [r.kind, r.id])).toEqual([
+      ["module", "course_change"],
+      ["part", "course_change.manage.advise"],
+      ["part", "course_change.manage.head"],
+      ["module", "receipts"],
+    ]);
+  });
+
+  it("handles a module that only declares manage parts", () => {
+    const rows: CatalogRow[] = [{ row: "x", label: "X", manage: { key: null, label: null, parts: [{ key: "x.manage.a", label: "A" }] } }];
+    const out = displayRows(rows);
+    expect(out.map((r) => r.kind)).toEqual(["module", "part"]);
+    expect(out[1].kind === "part" && out[1].part.key).toBe("x.manage.a");
   });
 });
