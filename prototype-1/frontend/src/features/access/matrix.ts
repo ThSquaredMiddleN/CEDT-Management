@@ -108,3 +108,31 @@ export function keyLabels(rows: CatalogRow[]): Map<string, string> {
   }
   return out;
 }
+
+export type CellLook = "locked" | "empty" | "saved" | "add" | "remove";
+
+/** Which of the five visual looks a cell takes. */
+export function cellLook(s: Pick<CellState, "checked" | "locked" | "change">): CellLook {
+  if (s.locked) return "locked";
+  if (s.change === "added" && s.checked) return "add";
+  if (s.change === "removed" && !s.checked) return "remove";
+  return s.checked ? "saved" : "empty";
+}
+
+/** Role names (not "direct") that give a cell. */
+export const roleSources = (s: Pick<CellState, "sources">): string[] => s.sources.filter((x) => x !== "direct");
+
+/** Tooltip text of a cell; `fallback` (the permission label) is used when there is nothing else to say. */
+export function cellTip(s: CellState, fallback: string): string {
+  const roles = roleSources(s);
+  const fromRoles = roles.length ? `ได้จากบทบาท: ${roles.join(", ")}` : "";
+  const look = cellLook(s);
+  if (look === "locked") return fromRoles;
+  if (look === "add") return [fromRoles, "จะเพิ่มเมื่อบันทึก"].filter(Boolean).join(" · ");
+  if (look === "remove") return [fromRoles, "จะถอนเมื่อบันทึก"].filter(Boolean).join(" · ");
+  if (look === "saved") {
+    const direct = s.sources.includes("direct") ? ["รายคน", s.note].filter(Boolean).join(" · ") : "";
+    return [fromRoles, direct].filter(Boolean).join(" · ") || fallback;
+  }
+  return s.disabled ? "ให้ได้เฉพาะสิทธิ์ที่คุณมี" : fallback;
+}

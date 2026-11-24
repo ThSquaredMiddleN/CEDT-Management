@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogRow, RoleView } from "@/api/access";
-import { cellKeys, cellState, diffDraft, directNote, draftSources, isGivable, keyLabels, type Draft } from "./matrix";
+import { cellKeys, cellLook, cellState, cellTip, diffDraft, directNote, draftSources, isGivable, keyLabels, type CellState, type Draft } from "./matrix";
 
 const role = (id: string, name: string, permissions: string[], key = id): RoleView => ({
   id, key, name, description: null, isSystem: false, isActive: true, permissions, userCount: 0,
@@ -131,5 +131,25 @@ describe("keyLabels", () => {
     expect(m.get("receipts.view")).toBe("ใบเสร็จ · ดู");
     expect(m.get("receipts.manage")).toBe("ใบเสร็จ · จัดการ");
     expect(m.get("receipts.manage.void")).toBe("ใบเสร็จ · จัดการ: ยกเลิก");
+  });
+});
+
+describe("cellLook and cellTip", () => {
+  const st = (o: Partial<CellState>): CellState => ({ checked: false, locked: false, disabled: false, sources: [], change: null, ...o });
+  it("picks the look", () => {
+    expect(cellLook(st({}))).toBe("empty");
+    expect(cellLook(st({ checked: true, sources: ["direct"] }))).toBe("saved");
+    expect(cellLook(st({ checked: true, change: "added", sources: ["direct"] }))).toBe("add");
+    expect(cellLook(st({ change: "removed" }))).toBe("remove");
+    expect(cellLook(st({ checked: true, locked: true, sources: ["อาจารย์"] }))).toBe("locked");
+  });
+  it("builds tooltips", () => {
+    expect(cellTip(st({ checked: true, locked: true, sources: ["อาจารย์", "นิสิต"] }), "x")).toBe("ได้จากบทบาท: อาจารย์, นิสิต");
+    expect(cellTip(st({ checked: true, sources: ["direct"], note: "เหตุผล: ก · ให้โดย ข" }), "x")).toBe("รายคน · เหตุผล: ก · ให้โดย ข");
+    expect(cellTip(st({ checked: true, sources: ["อาจารย์", "direct"], note: "เหตุผล: ก" }), "x")).toBe("ได้จากบทบาท: อาจารย์ · รายคน · เหตุผล: ก");
+    expect(cellTip(st({ checked: true, change: "added", sources: ["direct"] }), "x")).toBe("จะเพิ่มเมื่อบันทึก");
+    expect(cellTip(st({ change: "removed" }), "x")).toBe("จะถอนเมื่อบันทึก");
+    expect(cellTip(st({ disabled: true }), "x")).toBe("ให้ได้เฉพาะสิทธิ์ที่คุณมี");
+    expect(cellTip(st({}), "x")).toBe("x");
   });
 });
