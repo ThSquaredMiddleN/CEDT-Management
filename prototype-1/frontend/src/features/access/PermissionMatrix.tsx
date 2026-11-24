@@ -108,7 +108,7 @@ export function PermissionMatrix({
   stateOf,
   onToggle,
   forRole = false,
-  maxHeightClass = "max-h-[calc(100vh-360px)]",
+  maxHeightClass = "max-h-[calc(100vh-400px)]",
 }: {
   rows: CatalogRow[];
   stateOf: (key: string) => CellState;
@@ -121,7 +121,7 @@ export function PermissionMatrix({
   const hasLocks = rows.some((r) =>
     [r.use, r.view, r.manage?.key ? { key: r.manage.key } : undefined, ...(r.manage?.parts ?? [])].some((c) => c && roleSources(stateOf(c.key)).length > 0),
   );
-  const th = "bg-blue-50 px-2 py-2 text-center text-xs font-medium text-blue-900";
+  const th = "bg-blue-50 px-2 py-2 text-xs font-medium text-blue-900";
   const td = "px-2 py-2.5 text-center";
   const list = displayRows(rows);
   return (
@@ -131,9 +131,9 @@ export function PermissionMatrix({
           <thead className="sticky top-0 z-30">
             <tr>
               <th className={`${th} pl-4 text-left`}>หมวด</th>
-              <th className={th}>ใช้งาน</th>
-              <th className={th}>ดู</th>
-              <th className={th}>จัดการ</th>
+              <th className={`${th} text-center`}>ใช้งาน</th>
+              <th className={`${th} text-center`}>ดู</th>
+              <th className={`${th} text-center`}>จัดการ</th>
             </tr>
           </thead>
           <tbody>
