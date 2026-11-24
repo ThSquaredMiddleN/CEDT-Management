@@ -54,6 +54,11 @@ const ReceiptChecksPage = lazy(() =>
     default: module.ReceiptChecksPage,
   })),
 );
+const MyReceiptPage = lazy(() =>
+  import("@/features/receipts/MyReceiptPage").then((module) => ({
+    default: module.MyReceiptPage,
+  })),
+);
 const MyRequests = lazy(() =>
   import("@/features/my-requests/MyRequests").then((module) => ({
     default: module.MyRequests,
@@ -281,6 +286,15 @@ export function AppRoutes() {
             element={
               <RequireAuth permission="line.use">
                 <LineSettingsPage />
+              </RequireAuth>
+            }
+          />
+          {/* Student's own tuition receipt check (upload, result, list). The API checks receipts.use too. */}
+          <Route
+            path="receipts"
+            element={
+              <RequireAuth permission="receipts.use">
+                <MyReceiptPage />
               </RequireAuth>
             }
           />

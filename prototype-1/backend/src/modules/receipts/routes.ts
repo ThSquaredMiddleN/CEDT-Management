@@ -1,12 +1,16 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { AppError, badRequest } from "../../lib/errors.js";
+import { AppError, badRequest, forbidden } from "../../lib/errors.js";
+import type { SessionUser } from "../../core/permissions.js";
 import { requireUser } from "../../plugins/auth.js";
 import {
   checkReceipt,
+  currentTerm,
   deleteReceiptCheck,
+  listOwnReceiptChecks,
   listReceiptChecks,
   OcrUnavailableError,
+  studentView,
   type UploadedFile,
 } from "./service.js";
 
@@ -63,6 +67,12 @@ async function readUpload(req: FastifyRequest): Promise<{ file?: UploadedFile; f
   return { file, fields };
 }
 
+/** The student number a student may act on. Staff accounts have none, so they get 403 here. */
+function ownStudentNo(me: SessionUser): string {
+  if (!me.studentNo) throw forbidden("Only students with a student number can submit a receipt");
+  return me.studentNo;
+}
+
 export async function receiptRoutes(app: FastifyInstance): Promise<void> {
   app.post("/receipts/check", { config: { auth: "user", permission: "receipts.manage" } }, async (req, reply) => {
     const me = requireUser(req);
@@ -84,6 +94,32 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       }
       throw err;
     }
+  });
+
+  // Student routes: the student's own ID (never one from the form), the current term, a safe response.
+  app.post("/receipts/mine", { config: { auth: "user", permission: "receipts.use" } }, async (req) => {
+    const me = requireUser(req);
+    const studentId = ownStudentNo(me);
+    // Any studentId or term fields in the form are read and dropped.
+    const { file } = await readUpload(req);
+    if (!file) throw badRequest("A `file` field is required");
+
+    try {
+      const { check } = await checkReceipt({ studentId, term: currentTerm(), file, checkedById: me.id });
+      return { check: studentView(check) };
+    } catch (err) {
+      if (err instanceof OcrUnavailableError) {
+        throw new AppError("SERVICE_UNAVAILABLE", "OCR service unavailable");
+      }
+      throw err;
+    }
+  });
+
+  app.get("/receipts/mine", { config: { auth: "user", permission: "receipts.use" } }, async (req) => {
+    const me = requireUser(req);
+    const studentId = ownStudentNo(me);
+    const rows = await listOwnReceiptChecks(studentId);
+    return { items: rows.map(studentView) };
   });
 
   app.get("/receipts", { config: { auth: "user", permission: "receipts.view" } }, async (req) => {

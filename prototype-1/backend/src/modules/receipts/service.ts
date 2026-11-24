@@ -12,6 +12,7 @@ export interface UploadedFile {
 export type Verdict = "ok" | "warn" | "fail";
 
 const DUPLICATE_CHECK = "Not submitted before";
+const BELONGS_CHECK = "Belongs to this student";
 
 const sidecarResponse = z.object({
   kind: z.enum(["pdf", "screenshot"]),
@@ -173,9 +174,13 @@ export async function checkReceipt(input: CheckInput) {
       : null;
 
     const checks = applyReferenceCheck(sidecar.checks, reference, dup);
+    // A receipt that isn't this student's must not claim its reference: otherwise anyone who uploads a classmate's
+    // screenshot makes the classmate's own upload fail "Not submitted before".
+    const notTheirs = checks.some((c) => c.name === BELONGS_CHECK && c.state === "fail");
     const data = {
       kind: sidecar.kind,
       ...columns,
+      ...(notTheirs ? { reference: null } : {}),
       checks,
       verdict: verdictOf(checks),
       checkedById: input.checkedById,
@@ -206,6 +211,37 @@ export async function listReceiptChecks(filter: { term?: string; verdict?: Verdi
       ...(filter.term ? { term: filter.term } : {}),
       ...(filter.verdict ? { verdict: filter.verdict } : {}),
     },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  });
+}
+
+/**
+ * What a student sees of a check. Only name and state of each check: the `detail` text can name another
+ * student's ID (the duplicate check), and the OCR fields carry the student's own name. Neither is returned.
+ */
+export function studentView(row: {
+  id: string;
+  term: string;
+  kind: string;
+  verdict: string;
+  createdAt: Date;
+  checks: unknown;
+}) {
+  const checks = row.checks as { name: string; state: string }[];
+  return {
+    id: row.id,
+    term: row.term,
+    kind: row.kind,
+    verdict: row.verdict,
+    createdAt: row.createdAt,
+    checks: checks.map((c) => ({ name: c.name, state: c.state })),
+  };
+}
+
+/** The student's own checks, all terms, newest first. */
+export async function listOwnReceiptChecks(studentId: string) {
+  return prisma.receiptCheck.findMany({
+    where: { studentId },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 }

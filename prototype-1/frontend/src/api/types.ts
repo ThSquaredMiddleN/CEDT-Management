@@ -302,3 +302,21 @@ export interface LineStatus {
   linkedAt: string | null;
   addFriendUrl: string | null;
 }
+
+// ------------------------------------------------- student's own receipt checks
+
+/** Student view of a check (GET/POST /receipts/mine). No fields read, no name, no reference. */
+export interface MyReceiptCheckItem {
+  name: string;
+  /** "info" is sent for the Funding row; the student page shows it as a neutral note. */
+  state: ReceiptCheckState;
+}
+
+export interface MyReceiptCheck {
+  id: string;
+  term: string;
+  kind: "pdf" | "screenshot";
+  verdict: ReceiptVerdict;
+  createdAt: string;
+  checks: MyReceiptCheckItem[];
+}

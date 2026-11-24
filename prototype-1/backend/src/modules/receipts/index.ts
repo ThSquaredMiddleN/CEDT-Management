@@ -7,6 +7,7 @@ export const receiptsModule: AppModule = {
   permissions: [
     { key: "receipts.view", label: "ดูผลตรวจใบเสร็จ" },
     { key: "receipts.manage", label: "ตรวจและลบใบเสร็จ" },
+    { key: "receipts.use", label: "ส่งใบเสร็จค่าเทอมของตัวเอง" },
   ],
   async setup(app) {
     await app.register(receiptRoutes, { prefix: API_PREFIX });
