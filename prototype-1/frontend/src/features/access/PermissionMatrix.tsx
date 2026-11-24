@@ -9,11 +9,13 @@ export interface CellState {
   /** Names shown next to the box, e.g. "อาจารย์, Audit". */
   sources: string[];
   change: "added" | "removed" | null;
+  /** Hover text, e.g. the reason and granter of a saved direct permission. */
+  note?: string;
 }
 
 function Box({ cell, state, onToggle }: { cell: CatalogCell; state: CellState; onToggle: (key: string) => void }) {
   const tone = state.change === "added" ? "text-green-700" : state.change === "removed" ? "text-red-700 line-through" : "";
-  const hint = state.disabled && !state.checked ? `${cell.label} (ให้ได้เฉพาะสิทธิ์ที่คุณมี)` : cell.label;
+  const hint = state.note ?? (state.disabled && !state.checked ? `${cell.label} (ให้ได้เฉพาะสิทธิ์ที่คุณมี)` : cell.label);
   return (
     <label className={`flex items-start gap-1.5 text-xs ${tone}`} title={hint}>
       <input

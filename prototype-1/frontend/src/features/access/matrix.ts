@@ -46,3 +46,13 @@ export function diffDraft(saved: Draft, draft: Draft) {
 /** True when the actor holds every permission (rule: you cannot give what you do not have). */
 export const isGivable = (permissions: string[], actorPermissions: readonly string[]): boolean =>
   permissions.every((p) => actorPermissions.includes(p));
+
+/** Tooltip text for a saved direct permission: its reason and who granted it. Unsaved additions have none. */
+export function directNote(
+  direct: { permission: string; reason: string; grantedBy: string | null }[],
+  permission: string,
+): string | undefined {
+  const d = direct.find((x) => x.permission === permission);
+  if (!d) return undefined;
+  return `เหตุผล: ${d.reason}${d.grantedBy ? ` · ให้โดย ${d.grantedBy}` : ""}`;
+}

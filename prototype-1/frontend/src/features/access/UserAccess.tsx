@@ -3,7 +3,7 @@ import { useAccessCatalog, useAccessUserSearch, useRoles, useSaveUserAccess, use
 import { useAuth } from "@/app/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { diffDraft, draftSources, isGivable, type Draft } from "./matrix";
+import { diffDraft, directNote, draftSources, isGivable, type Draft } from "./matrix";
 import { PermissionMatrix } from "./PermissionMatrix";
 import { SaveChangesDialog } from "./SaveChangesDialog";
 
@@ -138,6 +138,7 @@ export function UserAccess({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
                 locked,
                 disabled: !direct && !isGivable([key], actorPerms),
                 sources: s,
+                note: direct ? directNote(access.data?.direct ?? [], key) : undefined,
                 change: s.length > 0 && before.length === 0 ? "added" : s.length === 0 && before.length > 0 ? "removed" : null,
               };
             }}

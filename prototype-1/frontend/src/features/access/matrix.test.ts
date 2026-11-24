@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogRow, RoleView } from "@/api/access";
-import { cellKeys, diffDraft, draftSources, isGivable } from "./matrix";
+import { cellKeys, diffDraft, directNote, draftSources, isGivable } from "./matrix";
 
 const role = (id: string, name: string, permissions: string[], key = id): RoleView => ({
   id, key, name, description: null, isSystem: false, isActive: true, permissions, userCount: 0,
@@ -43,5 +43,21 @@ describe("isGivable", () => {
   it("allows only permissions the actor holds", () => {
     expect(isGivable(["a.view"], ["a.view", "b.view"])).toBe(true);
     expect(isGivable(["a.view", "b.view"], ["a.view"])).toBe(false);
+  });
+});
+
+describe("directNote", () => {
+  const direct = [
+    { permission: "a.view", reason: "ช่วยงาน", grantedBy: "Admin" },
+    { permission: "b.view", reason: "ชั่วคราว", grantedBy: null },
+  ];
+  it("shows reason and granter", () => {
+    expect(directNote(direct, "a.view")).toBe("เหตุผล: ช่วยงาน · ให้โดย Admin");
+  });
+  it("omits the granter when unknown", () => {
+    expect(directNote(direct, "b.view")).toBe("เหตุผล: ชั่วคราว");
+  });
+  it("has no note for unsaved permissions", () => {
+    expect(directNote(direct, "c.view")).toBeUndefined();
   });
 });
