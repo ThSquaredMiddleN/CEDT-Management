@@ -56,3 +56,55 @@ export function directNote(
   if (!d) return undefined;
   return `เหตุผล: ${d.reason}${d.grantedBy ? ` · ให้โดย ${d.grantedBy}` : ""}`;
 }
+
+export interface CellState {
+  checked: boolean;
+  /** Ticked by a role (or the automatic student role) and not directly: cannot be toggled here. */
+  locked: boolean;
+  /** The current user may not give it. */
+  disabled: boolean;
+  /** Source names shown next to the box; "direct" is rendered as "รายคน". */
+  sources: string[];
+  change: "added" | "removed" | null;
+  /** Hover text, e.g. the reason and granter of a saved direct permission. */
+  note?: string;
+}
+
+export interface CellInput {
+  draft: Draft;
+  saved: Draft;
+  draftSources: Map<string, string[]>;
+  savedSources: Map<string, string[]>;
+  direct: { permission: string; reason: string; grantedBy: string | null }[];
+  actorPermissions: readonly string[];
+}
+
+/** State of one checkbox on the user matrix. */
+export function cellState(key: string, i: CellInput): CellState {
+  const sources = i.draftSources.get(key) ?? [];
+  const before = i.savedSources.get(key) ?? [];
+  const isDirect = i.draft.permissions.includes(key);
+  const wasSaved = i.saved.permissions.includes(key);
+  return {
+    checked: sources.length > 0,
+    // A direct grant is always removable; a role-only source is not.
+    locked: !isDirect && sources.some((x) => x !== "direct"),
+    // Judged on the saved state so an un-tick of something you cannot give can be undone.
+    disabled: !wasSaved && !isGivable([key], i.actorPermissions),
+    sources,
+    note: isDirect ? directNote(i.direct, key) : undefined,
+    change: sources.length > 0 && before.length === 0 ? "added" : sources.length === 0 && before.length > 0 ? "removed" : null,
+  };
+}
+
+/** permission key → short Thai label such as "ใบเสร็จ · ดู", for change summaries. */
+export function keyLabels(rows: CatalogRow[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    if (r.use) out.set(r.use.key, `${r.label} · ใช้งาน`);
+    if (r.view) out.set(r.view.key, `${r.label} · ดู`);
+    if (r.manage?.key) out.set(r.manage.key, `${r.label} · จัดการ`);
+    for (const p of r.manage?.parts ?? []) out.set(p.key, `${r.label} · จัดการ: ${p.label}`);
+  }
+  return out;
+}

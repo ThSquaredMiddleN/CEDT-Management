@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogRow, RoleView } from "@/api/access";
-import { cellKeys, diffDraft, directNote, draftSources, isGivable } from "./matrix";
+import { cellKeys, cellState, diffDraft, directNote, draftSources, isGivable, keyLabels, type Draft } from "./matrix";
 
 const role = (id: string, name: string, permissions: string[], key = id): RoleView => ({
   id, key, name, description: null, isSystem: false, isActive: true, permissions, userCount: 0,
@@ -59,5 +59,77 @@ describe("directNote", () => {
   });
   it("has no note for unsaved permissions", () => {
     expect(directNote(direct, "c.view")).toBeUndefined();
+  });
+});
+
+describe("cellState", () => {
+  const base = (draft: Draft, saved: Draft, actor: string[], direct: { permission: string; reason: string; grantedBy: string | null }[] = []) => {
+    const rs = [...roles];
+    return (key: string) =>
+      cellState(key, {
+        draft,
+        saved,
+        draftSources: draftSources(draft, rs, false),
+        savedSources: draftSources(saved, rs, false),
+        direct,
+        actorPermissions: actor,
+      });
+  };
+
+  it("locks a permission that only a role gives", () => {
+    const d = { roleIds: ["r1"], permissions: [] };
+    const s = base(d, d, ["bookings.use"])("bookings.use");
+    expect(s).toMatchObject({ checked: true, locked: true, sources: ["อาจารย์"] });
+  });
+
+  it("does not lock a direct permission that a role also gives, and shows both sources", () => {
+    const d = { roleIds: ["r1"], permissions: ["bookings.use"] };
+    const s = base(d, d, ["bookings.use"])("bookings.use");
+    expect(s.locked).toBe(false);
+    expect(s.checked).toBe(true);
+    expect(s.sources).toEqual(["อาจารย์", "direct"]);
+  });
+
+  it("stays ticked after removing the direct grant when a role still gives it", () => {
+    const saved = { roleIds: ["r1"], permissions: ["bookings.use"] };
+    const draft = { roleIds: ["r1"], permissions: [] };
+    const s = base(draft, saved, [])("bookings.use");
+    expect(s).toMatchObject({ checked: true, locked: true, change: null });
+  });
+
+  it("keeps a saved direct permission the actor lacks clickable, even after un-tick", () => {
+    const saved = { roleIds: [], permissions: ["receipts.view"] };
+    const draft = { roleIds: [], permissions: [] };
+    const s = base(draft, saved, [])("receipts.view");
+    expect(s).toMatchObject({ checked: false, disabled: false, change: "removed" });
+  });
+
+  it("disables a new permission the actor lacks", () => {
+    const d = { roleIds: [], permissions: [] };
+    expect(base(d, d, [])("receipts.view").disabled).toBe(true);
+    expect(base(d, d, ["receipts.view"])("receipts.view").disabled).toBe(false);
+  });
+
+  it("carries the saved note only for direct permissions", () => {
+    const d = { roleIds: [], permissions: ["news.view"] };
+    const direct = [{ permission: "news.view", reason: "ช่วยงาน", grantedBy: null }];
+    expect(base(d, d, ["news.view"], direct)("news.view").note).toBe("เหตุผล: ช่วยงาน");
+  });
+});
+
+describe("keyLabels", () => {
+  it("maps keys to short Thai labels", () => {
+    const rows: CatalogRow[] = [
+      {
+        row: "receipts",
+        label: "ใบเสร็จ",
+        view: { key: "receipts.view", label: "x" },
+        manage: { key: "receipts.manage", label: null, parts: [{ key: "receipts.manage.void", label: "ยกเลิก" }] },
+      },
+    ];
+    const m = keyLabels(rows);
+    expect(m.get("receipts.view")).toBe("ใบเสร็จ · ดู");
+    expect(m.get("receipts.manage")).toBe("ใบเสร็จ · จัดการ");
+    expect(m.get("receipts.manage.void")).toBe("ใบเสร็จ · จัดการ: ยกเลิก");
   });
 });

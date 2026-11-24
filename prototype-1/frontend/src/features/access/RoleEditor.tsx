@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { isGivable } from "./matrix";
+import { isGivable, keyLabels } from "./matrix";
 import { PermissionMatrix } from "./PermissionMatrix";
 import { SaveChangesDialog } from "./SaveChangesDialog";
 
@@ -39,7 +39,9 @@ export function RoleEditor({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
     draft.description !== saved.description ? "คำอธิบาย" : null,
     draft.isActive !== saved.isActive ? (draft.isActive ? "เปิดใช้งาน" : "ปิดใช้งาน") : null,
   ].filter((c): c is string => !!c);
-  const changes = [...fieldChanges, ...added.map((p) => `+ ${p}`), ...removed.map((p) => `− ${p}`)];
+  const labels = useMemo(() => keyLabels(catalog.data?.rows ?? []), [catalog.data]);
+  const label = (p: string) => labels.get(p) ?? p;
+  const changes = [...fieldChanges, ...added.map((p) => `+ ${label(p)}`), ...removed.map((p) => `− ${label(p)}`)];
   const dirty = changes.length > 0;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
 
@@ -54,7 +56,7 @@ export function RoleEditor({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <select className="flex-1 rounded border px-2 py-2 text-sm" value={creating ? "" : roleId ?? ""} onChange={(e) => pick(e.target.value || null)}>
+        <select aria-label="เลือกบทบาท" className="flex-1 rounded border px-2 py-2 text-sm" value={creating ? "" : roleId ?? ""} onChange={(e) => pick(e.target.value || null)}>
           <option value="">เลือกบทบาท</option>
           {roles.data?.items.map((r) => (
             <option key={r.id} value={r.id}>
@@ -70,14 +72,14 @@ export function RoleEditor({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
         <>
           <section className="grid gap-2 border-t pt-3 text-sm sm:grid-cols-2">
             {creating ? (
-              <Input placeholder="key เช่น storage_staff" value={draft.key} onChange={(e) => setDraft({ ...draft, key: e.target.value })} />
+              <Input aria-label="key ของบทบาท" placeholder="key เช่น storage_staff" value={draft.key} onChange={(e) => setDraft({ ...draft, key: e.target.value })} />
             ) : (
               <p className="self-center">
                 key: <code>{saved.key}</code> {role.data?.isSystem && <Badge>ระบบ</Badge>}
               </p>
             )}
-            <Input placeholder="ชื่อบทบาท" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            <Textarea className="sm:col-span-2" placeholder="คำอธิบาย" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+            <Input aria-label="ชื่อบทบาท" placeholder="ชื่อบทบาท" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+            <Textarea aria-label="คำอธิบาย" className="sm:col-span-2" placeholder="คำอธิบาย" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
             {!creating && !role.data?.isSystem && (
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={draft.isActive} onChange={(e) => setDraft({ ...draft, isActive: e.target.checked })} />
@@ -98,10 +100,11 @@ export function RoleEditor({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
             }
             stateOf={(key) => {
               const checked = draft.permissions.includes(key);
+              const wasSaved = saved.permissions.includes(key);
               return {
                 checked,
                 locked: false,
-                disabled: !checked && !isGivable([key], me?.permissions ?? []),
+                disabled: !wasSaved && !isGivable([key], me?.permissions ?? []),
                 sources: [],
                 change: added.includes(key) ? "added" : removed.includes(key) ? "removed" : null,
               };

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
+import { qk } from "./queryKeys";
 
 export interface CatalogCell { key: string; label: string }
 export interface CatalogRow {
@@ -64,6 +65,7 @@ export function useSaveUserAccess(id: string) {
       qc.setQueryData(keys.user(id), data);
       void qc.invalidateQueries({ queryKey: ["access", "users"] });
       void qc.invalidateQueries({ queryKey: keys.roles });
+      void qc.invalidateQueries({ queryKey: qk.me });
     },
   });
 }
@@ -75,6 +77,9 @@ export function useSaveRole(id: string | null) {
       id
         ? api<RoleView>(`/access/roles/${id}`, { method: "PUT", body: JSON.stringify(body) })
         : api<RoleView>("/access/roles", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["access"] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["access"] });
+      void qc.invalidateQueries({ queryKey: qk.me });
+    },
   });
 }

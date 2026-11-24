@@ -10,7 +10,10 @@ export function AccessPage() {
 
   useEffect(() => {
     if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
@@ -30,6 +33,8 @@ export function AccessPage() {
           <button
             key={t}
             role="tab"
+            id={`access-tab-${t}`}
+            aria-controls={`access-panel-${t}`}
             aria-selected={tab === t}
             className={`px-3 py-2 text-sm ${tab === t ? "border-b-2 border-brand-primary font-semibold" : "text-neutral-500"}`}
             onClick={() => switchTo(t)}
@@ -38,7 +43,9 @@ export function AccessPage() {
           </button>
         ))}
       </div>
-      {tab === "users" ? <UserAccess onDirtyChange={onDirtyChange} /> : <RoleEditor onDirtyChange={onDirtyChange} />}
+      <div role="tabpanel" id={`access-panel-${tab}`} aria-labelledby={`access-tab-${tab}`}>
+        {tab === "users" ? <UserAccess onDirtyChange={onDirtyChange} /> : <RoleEditor onDirtyChange={onDirtyChange} />}
+      </div>
     </div>
   );
 }

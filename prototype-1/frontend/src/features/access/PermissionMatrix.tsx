@@ -1,19 +1,9 @@
+import { useId } from "react";
 import type { CatalogCell, CatalogRow } from "@/api/access";
-
-export interface CellState {
-  checked: boolean;
-  /** Ticked by a role (or the automatic student role): cannot be toggled here. */
-  locked: boolean;
-  /** The current user may not give it. */
-  disabled: boolean;
-  /** Names shown next to the box, e.g. "อาจารย์, Audit". */
-  sources: string[];
-  change: "added" | "removed" | null;
-  /** Hover text, e.g. the reason and granter of a saved direct permission. */
-  note?: string;
-}
+import type { CellState } from "./matrix";
 
 function Box({ cell, state, onToggle }: { cell: CatalogCell; state: CellState; onToggle: (key: string) => void }) {
+  const sourceId = useId();
   const tone = state.change === "added" ? "text-green-700" : state.change === "removed" ? "text-red-700 line-through" : "";
   const hint = state.note ?? (state.disabled && !state.checked ? `${cell.label} (ให้ได้เฉพาะสิทธิ์ที่คุณมี)` : cell.label);
   return (
@@ -25,10 +15,11 @@ function Box({ cell, state, onToggle }: { cell: CatalogCell; state: CellState; o
         disabled={state.locked || state.disabled}
         onChange={() => onToggle(cell.key)}
         aria-label={cell.label}
+        aria-describedby={sourceId}
       />
-      <span>
+      <span id={sourceId}>
         {state.locked && "🔒 "}
-        {state.sources.filter((s) => s !== "direct").join(", ") || (state.checked ? "รายคน" : "")}
+        {state.sources.map((s) => (s === "direct" ? "รายคน" : s)).join(", ")}
       </span>
     </label>
   );
