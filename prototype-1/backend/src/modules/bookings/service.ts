@@ -414,7 +414,8 @@ export async function cancelBooking(
     // bookings.manage may cancel any booking; otherwise only the requester may withdraw/cancel.
     const isAdmin = can(actor, "bookings.manage");
     const isOwner = booking.requestedBy === actor.id;
-    if (!isAdmin && !isOwner) throw forbidden("Only the requester can withdraw or cancel this booking");
+    // 404 like getBookingDetail, so booking ids cannot be probed.
+    if (!isAdmin && !isOwner) throw notFound("Booking not found");
 
     if (booking.status === "rejected" || booking.status === "cancelled") {
       throw invalidTransition("This request was already actioned.");

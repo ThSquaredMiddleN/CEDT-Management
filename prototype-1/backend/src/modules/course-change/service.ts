@@ -33,8 +33,9 @@ import {
   weekStartDate,
 } from "./timeline.js";
 
-/** Course Change staff view: sees every request instead of only their own. */
-export const isCcStaff = (me: { permissions: readonly string[] }): boolean => can(me, "course_change.view");
+/** Course Change staff view: sees every request instead of only their own (managers are notified, so they see them too). */
+export const isCcStaff = (me: { permissions: readonly string[] }): boolean =>
+  can(me, "course_change.view") || can(me, "course_change.manage");
 
 /**
  * Course Change workflow engine (docs/course-change/DESIGN.md). Every status change runs in one

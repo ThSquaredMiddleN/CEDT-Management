@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { prisma } from "../../src/db.js";
+import { PDFDocument } from "pdf-lib";
 import { registerAuth } from "../../src/plugins/auth.js";
 import { loginAs } from "../helpers/session.js";
 
@@ -191,5 +192,102 @@ describe("booking auto-approval", () => {
       await prisma.notification.deleteMany({ where: { bookingId: { in: created } } });
       await prisma.booking.deleteMany({ where: { id: { in: created } } });
     }
+  });
+});
+
+describe("negative permission checks", () => {
+  it("refuses a public route that declares a permission", async () => {
+    const a = Fastify();
+    registerAuth(a, new Set(["x.manage"]));
+    await expect(async () => {
+      a.get("/api/v1/x", { config: { auth: "public", permission: "x.manage" } }, async () => ({}));
+      await a.ready();
+    }).rejects.toThrow(/public but declares a permission/);
+  });
+
+  it("hides a booking from a bookings.use holder who neither requested nor teaches it", async () => {
+    const teacherId = (await prisma.user.findUniqueOrThrow({ where: { email: "teacher@test.local" } })).id;
+    const b = await prisma.booking.findFirstOrThrow({
+      where: { status: { in: ["pending", "approved"] }, requestedBy: { not: teacherId }, instructorId: { not: teacherId } },
+      select: { id: true, status: true },
+    });
+    const cookie = await loginAs(app, "teacher@test.local");
+    expect((await app.inject({ method: "GET", url: `/api/v1/bookings/${b.id}`, headers: { cookie } })).statusCode).toBe(404);
+    const list = await app.inject({ method: "GET", url: "/api/v1/bookings?pageSize=100", headers: { cookie } });
+    expect(list.statusCode).toBe(200);
+    expect(JSON.stringify(list.json())).not.toContain(b.id);
+    const cancel = await app.inject({
+      method: "POST",
+      url: `/api/v1/bookings/${b.id}/cancel`,
+      headers: { cookie, "x-requested-with": "XMLHttpRequest" },
+      payload: { reason: "TEST probe" },
+    });
+    expect(cancel.statusCode).toBe(404);
+    expect((await prisma.booking.findUniqueOrThrow({ where: { id: b.id } })).status).toBe(b.status);
+  });
+
+  it("refuses workflow actions and uploads from a course_change.view-only user", async () => {
+    const original = await prisma.courseChangeRequest.findFirstOrThrow({
+      where: { student: { email: { not: "audit@test.local" } } },
+      select: { id: true, workflowVersion: true, status: true, phase: true, revision: true },
+    });
+    // Open v2 request in staff review, so the request checks pass and only the permission check is left.
+    await prisma.courseChangeRequest.update({
+      where: { id: original.id },
+      data: { workflowVersion: 2, status: "pending_approval", phase: "staff_review" },
+    });
+    try {
+      const cookie = await loginAs(app, "audit@test.local");
+      const before = {
+        files: await prisma.courseChangeFile.count({ where: { requestId: original.id } }),
+        events: await prisma.courseChangeEvent.count({ where: { requestId: original.id } }),
+      };
+      const act = await app.inject({
+        method: "POST",
+        url: `/api/v1/course-change/requests/${original.id}/workflow`,
+        headers: { cookie, "x-requested-with": "XMLHttpRequest" },
+        payload: { revision: original.revision, action: "review", note: "TEST audit probe" },
+      });
+      expect([403, 404]).toContain(act.statusCode);
+
+      const boundary = "test-pdf-boundary";
+      const upload = await app.inject({
+        method: "POST",
+        url: `/api/v1/course-change/requests/${original.id}/files?revision=${original.revision}&kind=evidence`,
+        headers: { cookie, "x-requested-with": "XMLHttpRequest", "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload: Buffer.concat([
+          Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="x.pdf"\r\nContent-Type: application/pdf\r\n\r\n`),
+          Buffer.from(await (async () => { const d = await PDFDocument.create(); d.addPage(); return d.save(); })()),
+          Buffer.from(`\r\n--${boundary}--\r\n`),
+        ]),
+      });
+      expect([403, 404]).toContain(upload.statusCode);
+
+      const after = await prisma.courseChangeRequest.findUniqueOrThrow({ where: { id: original.id }, select: { revision: true, phase: true } });
+      expect(after).toEqual({ revision: original.revision, phase: "staff_review" });
+      expect(await prisma.courseChangeFile.count({ where: { requestId: original.id } })).toBe(before.files);
+      expect(await prisma.courseChangeEvent.count({ where: { requestId: original.id } })).toBe(before.events);
+    } finally {
+      await prisma.courseChangeRequest.update({
+        where: { id: original.id },
+        data: { workflowVersion: original.workflowVersion, status: original.status, phase: original.phase },
+      });
+    }
+  });
+
+  it("shows pending bookings on the calendar only to bookings.view / bookings.manage", async () => {
+    const occ = await prisma.bookingOccurrence.findFirstOrThrow({
+      where: { isCancelled: false, booking: { status: "pending" } },
+      select: { date: true, bookingId: true },
+    });
+    const day = occ.date.toISOString().slice(0, 10);
+    const cal = async (email: string) => {
+      const cookie = await loginAs(app, email);
+      const res = await app.inject({ method: "GET", url: `/api/v1/calendar?from=${day}&to=${day}`, headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      return JSON.stringify(res.json());
+    };
+    expect(await cal("norole@test.local")).not.toContain(occ.bookingId);
+    expect(await cal("staff@test.local")).toContain(occ.bookingId);
   });
 });
