@@ -22,6 +22,8 @@ import {
   type CcStatus,
   type CcType,
 } from "@/api/courseChange";
+import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { useToast } from "@/app/toast";
 import { SkeletonRow, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -60,6 +62,9 @@ const errMsg = requestErrorMessage;
 
 export function StaffView({ ctx }: { ctx: CcContext }) {
   const toast = useToast();
+  const { user } = useAuth();
+  // Every write route here needs course_change.manage; view-only users only read.
+  const canManage = can(user, "course_change.manage");
   const [params, setParams] = useSearchParams();
   const focusId = params.get("request");
   const clearFocus = () => setParams((prev) => { const next = new URLSearchParams(prev); next.delete("request"); return next; }, { replace: true });
@@ -167,7 +172,7 @@ export function StaffView({ ctx }: { ctx: CcContext }) {
           </>
         }
         action={
-          <Button disabled={checkedIds.length === 0 || bulk.isPending || selectedRequests.some(r => r.phase !== "staff_review")} onClick={() => { setBulkError(""); setReview(selectedRequests); }}>
+          canManage && <Button disabled={checkedIds.length === 0 || bulk.isPending || selectedRequests.some(r => r.phase !== "staff_review")} onClick={() => { setBulkError(""); setReview(selectedRequests); }}>
             {bulk.isPending && <Spinner />}
             ตรวจผ่านที่เลือก{checkedIds.length > 0 ? ` (${checkedIds.length})` : ""}
           </Button>
@@ -208,12 +213,12 @@ export function StaffView({ ctx }: { ctx: CcContext }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SyncIndicator updatedAt={list.dataUpdatedAt} refreshing={list.isFetching} error={list.isError} onRefresh={() => { void list.refetch(); void groups.refetch(); }} />
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="ghost" disabled={!pendingIds.size || bulk.isPending} onClick={() => setChecked(new Set([...pendingIds].slice(0, 50)))}>เลือกรายการในหน้านี้</Button>
+            {canManage && <Button size="sm" variant="ghost" disabled={!pendingIds.size || bulk.isPending} onClick={() => setChecked(new Set([...pendingIds].slice(0, 50)))}>เลือกรายการในหน้านี้</Button>}
             {checkedIds.length > 0 && <><Button size="sm" variant="ghost" disabled={bulk.isPending} onClick={resetSelection}>ล้างที่เลือก ({checkedIds.length})</Button><Button size="sm" variant="outline" disabled={bulk.isPending} onClick={exportSelected}><Download className="size-3.5" />ส่งออกสรุปที่เลือก</Button></>}
           </div>
         </div>
-        {checkedIds.length > 0 && <Button variant="outline" disabled={!canCollectSignatures(selectedRequests)} onClick={()=>setSignatureRows(selectedRequests)}>บันทึกส่งขอลงนามเป็นชุด ({checkedIds.length})</Button>}
-        {checkedIds.length > 0 && !canCollectSignatures(selectedRequests) && <p className="text-xs text-neutral-500">การรวบรวมขอลงนามต้องเป็นงานรอลงนามของวิชา ตอนเรียน ประเภท และรอบเดียวกัน</p>}
+        {canManage && checkedIds.length > 0 && <Button variant="outline" disabled={!canCollectSignatures(selectedRequests)} onClick={()=>setSignatureRows(selectedRequests)}>บันทึกส่งขอลงนามเป็นชุด ({checkedIds.length})</Button>}
+        {canManage && checkedIds.length > 0 && !canCollectSignatures(selectedRequests) && <p className="text-xs text-neutral-500">การรวบรวมขอลงนามต้องเป็นงานรอลงนามของวิชา ตอนเรียน ประเภท และรอบเดียวกัน</p>}
         {checkedIds.length > 0 && <p className="text-xs text-neutral-500">ไฟล์สรุปใช้ช่วยตรวจงาน ยังไม่ใช่เอกสารคำร้องทางการ · การเลือกจะถูกล้างเมื่อเปลี่ยนตัวกรองหรือหน้า</p>}
       </div>
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
@@ -328,6 +333,8 @@ function InboxRow({
   onSelect: () => void;
   onToggle: () => void;
 }) {
+  const { user } = useAuth();
+  const canManage = can(user, "course_change.manage");
   const pending = ["pending_approval", "processing"].includes(r.status) && r.workflowVersion === 2;
   return (
     <div
@@ -336,14 +343,14 @@ function InboxRow({
         selected ? "bg-neutral-100 shadow-[inset_3px_0_0_#171717]" : "hover:bg-neutral-50",
       )}
     >
-      <input
+      {canManage && <input
         type="checkbox"
         aria-label={`เลือก ${r.requestNo}`}
         checked={checked}
         disabled={!pending || selectionDisabled}
         onChange={onToggle}
         className="mt-1 size-4 accent-neutral-900 disabled:opacity-30"
-      />
+      />}
       <button type="button" aria-pressed={selected} onClick={onSelect} className="flex min-w-0 flex-1 flex-col gap-1 text-left">
         <span className="flex flex-wrap items-center justify-between gap-1">
           <span className="truncate text-sm font-medium">{r.studentName}</span>
@@ -375,6 +382,8 @@ function SelectedRequest({ id }: { id: string }) {
   const approve = useApproveCc();
   const reject = useRejectCc();
   const complete = useCompleteCc();
+  const { user } = useAuth();
+  const canManage = can(user, "course_change.manage");
 
   const [actionError, setActionError] = useState("");
   const [approving, setApproving] = useState(false);
@@ -394,7 +403,7 @@ function SelectedRequest({ id }: { id: string }) {
       <RequestDetailBody r={r} showStudent />
       {actionError && <p role="alert" className="rounded-xl border-2 border-neutral-900 p-3 text-sm">{actionError}</p>}
 
-      {r.workflowVersion !== 2 && (r.status === "pending_approval" || r.status === "processing") && (
+      {canManage && r.workflowVersion !== 2 && (r.status === "pending_approval" || r.status === "processing") && (
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-neutral-200 pt-4">
           {r.status === "pending_approval" && (
             <>
