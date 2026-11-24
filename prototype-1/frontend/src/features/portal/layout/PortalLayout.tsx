@@ -17,7 +17,7 @@ import {
 import { NotificationBell } from "@/features/notifications/NotificationBell";
 import { initials } from "@/lib/formatters";
 
-const STUDENT_TOPBAR_ITEMS: TopbarItem[] = [
+const PORTAL_TOPBAR_ITEMS: TopbarItem[] = [
   { label: "หน้าแรก", to: "/" },
   { label: "ข่าวสาร", to: "/news" },
   { label: "ตารางเรียน - สอบ", to: "/calendar" },
@@ -26,11 +26,11 @@ const STUDENT_TOPBAR_ITEMS: TopbarItem[] = [
   { label: "CU Links", to: "/links" },
 ];
 
-export function StudentLayout() {
+export function PortalLayout() {
   const { user } = useAuth();
   const { pathname } = useLocation();
 
-  const items = STUDENT_TOPBAR_ITEMS.map((item) => ({
+  const items = PORTAL_TOPBAR_ITEMS.map((item) => ({
     ...item,
     active:
       item.to === "/"

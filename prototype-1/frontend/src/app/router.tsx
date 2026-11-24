@@ -4,7 +4,7 @@ import type { Role } from "@/api/types";
 import { AdminHome } from "@/features/admin/pages/AdminHome";
 import { AdminLayout } from "@/features/admin/layout/AdminLayout";
 import { StudentHome } from "@/features/student/pages/StudentHome";
-import { StudentLayout } from "@/features/student/layout/StudentLayout";
+import { PortalLayout } from "@/features/portal/layout/PortalLayout";
 import { roleLanding, useAuth } from "./AuthProvider";
 import { DeferredPage } from "./DeferredPage";
 
@@ -216,7 +216,7 @@ export function AppRoutes() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
-        <Route element={<StudentLayout />}>
+        <Route element={<PortalLayout />}>
           <Route index element={<StudentHome />} />
           {/* Public: anyone can view the calendar without logging in. */}
           <Route path="calendar" element={<CalendarPage />} />

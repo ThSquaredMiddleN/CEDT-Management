@@ -29,6 +29,7 @@
     "line:pending": "tsx --env-file=.env scripts/line-pending.ts"
   },
   "prisma": {
+    "schema": "prisma/schema",
     "seed": "tsx --env-file=.env prisma/seed.ts"
   },
   "dependencies": {
