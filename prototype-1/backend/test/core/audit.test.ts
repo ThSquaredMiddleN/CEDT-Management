@@ -10,7 +10,7 @@ import { audit } from "../../src/core/audit.js";
 let staffId = "";
 
 beforeAll(async () => {
-  const staff = await prisma.user.findFirstOrThrow({ where: { role: "staff" }, select: { id: true } });
+  const staff = await prisma.user.findFirstOrThrow({ where: { roles: { some: { role: { key: "staff" } } } }, select: { id: true } });
   staffId = staff.id;
 });
 

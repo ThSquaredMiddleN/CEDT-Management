@@ -23,10 +23,10 @@ async function cleanup(): Promise<void> {
 beforeAll(async () => {
   await cleanup();
   const a = await prisma.user.create({
-    data: { email: EMAIL_A, name: "Made-up notify user A", role: "staff" },
+    data: { email: EMAIL_A, name: "Made-up notify user A" },
   });
   const b = await prisma.user.create({
-    data: { email: EMAIL_B, name: "Made-up notify user B", role: "staff" },
+    data: { email: EMAIL_B, name: "Made-up notify user B" },
   });
   userA = a.id;
   userB = b.id;

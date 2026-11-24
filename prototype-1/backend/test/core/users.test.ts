@@ -16,7 +16,6 @@ beforeAll(async () => {
     data: {
       email: INACTIVE_EMAIL,
       name: "Made-up inactive student",
-      role: "student",
       studentNo: INACTIVE_NO,
       isActive: false,
     },

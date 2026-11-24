@@ -2,6 +2,7 @@ import { UserCircleIcon } from "@heroicons/react/24/outline";
 import { LogOut, MessageCircle, Settings } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { signOut } from "@/app/signOut";
 import { Topbar, type TopbarItem } from "@/components/Topbar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -64,12 +65,14 @@ export function PortalLayout() {
             <span className="text-xs font-normal text-neutral-500">{user.email}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link to="/line">
-              <MessageCircle className="size-4" />
-              LINE
-            </Link>
-          </DropdownMenuItem>
+          {can(user, "line.use") && (
+            <DropdownMenuItem asChild>
+              <Link to="/line">
+                <MessageCircle className="size-4" />
+                LINE
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem disabled>
             <UserCircleIcon className="size-4" />
             Profile

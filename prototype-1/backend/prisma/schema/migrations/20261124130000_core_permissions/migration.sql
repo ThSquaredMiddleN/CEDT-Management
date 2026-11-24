@@ -82,7 +82,7 @@ INSERT INTO "role_permissions" ("role_id", "permission")
 SELECT r."id", p.permission
 FROM "roles" r
 JOIN (VALUES
-  ('student',  'course_change.use'),
+  ('student',  'course_change.use'), ('student', 'line.use'),
   ('it_admin', 'core.users.view'), ('it_admin', 'core.users.manage'),
   ('it_admin', 'core.permissions.manage'), ('it_admin', 'core.import.manage'),
   ('audit', 'core.users.view'), ('audit', 'announcements.view'), ('audit', 'news.view'),

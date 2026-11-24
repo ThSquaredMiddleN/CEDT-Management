@@ -189,7 +189,7 @@ describe("booking auto-approval", () => {
       expect(await book("teacher@test.local", "20:00", "20:30")).toBe("pending");
       expect(await book("staff@test.local", "20:30", "21:00")).toBe("approved");
     } finally {
-      await prisma.notification.deleteMany({ where: { bookingId: { in: created } } });
+      await prisma.notification.deleteMany({ where: { module: "bookings", subjectId: { in: created } } });
       await prisma.booking.deleteMany({ where: { id: { in: created } } });
     }
   });

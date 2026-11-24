@@ -122,11 +122,11 @@ model CourseChangeRequest {
   // CC-BR-2 partial unique index (one live request per student+course+term) is added by
   // the raw SQL in the migration — Prisma cannot express partial indexes.
 
-  student   User                @relation("ccStudent", fields: [studentId], references: [id])
-  term      Term                @relation(fields: [termId], references: [id])
-  course    Course              @relation(fields: [courseId], references: [id])
-  decidedBy User?               @relation("ccDecidedBy", fields: [decidedById], references: [id])
-  events    CourseChangeEvent[]
+  student       User                @relation("ccStudent", fields: [studentId], references: [id])
+  term          Term                @relation(fields: [termId], references: [id])
+  course        Course              @relation(fields: [courseId], references: [id])
+  decidedBy     User?               @relation("ccDecidedBy", fields: [decidedById], references: [id])
+  events        CourseChangeEvent[]
 
   @@unique([studentId, clientRequestId])
   @@index([status, createdAt(sort: Desc)])
