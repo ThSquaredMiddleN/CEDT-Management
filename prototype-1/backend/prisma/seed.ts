@@ -7,6 +7,7 @@ import type { BookingInput } from "../src/modules/bookings/schemas.js";
 import { addNewsImages } from "../src/modules/news/service.js";
 import { dateFromISO } from "../src/lib/time.js";
 import { seedCourseChange } from "./seed-course-change.js";
+import { assignRole, seedTestAccounts } from "./seed-test-accounts.js";
 
 /**
  * Seeds the dataset the wireframes were designed against (§9). Idempotent: every write is
@@ -113,6 +114,11 @@ async function main() {
       studentNo: row.studentNo,
     };
   }
+
+  // Roles (step 5a): the demo admin is staff + IT admin; instructors keep the legacy staff role.
+  for (const u of users) await assignRole(prisma, userByEmail[u.email]!.id, "staff");
+  await assignRole(prisma, userByEmail["admin@cedt.edu"]!.id, "it_admin");
+  await seedTestAccounts(prisma, hash);
 
   const admin = userByEmail["admin@cedt.edu"]! as SessionUser;
   const somchai = userByEmail["somchai@cedt.edu"]! as SessionUser;
