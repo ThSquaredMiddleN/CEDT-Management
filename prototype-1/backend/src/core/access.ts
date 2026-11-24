@@ -52,15 +52,17 @@ function requireHeld(actor: SessionUser, permissions: string[]): void {
 /**
  * Serialises every change that can shrink the set of active IT Admins (READ COMMITTED would let two
  * transactions each remove a different admin and both see one left). Always take the user/role row lock
- * first, then this one, so lock order is the same everywhere.
+ * first, then this one, so lock order is the same everywhere. All locks here are FOR NO KEY UPDATE, not
+ * FOR UPDATE: foreign key checks (an audit row naming this user as actor, a user_roles row for this role)
+ * take KEY SHARE, which FOR UPDATE would block and turn two concurrent saves into a deadlock.
  */
 async function lockItAdmins(tx: Tx): Promise<void> {
-  await tx.$queryRaw`SELECT id FROM roles WHERE key = ${IT_ADMIN_ROLE} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM roles WHERE key = ${IT_ADMIN_ROLE} FOR NO KEY UPDATE`;
 }
 
 /** Throws when removing it_admin from this user (or deactivating them) would leave no IT Admin. */
 export async function assertNotLastItAdmin(tx: Tx, userId: string): Promise<void> {
-  const target = await tx.$queryRaw<{ is_active: boolean }[]>`SELECT is_active FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+  const target = await tx.$queryRaw<{ is_active: boolean }[]>`SELECT is_active FROM users WHERE id = ${userId}::uuid FOR NO KEY UPDATE`;
   // An already-inactive user is not counted as an active admin, so removing them changes nothing.
   if (!target[0] || !target[0].is_active) return;
   await lockItAdmins(tx);
@@ -124,7 +126,7 @@ export async function saveUserAccess(
   const changes: AccessChange[] = [];
   await prisma.$transaction(async (tx) => {
     // Lock the target first so concurrent saves of the same user run one after the other.
-    const target = await tx.$queryRaw<{ is_active: boolean }[]>`SELECT is_active FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+    const target = await tx.$queryRaw<{ is_active: boolean }[]>`SELECT is_active FROM users WHERE id = ${userId}::uuid FOR NO KEY UPDATE`;
     if (!target[0]) throw notFound("ไม่พบผู้ใช้");
     const wantRoles = new Set(input.roleIds);
     const wantPerms = new Set(input.permissions);
@@ -260,7 +262,7 @@ export async function updateRole(
 ): Promise<{ role: RoleView; changes: AccessChange[] }> {
   return prisma.$transaction(async (tx) => {
     // Lock the role so concurrent identical saves run one after the other instead of failing on P2002/P2025.
-    await tx.$queryRaw`SELECT id FROM roles WHERE id = ${id}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM roles WHERE id = ${id}::uuid FOR NO KEY UPDATE`;
     const role = await tx.role.findUnique({ where: { id }, include: roleInclude });
     if (!role) throw notFound("ไม่พบบทบาท");
     const before = toRoleView(role);
