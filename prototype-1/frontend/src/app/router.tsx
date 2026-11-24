@@ -59,6 +59,9 @@ const MyRequests = lazy(() =>
     default: module.MyRequests,
   })),
 );
+const AccessPage = lazy(() =>
+  import("@/features/access/AccessPage").then((module) => ({ default: module.AccessPage })),
+);
 const MapPage = lazy(() =>
   import("./MapPage").then((module) => ({ default: module.MapPage })),
 );
@@ -303,6 +306,7 @@ export function AppRoutes() {
           />
           <Route path="receipts" element={<RequireAuth permission="receipts.view"><ReceiptChecksPage /></RequireAuth>} />
           <Route path="line" element={<RequireAuth permission="line.use"><LineSettingsPage /></RequireAuth>} />
+          <Route path="access" element={<RequireAuth permission="core.permissions.manage"><AccessPage /></RequireAuth>} />
           <Route path="announcements" element={<RequireAuth permission="announcements.view"><AnnouncementListPage /></RequireAuth>} />
           <Route path="announcements/create" element={<RequireAuth permission="announcements.manage"><AnnouncementCreatePage /></RequireAuth>} />
           <Route path="announcements/:id" element={<RequireAuth permission="announcements.view"><AnnouncementDetailPage /></RequireAuth>} />
