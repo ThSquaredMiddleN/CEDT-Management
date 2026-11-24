@@ -52,7 +52,7 @@ beforeAll(async () => {
   const courses = (await get("/api/v1/courses?q=CEDT205", staffA)).json() as {
     items: { id: string }[];
   };
-  const users = (await get("/api/v1/users?role=staff", staffA)).json() as {
+  const users = (await get("/api/v1/users?permission=bookings.use", staffA)).json() as {
     items: { id: string; name: string }[];
   };
   const rooms = (await get("/api/v1/rooms", staffA)).json() as {

@@ -2,6 +2,7 @@ import argon2 from "argon2";
 import type { Prisma } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { usersWithPermission } from "../../core/permissions.js";
 import { prisma } from "../../db.js";
 import { duplicate, isUniqueViolation, needsConfirm, notFound } from "../../lib/errors.js";
 import { dateFromISO, hhmm, isoDate, todayISO } from "../../lib/time.js";
@@ -94,14 +95,12 @@ const userCreate = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   titlePrefix: z.string().nullable().optional(),
-  role: z.enum(["staff"]).default("staff"),
   password: z.string().min(8),
 });
 const userPatch = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
   titlePrefix: z.string().nullable().optional(),
-  role: z.enum(["staff"]).optional(),
   isActive: z.boolean().optional(),
   password: z.string().min(8).optional(),
 });
@@ -349,28 +348,31 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
     requireUser(req);
     const q = z
       .object({
-        role: z.enum(["staff"]).optional(),
+        permission: z.string().optional(),
         active: z.string().optional(),
         q: z.string().optional(),
       })
       .parse(req.query);
 
     const where: Prisma.UserWhereInput = {};
-    if (q.role) where.role = q.role;
     if (q.active === "true") where.isActive = true;
     if (q.active === "false") where.isActive = false;
     if (q.q) where.name = { contains: q.q, mode: "insensitive" };
+    if (q.permission) where.id = { in: await usersWithPermission(q.permission) };
 
-    const users = await prisma.user.findMany({ where, orderBy: { name: "asc" } });
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: { name: "asc" },
+      include: { roles: { include: { role: { select: { name: true } } } } },
+    });
 
-    // Single `staff` role: every authenticated user gets the full projection.
     return {
       items: users.map((u) => ({
         id: u.id,
         name: u.name,
         titlePrefix: u.titlePrefix,
         email: u.email,
-        role: u.role,
+        roles: u.roles.map((a) => a.role.name),
         isActive: u.isActive,
         createdAt: u.createdAt.toISOString(),
       })),
@@ -380,14 +382,21 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
   app.post("/users", { config: { auth: "user", permission: "core.users.manage" } }, async (req, reply) => {
     const body = userCreate.parse(req.body);
     try {
-      const user = await prisma.user.create({
-        data: {
-          name: body.name,
-          email: body.email,
-          titlePrefix: body.titlePrefix ?? null,
-          role: body.role,
-          passwordHash: await argon2.hash(body.password, { type: argon2.argon2id }),
-        },
+      const user = await prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            name: body.name,
+            email: body.email,
+            titlePrefix: body.titlePrefix ?? null,
+            passwordHash: await argon2.hash(body.password, { type: argon2.argon2id }),
+          },
+        });
+        // New accounts get the legacy staff role; IT Admin adjusts it on /admin/access (step 5b).
+        const staff = await tx.role.findUniqueOrThrow({ where: { key: "staff" } });
+        await tx.userRoleAssignment.create({
+          data: { userId: created.id, roleId: staff.id, grantedById: requireUser(req).id },
+        });
+        return created;
       });
       return reply.code(201).send({
         user: {
@@ -395,7 +404,6 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
           name: user.name,
           titlePrefix: user.titlePrefix,
           email: user.email,
-          role: user.role,
           isActive: user.isActive,
         },
       });
@@ -420,7 +428,6 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
             name: body.name,
             email: body.email,
             titlePrefix: body.titlePrefix,
-            role: body.role,
             isActive: body.isActive,
             ...(body.password
               ? { passwordHash: await argon2.hash(body.password, { type: argon2.argon2id }) }
@@ -440,7 +447,6 @@ export async function masterDataRoutes(app: FastifyInstance): Promise<void> {
           name: user.name,
           titlePrefix: user.titlePrefix,
           email: user.email,
-          role: user.role,
           isActive: user.isActive,
         },
       };

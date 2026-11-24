@@ -2,17 +2,14 @@ import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config, isProd } from "../config.js";
 import { prisma } from "../db.js";
-import { can, loadSessionUser, type SessionUser as CoreSessionUser } from "../core/permissions.js";
+import { can, loadSessionUser, type SessionUser } from "../core/permissions.js";
 import { forbidden, unauthenticated } from "../lib/errors.js";
 
 // "public" = no session needed; "user" = any signed-in account. What the user may do is decided
 // by config.permission (see can()), never by the level.
 export type AuthLevel = "public" | "user";
 
-export type Role = "staff" | "student";
-
-/** Until Task A7 the old role rides along; new code must use permissions. */
-export type SessionUser = CoreSessionUser & { role: Role };
+export type { SessionUser };
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -59,11 +56,10 @@ async function resolveUser(req: FastifyRequest): Promise<SessionUser | undefined
 
   const session = await prisma.session.findUnique({
     where: { tokenHash: hashToken(raw) },
-    select: { expiresAt: true, userId: true, user: { select: { role: true, isActive: true } } },
+    select: { expiresAt: true, userId: true },
   });
-  if (!session || session.expiresAt <= new Date() || !session.user.isActive) return undefined;
-  const user = await loadSessionUser(session.userId);
-  return user ? { ...user, role: session.user.role } : undefined;
+  if (!session || session.expiresAt <= new Date()) return undefined;
+  return (await loadSessionUser(session.userId)) ?? undefined;
 }
 
 export function registerAuth(app: FastifyInstance, knownPermissions: ReadonlySet<string>): void {

@@ -41,7 +41,7 @@ export async function createDemoScenarios(
   const otherRow = await prisma.user.findUniqueOrThrow({
     where: { email: "student2@cedt.edu" },
   });
-  const other: SessionUser = { ...(await loadSessionUser(otherRow.id))!, role: otherRow.role };
+  const other: SessionUser = (await loadSessionUser(otherRow.id))!;
   const original = await demoPdf("Programme petition test document");
   const reg = await demoPdf("Reg Chula test document");
   const directory = new URL(

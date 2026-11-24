@@ -89,17 +89,16 @@ export async function seedCourseChange(args: {
     const advisorId = staff[s.advisor].id;
     const row = await prisma.user.upsert({
       where: { email: s.email },
-      update: { name: s.name, role: "student", studentNo: s.studentNo, advisorId, isActive: true },
+      update: { name: s.name, studentNo: s.studentNo, advisorId, isActive: true },
       create: {
         email: s.email,
         name: s.name,
-        role: "student",
         studentNo: s.studentNo,
         advisorId,
         passwordHash: await args.hash("student1234"),
       },
     });
-    students[s.email] = { ...(await loadSessionUser(row.id))!, role: row.role };
+    students[s.email] = (await loadSessionUser(row.id))!;
 
     for (const code of s.courses) {
       const courseId = catalog.ids[code]!;

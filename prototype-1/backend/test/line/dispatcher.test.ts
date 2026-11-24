@@ -52,7 +52,7 @@ const EXTRA_EMAIL = "dispatcher-test-extra@example.test";
 /** Creates the extra user. It has no notifications from other tests, so a test can link it as far back as it needs. */
 async function extraUser(): Promise<string> {
   const user = await prisma.user.create({
-    data: { email: EXTRA_EMAIL, passwordHash: "not-a-login", name: "Dispatcher Test", role: "staff" },
+    data: { email: EXTRA_EMAIL, passwordHash: "not-a-login", name: "Dispatcher Test" },
     select: { id: true },
   });
   return user.id;

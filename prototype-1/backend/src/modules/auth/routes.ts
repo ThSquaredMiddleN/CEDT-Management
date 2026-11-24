@@ -91,7 +91,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     setSessionCookie(reply, raw);
 
     const sessionUser = await loadSessionUser(user.id);
-    return { user: { ...sessionUser!, role: user.role } };
+    return { user: sessionUser };
   });
 
   app.post("/auth/logout", { config: { auth: "user", permission: null } }, async (req, reply) => {

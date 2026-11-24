@@ -25,11 +25,11 @@ try {
   const staffRow = await prisma.user.findUniqueOrThrow({
     where: { email: "admin@cedt.edu" },
   });
-  const staff = { ...(await loadSessionUser(staffRow.id))!, role: staffRow.role };
+  const staff = (await loadSessionUser(staffRow.id))!;
   const student = await prisma.user.findUniqueOrThrow({
     where: { email: "student3@cedt.edu" },
   });
-  const studentSession = { ...(await loadSessionUser(student.id))!, role: student.role };
+  const studentSession = (await loadSessionUser(student.id))!;
   const code = "DEMO-CC-V2";
   const previous = await prisma.course.findUnique({ where: { code } });
   if (previous && previous.catalogSource !== "synthetic-course-change-v2")

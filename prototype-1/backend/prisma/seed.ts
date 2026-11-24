@@ -86,28 +86,27 @@ function createPlaceholderPng(
 async function main() {
   // ------------------------------------------------------------------- users
   const users = [
-    { name: "Waraporn K.", titlePrefix: null, email: "admin@cedt.edu", password: "admin1234", role: "staff" as const },
-    { name: "Somchai P.", titlePrefix: "Dr.", email: "somchai@cedt.edu", password: "instr1234", role: "staff" as const },
-    { name: "Anucha T.", titlePrefix: "Dr.", email: "anucha@cedt.edu", password: "instr1234", role: "staff" as const },
-    { name: "Pimchanok R.", titlePrefix: "Asst. Prof.", email: "pimchanok@cedt.edu", password: "instr1234", role: "staff" as const },
-    { name: "Krit W.", titlePrefix: "Dr.", email: "krit@cedt.edu", password: "instr1234", role: "staff" as const },
+    { name: "Waraporn K.", titlePrefix: null, email: "admin@cedt.edu", password: "admin1234" },
+    { name: "Somchai P.", titlePrefix: "Dr.", email: "somchai@cedt.edu", password: "instr1234" },
+    { name: "Anucha T.", titlePrefix: "Dr.", email: "anucha@cedt.edu", password: "instr1234" },
+    { name: "Pimchanok R.", titlePrefix: "Asst. Prof.", email: "pimchanok@cedt.edu", password: "instr1234" },
+    { name: "Krit W.", titlePrefix: "Dr.", email: "krit@cedt.edu", password: "instr1234" },
   ];
 
-  const userRows: Record<string, { id: string; role: SessionUser["role"] }> = {};
+  const userRows: Record<string, { id: string }> = {};
   const userByEmail: Record<string, SessionUser> = {};
   for (const u of users) {
     const row = await prisma.user.upsert({
       where: { email: u.email },
-      update: { name: u.name, titlePrefix: u.titlePrefix, role: u.role, isActive: true },
+      update: { name: u.name, titlePrefix: u.titlePrefix, isActive: true },
       create: {
         name: u.name,
         titlePrefix: u.titlePrefix,
         email: u.email,
-        role: u.role,
         passwordHash: await hash(u.password),
       },
     });
-    userRows[u.email] = { id: row.id, role: row.role };
+    userRows[u.email] = { id: row.id };
   }
 
   // Roles (step 5a): the demo admin is staff + IT admin; instructors keep the legacy staff role.
@@ -116,7 +115,7 @@ async function main() {
   await seedTestAccounts(prisma, hash);
   for (const u of users) {
     const r = userRows[u.email]!;
-    userByEmail[u.email] = { ...(await loadSessionUser(r.id))!, role: r.role };
+    userByEmail[u.email] = (await loadSessionUser(r.id))!;
   }
 
   const admin = userByEmail["admin@cedt.edu"]! as SessionUser;

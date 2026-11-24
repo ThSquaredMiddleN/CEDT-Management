@@ -30,8 +30,7 @@ export async function seedTestAccounts(prisma: PrismaClient, hash: (pw: string) 
     const user = await prisma.user.upsert({
       where: { email: a.email },
       update: { name: a.name, studentNo: a.studentNo, isActive: true },
-      // `role` is still required until Task A7 drops the column.
-      create: { email: a.email, name: a.name, studentNo: a.studentNo, passwordHash, role: a.studentNo ? "student" : "staff" },
+      create: { email: a.email, name: a.name, studentNo: a.studentNo, passwordHash },
     });
     for (const key of a.roles) await assignRole(prisma, user.id, key);
   }

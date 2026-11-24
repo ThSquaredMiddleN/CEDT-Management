@@ -60,7 +60,7 @@ beforeAll(async () => {
   for(const enrollment of enrolled) for(const requestType of ["drop","withdraw"] as const) {
     await prisma.courseChangeSchedule.create({data:{termId:term.id,courseId:enrollment.courseId,section:"*",requestType,label:"TEST catalog published dates",format:"block",opensOn:new Date("2026-09-01"),closesOn:new Date("2026-10-25"),flow:requestType==="drop"?"program_registrar":"advisor_pi",needsSignature:true,needsReg:false,needsPi:requestType==="withdraw",needsMerge:false,published:true}});
   }
-  s3 = { ...(await loadSessionUser(u.id))!, role: u.role };
+  s3 = (await loadSessionUser(u.id))!;
 });
 
 afterAll(async () => {

@@ -31,7 +31,7 @@ try {
   const course = await prisma.course.findFirstOrThrow({ where: { code: "CEDT499" } });
   const room = await prisma.room.findFirstOrThrow({ where: { name: "E12-501" } });
 
-  const actor: SessionUser = { ...(await loadSessionUser(user.id))!, role: user.role };
+  const actor: SessionUser = (await loadSessionUser(user.id))!;
   const booking = await createBooking(
     {
       bookingType: "one_off",

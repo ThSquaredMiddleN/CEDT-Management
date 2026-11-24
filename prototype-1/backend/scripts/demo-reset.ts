@@ -34,7 +34,7 @@ async function main() {
     prisma.course.findUniqueOrThrow({ where: { code: DEMO_COURSE } }),
     prisma.term.findFirstOrThrow({ where: { isActive: true } }),
   ]);
-  if (student.role !== "student") throw new Error(`${DEMO_STUDENT} is not a student account`);
+  if (!student.studentNo) throw new Error(`${DEMO_STUDENT} is not a student account`);
   if (!course.catalogSource) throw new Error(`${DEMO_COURSE} is not a CEDT catalog course`);
 
   const targets = await prisma.courseChangeRequest.findMany({
