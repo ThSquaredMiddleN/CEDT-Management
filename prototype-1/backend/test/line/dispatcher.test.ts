@@ -15,6 +15,8 @@ import { cleanLineState, fakeLine, LINE_A, LINE_B, newEventId, UUID } from "./fi
 /** Seeded staff accounts. Their LINE fields are reset to null after every test. */
 const SOMCHAI = "somchai@cedt.edu";
 const ANUCHA = "anucha@cedt.edu";
+/** Seeded student (seed-course-change.ts): course change rows go to LINE for students only. */
+const STUDENT = "student@cedt.edu";
 
 /** Marks every notification this file creates, so cleanup can find them. */
 const MARK = "dispatcher-test";
@@ -300,8 +302,8 @@ describe("dispatchLineOnce", () => {
 
   it("pushes a course_change row with its message and full link, then marks it delivered", async () => {
     const linkedAt = new Date();
-    await link(SOMCHAI, LINE_A, linkedAt);
-    const id = await addRow(SOMCHAI, new Date(linkedAt.getTime() + 1000), {
+    await link(STUDENT, LINE_A, linkedAt);
+    const id = await addRow(STUDENT, new Date(linkedAt.getTime() + 1000), {
       type: "course_change.approved",
       module: "course_change",
       message: `${MARK} course change approved`,
@@ -315,6 +317,25 @@ describe("dispatchLineOnce", () => {
       `${MARK} course change approved\n\n${config.APP_ORIGIN}/course-change?view=tracking&request=fake-request`,
     );
     expect(await deliveredAt(id)).not.toBeNull();
+  });
+
+  it("does not push a course_change row to a staff user: it stays undelivered, and their booking row is still sent", async () => {
+    const linkedAt = new Date();
+    await link(SOMCHAI, LINE_A, linkedAt);
+    const cc = await addRow(SOMCHAI, new Date(linkedAt.getTime() + 1000), {
+      type: "course_change.submitted",
+      module: "course_change",
+      message: `${MARK} new course change request`,
+      link: "/course-change?view=tracking&request=fake-request",
+      payload: { requestNo: "CC-0003" },
+    });
+    const booking = await addNotification(SOMCHAI, new Date(linkedAt.getTime() + 2000));
+
+    expect(await dispatch()).toEqual(tally({ sent: 1 }));
+    expect(line.sent).toHaveLength(1);
+    expect(line.sent[0]!.text).not.toContain("new course change request");
+    expect(await deliveredAt(booking)).not.toBeNull();
+    expect(await deliveredAt(cc)).toBeNull();
   });
 
   it("sends a booking row with an incomplete payload as its message, marks it delivered, and logs no message text", async () => {
@@ -358,8 +379,8 @@ describe("dispatchLineOnce", () => {
 
   it("sends a row with a null link to the app's root", async () => {
     const linkedAt = new Date();
-    await link(SOMCHAI, LINE_A, linkedAt);
-    const id = await addRow(SOMCHAI, new Date(linkedAt.getTime() + 1000), {
+    await link(STUDENT, LINE_A, linkedAt);
+    const id = await addRow(STUDENT, new Date(linkedAt.getTime() + 1000), {
       type: "course_change.cancelled",
       module: "course_change",
       message: `${MARK} no link`,
