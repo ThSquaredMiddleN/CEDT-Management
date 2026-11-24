@@ -15,9 +15,6 @@ const AuthContext = createContext<AuthContextValue>({ user: null });
 
 export const useAuth = () => useContext(AuthContext);
 
-// Everyone lands on the portal home (news and announcements).
-export const roleLanding = (): string => "/";
-
 /** Full-page splash while the session bootstraps — never a blank screen. */
 function Splash() {
   return (
