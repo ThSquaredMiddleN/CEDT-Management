@@ -148,6 +148,8 @@ beforeEach(async () => {
 afterEach(async () => {
   await prisma.courseChangeSignatureBatch.deleteMany({ where: { courseId } });
   config.COURSE_CHANGE_TODAY = today;
+  const reqIds = (await prisma.courseChangeRequest.findMany({ where: { courseId }, select: { id: true } })).map((r) => r.id);
+  await prisma.notification.deleteMany({ where: { module: "course_change", subjectId: { in: reqIds } } });
   await prisma.courseChangeRequest.deleteMany({ where: { courseId } });
   await prisma.courseChangeSchedule.deleteMany({ where: { courseId } });
   await prisma.allowedCourse.deleteMany({ where: { courseId } });
@@ -452,9 +454,10 @@ describe("Private PDF documents and human evidence", () => {
     ).json().request;
     expect(r.status).toBe("completed");
     const notification = await prisma.notification.findFirst({
-      where: { courseChangeRequestId: r.id, type: "cc_completed" },
+      where: { module: "course_change", subjectId: r.id, type: "course_change.completed" },
     });
     expect(notification?.deliveredLineAt).toBeNull();
+    expect(notification?.link).toBe(`/course-change?view=tracking&request=${r.id}`);
     expect((await upload(r, "evidence", staff)).statusCode).toBe(409);
   });
   it("rejects corrupt and over-limit PDFs", async () => {

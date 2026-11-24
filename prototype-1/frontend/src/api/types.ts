@@ -168,25 +168,15 @@ export interface DirectoryUser {
   isActive?: boolean;
 }
 
-export type NotificationType =
-  | "request_submitted"
-  | "request_approved"
-  | "request_rejected"
-  | "booking_moved"
-  | "booking_cancelled_by_instructor"
-  | "request_withdrawn"
-  | "cc_submitted"
-  | "cc_approved"
-  | "cc_rejected"
-  | "cc_completed"
-  | "cc_cancelled";
-
+/** `type` is `<module>.<event>`, e.g. `bookings.request_approved`, `course_change.approved`. */
 export interface AppNotification {
   id: string;
-  type: NotificationType;
+  type: string;
+  module: string;
+  subjectId: string | null;
   message: string;
-  bookingId: string | null;
-  courseChangeRequestId?: string | null;
+  /** In-app path (e.g. `/requests`), or null when there is nothing to open. */
+  link: string | null;
   payload: Record<string, unknown>;
   isRead: boolean;
   createdAt: string;

@@ -16,7 +16,7 @@ import {
 } from "../../lib/errors.js";
 import { isoDate } from "../../lib/time.js";
 import type { SessionUser } from "../../plugins/auth.js";
-import { activeAdminIds } from "../notifications/service.js";
+import { activeAdminIds } from "../../core/users.js";
 import {
   event,
   notifyCc,
@@ -413,7 +413,7 @@ export async function submitRequest(
     });
     await notifyCc(tx, {
       userIds: await activeAdminIds(tx),
-      type: "cc_submitted",
+      event: "submitted",
       message: `${r.requestNo} รอเจ้าหน้าที่ตรวจคำร้อง`,
       requestId: r.id,
       requestNo: r.requestNo,
@@ -611,12 +611,12 @@ export async function action(
     );
     await notifyCc(tx, {
       userIds: me.role === "student" ? await activeAdminIds(tx) : [r.studentId],
-      type:
+      event:
         body.action === "complete"
-          ? "cc_completed"
+          ? "completed"
           : body.action === "reject"
-            ? "cc_rejected"
-            : "cc_approved",
+            ? "rejected"
+            : "approved",
       message: `${r.requestNo} · ${body.action === "reject" ? `ไม่รับดำเนินการ: ${body.note}` : PHASES[phase]}`,
       requestId: id,
       requestNo: r.requestNo,

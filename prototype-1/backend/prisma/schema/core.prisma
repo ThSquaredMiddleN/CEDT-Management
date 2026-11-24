@@ -5,22 +5,6 @@ enum UserRole {
   @@map("user_role")
 }
 
-enum NotificationType {
-  request_submitted
-  request_approved
-  request_rejected
-  booking_moved
-  booking_cancelled_by_instructor
-  request_withdrawn
-  cc_submitted
-  cc_approved
-  cc_rejected
-  cc_completed
-  cc_cancelled
-
-  @@map("notification_type")
-}
-
 model User {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email            String    @unique @db.Citext
@@ -128,25 +112,31 @@ model Term {
   @@map("terms")
 }
 
+/// One row per recipient. `type` is "<module>.<event>" (checked in core/notify.ts); no FK to the subject,
+/// so deletes of a subject must remove its rows by module + subjectId.
 model Notification {
-  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId                String           @map("user_id") @db.Uuid
-  type                  NotificationType
-  message               String
-  bookingId             String?          @map("booking_id") @db.Uuid
-  courseChangeRequestId String?          @map("course_change_request_id") @db.Uuid
-  payload               Json             @default("{}")
-  isRead                Boolean          @default(false) @map("is_read")
-  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  deliveredEmailAt DateTime? @map("delivered_email_at") @db.Timestamptz(6)
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  type             String
+  module           String
+  /// Id of the thing notified about (e.g. a booking id), stored as text.
+  subjectId        String?   @map("subject_id")
+  /// Readable without opening the web app; LINE sends this text as-is.
+  message          String
+  /// In-app path such as "/requests", never a full URL.
+  link             String?
+  payload          Json      @default("{}")
+  isRead           Boolean   @default(false) @map("is_read")
+  readAt           DateTime? @map("read_at") @db.Timestamptz(6)
   deliveredLineAt  DateTime? @map("delivered_line_at") @db.Timestamptz(6)
+  deliveredEmailAt DateTime? @map("delivered_email_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  user                User                 @relation(fields: [userId], references: [id])
-  booking             Booking?             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  courseChangeRequest CourseChangeRequest? @relation(fields: [courseChangeRequestId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId, isRead, createdAt(sort: Desc)])
+  @@index([module, subjectId])
+  @@index([deliveredLineAt])
   @@map("notifications")
 }
 

@@ -69,16 +69,17 @@ beforeAll(async () => {
   await prisma.courseChangeSchedule.create({data:{termId:activeTerm.id,courseId:courses["2110582"]!,section:"*",requestType:"drop",label:"TEST stale preview",format:"block",opensOn:new Date("2026-09-14"),closesOn:new Date("2026-12-06"),flow:"program_registrar",needsSignature:true,needsReg:false,needsPi:false,needsMerge:false,published:true}});
   // Clear anything a previous, crashed run of this test left behind on the courses it uses.
   const s3 = await prisma.user.findUniqueOrThrow({ where: { email: "student3@cedt.edu" } });
-  await prisma.courseChangeRequest.deleteMany({
-    where: {
-      studentId: s3.id,
-      courseId: { in: [courses["2110252"]!, courses["2110204"]!] },
-    },
+  const stale = await prisma.courseChangeRequest.findMany({
+    where: { studentId: s3.id, courseId: { in: [courses["2110252"]!, courses["2110204"]!] } },
+    select: { id: true },
   });
+  await prisma.notification.deleteMany({ where: { module: "course_change", subjectId: { in: stale.map((r) => r.id) } } });
+  await prisma.courseChangeRequest.deleteMany({ where: { id: { in: stale.map((r) => r.id) } } });
 });
 
 afterAll(async () => {
   await prisma.courseChangeSchedule.deleteMany({where:{label:"TEST stale preview"}});
+  await prisma.notification.deleteMany({ where: { module: "course_change", subjectId: { in: created } } });
   await prisma.courseChangeRequest.deleteMany({ where: { id: { in: created } } });
   await app.close();
   await prisma.$disconnect();
@@ -111,10 +112,13 @@ describe("Historical v1 Flow B — withdraw in week 9", () => {
     ]);
 
     const n = await prisma.notification.findFirst({
-      where: { courseChangeRequestId: id, type: "cc_submitted" },
+      where: { module: "course_change", subjectId: id, type: "course_change.submitted" },
       include: { user: true },
     });
     expect(n?.user.email).toBe("anucha@cedt.edu");
+    // Created as an in-app row only: the LINE dispatcher sets deliveredLineAt later.
+    expect(n?.deliveredLineAt).toBeNull();
+    expect(n?.link).toBe(`/course-change?view=tracking&request=${id}`);
   });
 
   it("refuses a second live request for the same course (CC-BR-2)", async () => {
@@ -141,11 +145,11 @@ describe("Historical v1 Flow B — withdraw in week 9", () => {
       "done", "done", "done", "done", "current",
     ]);
 
-    // The student got an in-app notification that was also pushed to LINE (mock).
+    // The student got an in-app row; LINE delivery is not marked here (the dispatcher does it).
     const n = await prisma.notification.findFirst({
-      where: { courseChangeRequestId: id, type: "cc_approved" },
+      where: { module: "course_change", subjectId: id, type: "course_change.approved" },
     });
-    expect(n?.deliveredLineAt).not.toBeNull();
+    expect(n?.deliveredLineAt).toBeNull();
   });
 
   it("serves the merged document to its owner, escaped and verified", async () => {

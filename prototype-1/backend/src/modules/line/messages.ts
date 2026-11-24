@@ -1,9 +1,10 @@
-import type { NotificationType } from "@prisma/client";
-import type { NotifyPayload } from "../notifications/service.js";
+import type { NotifyPayload } from "../bookings/service.js";
 
 /**
- * Text for LINE. Each message is one text: Thai block, English block, then the app link, separated by
- * blank lines. Thai comes first because the staff are Thai speakers.
+ * Text for LINE. Each message is one text, blocks separated by blank lines, the app link last.
+ * A booking row whose payload renders gets a Thai block, then an English block, then the link. Thai comes
+ * first because the staff are Thai speakers. Every other row, and a booking row that cannot be rendered, is
+ * sent as its own message text followed by the link (fallbackTextFor).
  */
 
 const TIME_ZONE = "Asia/Bangkok";
@@ -12,18 +13,14 @@ const MAX_REASON_CHARS = 500;
 
 type Copy = { th: string; en: string };
 
-const TITLES: Record<NotificationType, (requestNo: string) => Copy> = {
-  request_submitted: (n) => ({ th: `มีคำขอใหม่ ${n}`, en: `New request ${n}` }),
-  request_approved: (n) => ({ th: `คำขอ ${n} ได้รับการอนุมัติแล้ว`, en: `Request ${n} approved` }),
-  request_rejected: (n) => ({ th: `คำขอ ${n} ไม่ได้รับการอนุมัติ`, en: `Request ${n} rejected` }),
-  booking_moved: (n) => ({ th: `การจอง ${n} ถูกย้าย`, en: `Booking ${n} was moved` }),
-  booking_cancelled_by_instructor: (n) => ({ th: `การจอง ${n} ถูกยกเลิก`, en: `Booking ${n} was cancelled` }),
-  request_withdrawn: (n) => ({ th: `คำขอ ${n} ถูกถอน`, en: `Request ${n} was withdrawn` }),
-  cc_submitted: (n) => ({ th: `มีคำร้องลด/ถอนรายวิชาใหม่ ${n}`, en: `New course change request ${n}` }),
-  cc_approved: (n) => ({ th: `คำร้อง ${n} ได้รับการอนุมัติแล้ว`, en: `Course change request ${n} approved` }),
-  cc_rejected: (n) => ({ th: `คำร้อง ${n} ไม่ได้รับการอนุมัติ`, en: `Course change request ${n} rejected` }),
-  cc_completed: (n) => ({ th: `คำร้อง ${n} ดำเนินการเสร็จแล้ว`, en: `Course change request ${n} completed` }),
-  cc_cancelled: (n) => ({ th: `คำร้อง ${n} ถูกยกเลิก`, en: `Course change request ${n} was cancelled` }),
+/** Titles for booking rows, keyed by "bookings.<event>". A type with no entry makes lineTextFor throw. */
+const TITLES: Record<string, ((requestNo: string) => Copy) | undefined> = {
+  "bookings.request_submitted": (n) => ({ th: `มีคำขอใหม่ ${n}`, en: `New request ${n}` }),
+  "bookings.request_approved": (n) => ({ th: `คำขอ ${n} ได้รับการอนุมัติแล้ว`, en: `Request ${n} approved` }),
+  "bookings.request_rejected": (n) => ({ th: `คำขอ ${n} ไม่ได้รับการอนุมัติ`, en: `Request ${n} rejected` }),
+  "bookings.booking_moved": (n) => ({ th: `การจอง ${n} ถูกย้าย`, en: `Booking ${n} was moved` }),
+  "bookings.booking_cancelled_by_instructor": (n) => ({ th: `การจอง ${n} ถูกยกเลิก`, en: `Booking ${n} was cancelled` }),
+  "bookings.request_withdrawn": (n) => ({ th: `คำขอ ${n} ถูกถอน`, en: `Request ${n} was withdrawn` }),
 };
 
 const DAYS_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"] as const;
@@ -63,29 +60,45 @@ function detailLine(p: NotifyPayload, lang: "th" | "en"): string {
 }
 
 /**
- * A field every message needs. A payload without it is not sent: it would show "undefined" to the user, so
- * lineTextFor throws and the dispatcher marks the notification as a render failure.
+ * A field every message needs. A payload without it is not sent as rich text: it would show "undefined" to the
+ * user, so lineTextFor throws and the dispatcher sends the row's message instead.
  */
 function requiredText(value: unknown, name: string): string {
   if (typeof value !== "string" || value.length === 0) throw new TypeError(`payload.${name} is missing`);
   return value;
 }
 
-/** The notification text for LINE. Pure: the app origin is passed in, nothing is read from config. Throws on a payload it cannot render. */
-export function lineTextFor(type: NotificationType, payload: NotifyPayload, appOrigin: string): string {
+/** The full URL for a row's in-app link. A null link goes to the app's root. */
+export function linkFor(appOrigin: string, link: string | null): string {
+  return `${appOrigin}${link ?? "/"}`;
+}
+
+/**
+ * Rich text for a booking row. Pure: the URL is passed in, nothing is read from config. Throws on a type with no
+ * title or on a payload it cannot render; the caller then falls back to fallbackTextFor.
+ */
+export function lineTextFor(type: string, payload: NotifyPayload, url: string): string {
+  const titleOf = TITLES[type];
+  if (!titleOf) throw new TypeError(`no LINE title for ${type}`);
   const requestNo = requiredText(payload?.requestNo, "requestNo");
   requiredText(payload?.roomName, "roomName");
   requiredText(payload?.startTime, "startTime");
   requiredText(payload?.endTime, "endTime");
-  const title = TITLES[type](requestNo);
+  const title = titleOf(requestNo);
   const reason = payload.reason ? clip(payload.reason, MAX_REASON_CHARS) : null;
 
   const th = [title.th, detailLine(payload, "th"), ...(reason ? [`เหตุผล: ${reason}`] : [])].join("\n");
   const en = [title.en, detailLine(payload, "en"), ...(reason ? [`Reason: ${reason}`] : [])].join("\n");
-  // Approvers act on the dashboard queue; every other type is about the reader's own request.
-  const path = type === "request_submitted" ? "/admin/dashboard" : "/requests";
-  const text = [th, en, `${appOrigin}${path}`].join("\n\n");
-  return clip(text, MAX_TEXT_CHARS);
+  return clip([th, en, url].join("\n\n"), MAX_TEXT_CHARS);
+}
+
+/**
+ * The row's own message, then the link. The message is clipped first so the link always stays whole.
+ * Used for every row that is not a booking, and for a booking row that cannot be rendered.
+ */
+export function fallbackTextFor(message: string, url: string): string {
+  const room = Math.max(1, MAX_TEXT_CHARS - url.length - "\n\n".length);
+  return [clip(message, room), url].join("\n\n");
 }
 
 /** Sent after a user adds the bot as a friend or messages it while not linked. `url` is the one-time link. */

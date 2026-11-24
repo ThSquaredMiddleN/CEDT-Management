@@ -15,6 +15,8 @@ import { cleanLineState, fakeLine, LINE_A, LINE_B, newEventId, UUID } from "./fi
 /** Seeded staff accounts. Their LINE fields are reset to null after every test. */
 const SOMCHAI = "somchai@cedt.edu";
 const ANUCHA = "anucha@cedt.edu";
+/** Seeded student (seed-course-change.ts): course change rows go to LINE for students only. */
+const STUDENT = "student@cedt.edu";
 
 /** Marks every notification this file creates, so cleanup can find them. */
 const MARK = "dispatcher-test";
@@ -82,13 +84,35 @@ async function deactivated(email: string, fn: () => Promise<void>): Promise<void
   }
 }
 
-async function addNotification(email: string, createdAt: Date, payload: Record<string, string> = PAYLOAD): Promise<string> {
+/** The columns a test may vary. The defaults are a booking row with a complete payload. */
+interface RowFields {
+  type: string;
+  module: string;
+  message: string;
+  link: string | null;
+  payload: Record<string, string>;
+}
+
+async function addRow(email: string, createdAt: Date, over: Partial<RowFields> = {}): Promise<string> {
   const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } });
   const row = await prisma.notification.create({
-    data: { userId: user.id, type: "request_submitted", message: `${MARK} fake`, payload, createdAt },
+    data: {
+      userId: user.id,
+      type: "bookings.request_submitted",
+      module: "bookings",
+      message: `${MARK} fake`,
+      link: "/admin/dashboard",
+      payload: PAYLOAD,
+      createdAt,
+      ...over,
+    },
   });
   return row.id;
 }
+
+/** A booking row (bookings.request_submitted) with the given payload. */
+const addNotification = (email: string, createdAt: Date, payload: Record<string, string> = PAYLOAD): Promise<string> =>
+  addRow(email, createdAt, { payload });
 
 const deliveredAt = async (id: string): Promise<Date | null> =>
   (await prisma.notification.findUniqueOrThrow({ where: { id }, select: { deliveredLineAt: true } })).deliveredLineAt;
@@ -247,7 +271,7 @@ describe("dispatchLineOnce", () => {
     expect(line.sent).toHaveLength(1);
   });
 
-  it("marks a notification whose payload cannot be rendered, and still sends the valid one after it", async () => {
+  it("sends a booking whose payload cannot be rendered as its message, and still sends the valid one after it", async () => {
     const linkedAt = new Date();
     await link(SOMCHAI, LINE_A, linkedAt);
     const empty = await addNotification(SOMCHAI, new Date(linkedAt.getTime() + 1000), {});
@@ -258,14 +282,115 @@ describe("dispatchLineOnce", () => {
     const valid = await addNotification(SOMCHAI, new Date(linkedAt.getTime() + 3000));
     const log = { warn: vi.fn(), error: vi.fn() };
 
-    expect(await dispatch({ log })).toEqual(tally({ sent: 1, permanent: 2 }));
+    expect(await dispatch({ log })).toEqual(tally({ sent: 3 }));
 
-    expect(line.sent.map((s) => s.retryKey)).toEqual([valid]);
+    expect(line.sent.map((s) => s.retryKey)).toEqual([empty, badDate, valid]);
+    expect(line.sent[0]!.text).toBe(`${MARK} fake\n\n${config.APP_ORIGIN}/admin/dashboard`);
     expect(await deliveredAt(empty)).not.toBeNull();
     expect(await deliveredAt(badDate)).not.toBeNull();
     expect(await deliveredAt(valid)).not.toBeNull();
-    expect(log.error).toHaveBeenCalledWith({ notificationId: empty, detail: "render_failed" }, expect.any(String));
-    expect(log.error).toHaveBeenCalledWith({ notificationId: badDate, detail: "render_failed" }, expect.any(String));
+    expect(log.warn).toHaveBeenCalledWith(
+      { notificationId: empty, type: "bookings.request_submitted", detail: "render_failed" },
+      expect.any(String),
+    );
+    expect(log.warn).toHaveBeenCalledWith(
+      { notificationId: badDate, type: "bookings.request_submitted", detail: "render_failed" },
+      expect.any(String),
+    );
+    expect(log.error).not.toHaveBeenCalled();
+  });
+
+  it("pushes a course_change row with its message and full link, then marks it delivered", async () => {
+    const linkedAt = new Date();
+    await link(STUDENT, LINE_A, linkedAt);
+    const id = await addRow(STUDENT, new Date(linkedAt.getTime() + 1000), {
+      type: "course_change.approved",
+      module: "course_change",
+      message: `${MARK} course change approved`,
+      link: "/course-change?view=tracking&request=fake-request",
+      payload: { requestNo: "CC-0001" },
+    });
+
+    expect(await dispatch()).toEqual(tally({ sent: 1 }));
+    expect(line.sent).toHaveLength(1);
+    expect(line.sent[0]!.text).toBe(
+      `${MARK} course change approved\n\n${config.APP_ORIGIN}/course-change?view=tracking&request=fake-request`,
+    );
+    expect(await deliveredAt(id)).not.toBeNull();
+  });
+
+  it("does not push a course_change row to a staff user: it stays undelivered, and their booking row is still sent", async () => {
+    const linkedAt = new Date();
+    await link(SOMCHAI, LINE_A, linkedAt);
+    const cc = await addRow(SOMCHAI, new Date(linkedAt.getTime() + 1000), {
+      type: "course_change.submitted",
+      module: "course_change",
+      message: `${MARK} new course change request`,
+      link: "/course-change?view=tracking&request=fake-request",
+      payload: { requestNo: "CC-0003" },
+    });
+    const booking = await addNotification(SOMCHAI, new Date(linkedAt.getTime() + 2000));
+
+    expect(await dispatch()).toEqual(tally({ sent: 1 }));
+    expect(line.sent).toHaveLength(1);
+    expect(line.sent[0]!.text).not.toContain("new course change request");
+    expect(await deliveredAt(booking)).not.toBeNull();
+    expect(await deliveredAt(cc)).toBeNull();
+  });
+
+  it("sends a booking row with an incomplete payload as its message, marks it delivered, and logs no message text", async () => {
+    const linkedAt = new Date();
+    await link(SOMCHAI, LINE_A, linkedAt);
+    const id = await addRow(SOMCHAI, new Date(linkedAt.getTime() + 1000), {
+      type: "bookings.request_approved",
+      message: `${MARK} approved, incomplete payload`,
+      link: "/requests",
+      payload: { requestNo: "DT-0002" },
+    });
+    const log = { warn: vi.fn(), error: vi.fn() };
+
+    expect(await dispatch({ log })).toEqual(tally({ sent: 1 }));
+    expect(line.sent[0]!.text).toBe(`${MARK} approved, incomplete payload\n\n${config.APP_ORIGIN}/requests`);
+    expect(await deliveredAt(id)).not.toBeNull();
+    expect(log.warn).toHaveBeenCalledWith(
+      { notificationId: id, type: "bookings.request_approved", detail: "render_failed" },
+      expect.any(String),
+    );
+    expect(JSON.stringify([log.warn.mock.calls, log.error.mock.calls])).not.toContain(MARK);
+  });
+
+  it("sends a booking row with a full payload as the rich Thai and English text, not its message", async () => {
+    const linkedAt = new Date();
+    await link(SOMCHAI, LINE_A, linkedAt);
+    const id = await addRow(SOMCHAI, new Date(linkedAt.getTime() + 1000), {
+      type: "bookings.request_approved",
+      message: `${MARK} plain message`,
+      link: "/requests",
+    });
+
+    expect(await dispatch()).toEqual(tally({ sent: 1 }));
+    const text = line.sent[0]!.text;
+    expect(text).toContain("คำขอ DT-0001 ได้รับการอนุมัติแล้ว");
+    expect(text).toContain("Request DT-0001 approved");
+    expect(text.endsWith(`${config.APP_ORIGIN}/requests`)).toBe(true);
+    expect(text).not.toContain(`${MARK} plain message`);
+    expect(await deliveredAt(id)).not.toBeNull();
+  });
+
+  it("sends a row with a null link to the app's root", async () => {
+    const linkedAt = new Date();
+    await link(STUDENT, LINE_A, linkedAt);
+    const id = await addRow(STUDENT, new Date(linkedAt.getTime() + 1000), {
+      type: "course_change.cancelled",
+      module: "course_change",
+      message: `${MARK} no link`,
+      link: null,
+      payload: { requestNo: "CC-0002" },
+    });
+
+    expect(await dispatch()).toEqual(tally({ sent: 1 }));
+    expect(line.sent[0]!.text).toBe(`${MARK} no link\n\n${config.APP_ORIGIN}/`);
+    expect(await deliveredAt(id)).not.toBeNull();
   });
 
   it("counts a 409 on push as sent, using the real client over a fake fetch", async () => {
@@ -321,7 +446,8 @@ describe("dispatchLineOnce", () => {
     await prisma.notification.createMany({
       data: Array.from({ length: 52 }, (_, i) => ({
         userId: user.id,
-        type: "request_submitted" as const,
+        type: "bookings.request_submitted",
+        module: "bookings",
         message: `${MARK} batch`,
         payload: PAYLOAD,
         createdAt: new Date(linkedAt.getTime() + (i + 1) * 1000),
@@ -359,7 +485,8 @@ describe("dispatchLineOnce", () => {
       data: ids.flatMap((userId, u) =>
         Array.from({ length: 10 }, (_, k) => ({
           userId,
-          type: "request_submitted" as const,
+          type: "bookings.request_submitted",
+          module: "bookings",
           message: `${MARK} cap`,
           payload: PAYLOAD,
           createdAt: new Date(linkedAt.getTime() + (k * ids.length + u + 1) * 1000),

@@ -64,6 +64,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.courseChangeSchedule.deleteMany({where:{label:"TEST catalog published dates"}});
+  await prisma.notification.deleteMany({ where: { module: "course_change", subjectId: { in: created } } });
   await prisma.courseChangeRequest.deleteMany({ where: { id: { in: created } } });
   await app.close();
   await prisma.$disconnect();

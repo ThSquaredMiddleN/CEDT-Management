@@ -22,8 +22,26 @@ import {
 import type { SessionUser } from "../../plugins/auth.js";
 import { expandOccurrences, type Candidate } from "../conflicts/expand.js";
 import { findAlternativeRooms, findConflicts, type ConflictEntry } from "../conflicts/find.js";
-import { activeAdminIds, notify, type NotifyPayload } from "../notifications/service.js";
+import { notify } from "../../core/notify.js";
+import { activeAdminIds } from "../../core/users.js";
 import type { BookingInput } from "./schemas.js";
+
+/** In-app links chosen at write time: admins get the queue, instructors and requesters their own list. */
+const ADMIN_LINK = "/admin/dashboard";
+const REQUESTER_LINK = "/requests";
+
+/** Payload LINE reads for booking rows (keep in sync with line/messages.ts). */
+export type NotifyPayload = {
+  bookingId: string;
+  requestNo: string;
+  courseCode: string | null;
+  roomName: string;
+  date?: string | null;
+  dayOfWeek?: number | null;
+  startTime: string;
+  endTime: string;
+  reason?: string | null;
+};
 
 interface Snapshot {
   courseCode: string | null;
@@ -219,11 +237,13 @@ export async function createBooking(
         const when = dayOrDate(booking.dayOfWeek, booking.oneOffDate ? isoDate(booking.oneOffDate) : null);
         await notify(tx, {
           userIds: await activeAdminIds(tx),
-          type: "request_submitted",
+          type: "bookings.request_submitted",
+          module: "bookings",
+          subjectId: booking.id,
           message: `New request from ${snapshot.instructorName}: ${
             snapshot.courseCode ?? booking.title
           }, ${snapshot.roomName}, ${when} ${hhmm(booking.startTime)}-${hhmm(booking.endTime)}`,
-          bookingId: booking.id,
+          link: ADMIN_LINK,
           payload: notifyPayload(booking, snapshot),
         });
       }
@@ -295,11 +315,13 @@ export async function approveBooking(id: string, actor: SessionUser) {
       );
       await notify(tx, {
         userIds: [booking.instructorId, booking.requestedBy],
-        type: "request_approved",
+        type: "bookings.request_approved",
+        module: "bookings",
+        subjectId: id,
         message: `Approved: ${snap.courseCode ?? booking.title}, ${snap.roomName}, ${when} ${hhmm(
           booking.startTime,
         )}-${hhmm(booking.endTime)}`,
-        bookingId: id,
+        link: REQUESTER_LINK,
         payload: notifyPayload(booking, snap),
       });
 
@@ -353,9 +375,11 @@ export async function rejectBooking(id: string, reason: string, actor: SessionUs
     const snap = booking.snapshot as unknown as Snapshot;
     await notify(tx, {
       userIds: [booking.instructorId, booking.requestedBy],
-      type: "request_rejected",
+      type: "bookings.request_rejected",
+      module: "bookings",
+      subjectId: id,
       message: `Rejected: ${snap.courseCode ?? booking.title} — ${reason}`,
-      bookingId: id,
+      link: REQUESTER_LINK,
       payload: notifyPayload(booking, snap, reason),
     });
 
@@ -407,11 +431,13 @@ export async function cancelBooking(
       });
       await notify(tx, {
         userIds: [booking.instructorId],
-        type: "booking_moved",
+        type: "bookings.booking_moved",
+        module: "bookings",
+        subjectId: id,
         message: `An occurrence of your ${snap.courseCode ?? booking.title} booking on ${isoDate(
           occ.date,
         )} was cancelled`,
-        bookingId: id,
+        link: REQUESTER_LINK,
         payload: notifyPayload(booking, snap, body.reason),
       });
       return await getBookingDetail(id, actor, tx);
@@ -464,31 +490,37 @@ export async function cancelBooking(
         if (ageHours > 24) {
           await notify(tx, {
             userIds: await activeAdminIds(tx),
-            type: "request_withdrawn",
+            type: "bookings.request_withdrawn",
+            module: "bookings",
+            subjectId: id,
             message: `${snap.instructorName} withdrew request ${booking.requestNo}`,
-            bookingId: id,
+            link: ADMIN_LINK,
             payload: notifyPayload(booking, snap, body.reason),
           });
         }
       } else {
         await notify(tx, {
           userIds: await activeAdminIds(tx),
-          type: "booking_cancelled_by_instructor",
+          type: "bookings.booking_cancelled_by_instructor",
+          module: "bookings",
+          subjectId: id,
           message: `${snap.instructorName} cancelled ${snap.courseCode ?? booking.title}, ${
             snap.roomName
           }, ${when} — ${body.reason ?? ""}`,
-          bookingId: id,
+          link: ADMIN_LINK,
           payload: notifyPayload(booking, snap, body.reason),
         });
       }
     } else if (isAdmin && booking.requestedBy !== actor.id) {
       await notify(tx, {
         userIds: [booking.instructorId, booking.requestedBy],
-        type: "booking_cancelled_by_instructor",
+        type: "bookings.booking_cancelled_by_instructor",
+        module: "bookings",
+        subjectId: id,
         message: `Your booking ${snap.courseCode ?? booking.title} (${
           snap.roomName
         }, ${when}) was cancelled by the admin`,
-        bookingId: id,
+        link: REQUESTER_LINK,
         payload: notifyPayload(booking, snap, body.reason),
       });
     }
@@ -619,11 +651,13 @@ export async function patchBooking(
       const snap = booking.snapshot as unknown as Snapshot;
       await notify(tx, {
         userIds: [booking.instructorId],
-        type: "booking_moved",
+        type: "bookings.booking_moved",
+        module: "bookings",
+        subjectId: id,
         message: `Your ${snap.courseCode ?? booking.title} booking was moved to ${
           room.name
         }, ${startTime}-${endTime}`,
-        bookingId: id,
+        link: REQUESTER_LINK,
         payload: { ...notifyPayload(booking, snap), roomName: room.name, startTime, endTime },
       });
 
@@ -764,10 +798,15 @@ export async function listBookings(
 
   // Drives the unread dot on My Requests / the queue.
   const unread = await prisma.notification.findMany({
-    where: { userId: actor.id, isRead: false, bookingId: { in: rows.map((r) => r.id) } },
-    select: { bookingId: true },
+    where: {
+      userId: actor.id,
+      isRead: false,
+      module: "bookings",
+      subjectId: { in: rows.map((r) => r.id) },
+    },
+    select: { subjectId: true },
   });
-  const unreadIds = new Set(unread.map((u) => u.bookingId));
+  const unreadIds = new Set(unread.map((u) => u.subjectId));
 
   return {
     items: rows.map((b) => ({

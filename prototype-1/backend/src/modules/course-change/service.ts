@@ -5,7 +5,6 @@ import type {
   CourseChangeFlow,
   CourseChangeStatus,
   CourseChangeType,
-  NotificationType,
   Prisma,
 } from "@prisma/client";
 import { config } from "../../config.js";
@@ -19,7 +18,8 @@ import {
 } from "../../lib/errors.js";
 import { isoDate, todayISO } from "../../lib/time.js";
 import type { SessionUser } from "../../plugins/auth.js";
-import { activeAdminIds } from "../notifications/service.js";
+import { notify } from "../../core/notify.js";
+import { activeAdminIds } from "../../core/users.js";
 import { documentHash, renderDocumentHtml, type DocumentContent } from "./document.js";
 import { integrations } from "./integrations.js";
 import {
@@ -201,35 +201,22 @@ export async function eligibleCourses(me: SessionUser, type: CourseChangeType, t
 
 // ------------------------------------------------------------- notifications
 
+/** Course change events: the row type is `course_change.<event>`. */
+export type CcEvent = "submitted" | "approved" | "rejected" | "completed" | "cancelled";
+
+/** One in-app row per recipient, linked to the request's tracking view. LINE dispatch is separate (step 3c). */
 export async function notifyCc(
   tx: Tx,
-  args: { userIds: string[]; type: NotificationType; message: string; requestId: string; requestNo: string },
+  args: { userIds: string[]; event: CcEvent; message: string; requestId: string; requestNo: string },
 ): Promise<void> {
-  const recipients = [...new Set(args.userIds)];
-  if (recipients.length === 0) return;
-
-  // Historical requests use the LINE mock; v2 records only real in-app delivery.
-  const request = await tx.courseChangeRequest.findUniqueOrThrow({ where: { id: args.requestId }, select: { workflowVersion: true } });
-  const students = new Set(
-    (
-      await tx.user.findMany({
-        where: { id: { in: recipients }, role: "student" },
-        select: { id: true },
-      })
-    ).map((u) => u.id),
-  );
-  const now = new Date();
-  if (request.workflowVersion === 1) for (const id of students) await integrations.line.push({ userId: id, message: args.message });
-
-  await tx.notification.createMany({
-    data: recipients.map((userId) => ({
-      userId,
-      type: args.type,
-      message: args.message,
-      courseChangeRequestId: args.requestId,
-      payload: { requestNo: args.requestNo },
-      deliveredLineAt: request.workflowVersion === 1 && students.has(userId) ? now : null,
-    })),
+  await notify(tx, {
+    userIds: args.userIds,
+    type: `course_change.${args.event}`,
+    module: "course_change",
+    subjectId: args.requestId,
+    message: args.message,
+    link: `/course-change?view=tracking&request=${args.requestId}`,
+    payload: { requestNo: args.requestNo },
   });
 }
 
@@ -392,7 +379,7 @@ export async function submitLegacyRequest(input: SubmitInput, me: SessionUser, t
       await event(tx, req.id, "sent_to_reg_chula", null, { payload: { ref } });
       await notifyCc(tx, {
         userIds: [me.id],
-        type: "cc_submitted",
+        event: "submitted",
         message: `${req.requestNo} ${subject} จำลองส่งเข้า Reg Chula แล้ว — รอเจ้าหน้าที่บันทึกผล`,
         requestId: req.id,
         requestNo: req.requestNo,
@@ -400,7 +387,7 @@ export async function submitLegacyRequest(input: SubmitInput, me: SessionUser, t
     } else {
       await notifyCc(tx, {
         userIds: await approverIds(tx, flow, snapshot),
-        type: "cc_submitted",
+        event: "submitted",
         message: `${snapshot.studentName} ยื่นคำร้อง${subject} (${req.requestNo}) — รออนุมัติ`,
         requestId: req.id,
         requestNo: req.requestNo,
@@ -680,7 +667,7 @@ export async function approveRequest(id: string, me: SessionUser) {
 
     await notifyCc(tx, {
       userIds: [r.studentId],
-      type: "cc_approved",
+      event: "approved",
       message: `${r.requestNo} ${TYPE_TH[r.requestType]} ${snap.courseCode} ได้รับการอนุมัติแล้ว — ระบบบันทึกการส่งต่อแบบจำลอง`,
       requestId: id,
       requestNo: r.requestNo,
@@ -718,7 +705,7 @@ export async function rejectRequest(id: string, reason: string, me: SessionUser)
     await event(tx, id, "rejected", me.id, { note: reason });
     await notifyCc(tx, {
       userIds: [r.studentId],
-      type: "cc_rejected",
+      event: "rejected",
       message: `${r.requestNo} ${TYPE_TH[r.requestType]} ${snap.courseCode} ไม่ได้รับการอนุมัติ: ${reason}`,
       requestId: id,
       requestNo: r.requestNo,
@@ -738,7 +725,7 @@ export async function cancelRequest(id: string, me: SessionUser) {
     await event(tx, id, "cancelled", me.id);
     await notifyCc(tx, {
       userIds: await approverIds(tx, r.flow, snap),
-      type: "cc_cancelled",
+      event: "cancelled",
       message: `${snap.studentName} ยกเลิกคำร้อง ${r.requestNo} (${TYPE_TH[r.requestType]} ${snap.courseCode})`,
       requestId: id,
       requestNo: r.requestNo,
@@ -760,7 +747,7 @@ export async function completeRequest(id: string, note: string | null, me: Sessi
     await event(tx, id, "completed", me.id, { note });
     await notifyCc(tx, {
       userIds: [r.studentId],
-      type: "cc_completed",
+      event: "completed",
       message: `${r.requestNo} ${TYPE_TH[r.requestType]} ${snap.courseCode} ดำเนินการสำเร็จ — เจ้าหน้าที่บันทึกผลในระบบสาธิตแล้ว`,
       requestId: id,
       requestNo: r.requestNo,
