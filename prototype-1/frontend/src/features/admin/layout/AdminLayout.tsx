@@ -4,6 +4,7 @@ import {
   CpuChipIcon,
   DocumentMagnifyingGlassIcon,
   DocumentTextIcon,
+  GlobeAltIcon,
   HomeIcon,
   KeyIcon,
   MegaphoneIcon,
@@ -28,6 +29,8 @@ const ADMIN_SIDEBAR_ITEMS: (SidebarItem & { permission?: string })[] = [
   { label: "Receipt checks", icon: <DocumentMagnifyingGlassIcon />, to: RECEIPTS_PATH, permission: "receipts.view" },
   { label: "การแจ้งเตือน LINE", icon: <ChatBubbleLeftRightIcon />, to: "/admin/line", permission: "line.use" },
   { label: "สิทธิ์ผู้ใช้", icon: <KeyIcon />, to: "/admin/access", permission: "core.permissions.manage" },
+  // Back to the portal (news, booking, course change for students, LINE settings).
+  { label: "หน้าเว็บหลัก", icon: <GlobeAltIcon />, to: "/" },
 ];
 
 export function AdminLayout() {
@@ -37,7 +40,8 @@ export function AdminLayout() {
     ({ permission: _permission, ...item }) => ({
       ...item,
       active:
-        item.to === "/admin"
+        // "/" would prefix-match every path, so the portal link and the admin home match exactly.
+        item.to === "/admin" || item.to === "/"
           ? pathname === item.to
           : item.to
             ? pathname.startsWith(item.to)

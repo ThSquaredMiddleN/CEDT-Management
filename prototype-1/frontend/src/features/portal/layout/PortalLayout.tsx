@@ -1,8 +1,8 @@
 import { UserCircleIcon } from "@heroicons/react/24/outline";
-import { LogOut, MessageCircle, Settings } from "lucide-react";
+import { LayoutDashboard, LogOut, MessageCircle, Settings } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/AuthProvider";
-import { can } from "@/app/permissions";
+import { can, isStaff } from "@/app/permissions";
 import { signOut } from "@/app/signOut";
 import { Topbar, type TopbarItem } from "@/components/Topbar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -65,6 +65,14 @@ export function PortalLayout() {
             <span className="text-xs font-normal text-neutral-500">{user.email}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {isStaff(user) && (
+            <DropdownMenuItem asChild>
+              <Link to="/admin">
+                <LayoutDashboard className="size-4" />
+                หน้าเจ้าหน้าที่
+              </Link>
+            </DropdownMenuItem>
+          )}
           {can(user, "line.use") && (
             <DropdownMenuItem asChild>
               <Link to="/line">

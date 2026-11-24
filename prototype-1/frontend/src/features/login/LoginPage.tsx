@@ -8,7 +8,8 @@ import { z } from "zod";
 import { ApiError } from "@/api/client";
 import { login } from "@/api/endpoints";
 import { qk } from "@/api/queryKeys";
-import { roleLanding, useAuth } from "@/app/AuthProvider";
+import { useAuth } from "@/app/AuthProvider";
+import { roleLanding } from "@/app/permissions";
 import { Brand } from "@/components/Brand";
 import { Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -49,11 +50,11 @@ export function LoginPage() {
     mutationFn: login,
     onSuccess: (data) => {
       qc.setQueryData(qk.me, data);
-      navigate(next ?? roleLanding(), { replace: true });
+      navigate(next ?? roleLanding(data.user), { replace: true });
     },
   });
 
-  if (user) return <Navigate to={next ?? roleLanding()} replace />;
+  if (user) return <Navigate to={next ?? roleLanding(user)} replace />;
 
   const error = mutation.error;
   const isLocked = error instanceof ApiError && error.status === 423;
