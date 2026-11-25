@@ -87,7 +87,7 @@ export async function courseChangeRoutes(app: FastifyInstance): Promise<void> {
     const { id, fileId } = z.object({ id: z.string().uuid(), fileId: z.string().uuid() }).parse(req.params);
     const file = await downloadFile(id, fileId, requireUser(req));
     return reply.type("application/pdf").header("Cache-Control", "private, no-store").header("X-Content-Type-Options", "nosniff")
-      .header("Content-Disposition", `attachment; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(file.filename)}`).send(Buffer.from(file.data));
+      .header("Content-Disposition", `attachment; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(file.filename)}`).send(file.buffer);
   });
 
   app.get("/course-change/submissions/:id", { config: { auth: "user", permission: "course_change.use" } }, async (req) => {
