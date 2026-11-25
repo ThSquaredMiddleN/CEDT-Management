@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { PDFDocument, PDFSignature } from "pdf-lib";
 import { z } from "zod";
 import type {
@@ -17,6 +16,7 @@ import {
 import { isoDate } from "../../lib/time.js";
 import type { SessionUser } from "../../plugins/auth.js";
 import { can, usersWithPermission } from "../../core/permissions.js";
+import { readFile, withFileTransaction } from "../../core/files.js";
 import {
   event,
   notifyCc,
@@ -651,8 +651,6 @@ export async function validatePdf(data: Buffer) {
     );
   }
 }
-const digest = (data: Buffer) =>
-  createHash("sha256").update(data).digest("hex");
 export async function uploadFile(
   id: string,
   revision: number,
@@ -662,7 +660,7 @@ export async function uploadFile(
   me: SessionUser,
 ) {
   await validatePdf(data);
-  await prisma.$transaction(async (tx) => {
+  await withFileTransaction(async (tx, files) => {
     const r = await lockedRequest(tx, id, revision, me);
     // Only the managing staff or the request's own student may attach files (view-only staff cannot).
     if (!can(me, "course_change.manage") && r.studentId !== me.id) throw forbidden();
@@ -687,13 +685,20 @@ export async function uploadFile(
         .replace(/[\\/\r\n\x00-\x1f]/g, "_")
         .slice(0, 150)
         .replace(/\.pdf$/i, "") + ".pdf";
+    const stored = await files.save({
+      buffer: data,
+      mime: "application/pdf",
+      originalName: safe,
+      module: "course_change",
+      uploadedBy: me.id,
+    });
     const file = await tx.courseChangeFile.create({
       data: {
         requestId: id,
         kind,
         filename: safe,
-        data: new Uint8Array(data),
-        sha256: digest(data),
+        fileId: stored.id,
+        sha256: stored.sha256,
         uploaderId: me.id,
       },
     });
@@ -719,7 +724,7 @@ export async function mergeFiles(
   ids: string[],
   me: SessionUser,
 ) {
-  await prisma.$transaction(async (tx) => {
+  await withFileTransaction(async (tx, files) => {
     const r = await lockedRequest(tx, id, revision, me);
     if (
       r.phase !== "student_external" ||
@@ -728,13 +733,13 @@ export async function mergeFiles(
       throw conflict("คำร้องนี้ยังไม่อยู่ในขั้นรวมสองฉบับ");
     if (r.studentId !== me.id)
       throw forbidden("ให้นิสิตตรวจและรวมเอกสารของตนเอง");
-    const files = await tx.courseChangeFile.findMany({
+    const sourceRows = await tx.courseChangeFile.findMany({
       where: { requestId: id, id: { in: ids } },
     });
     if (
-      files.length !== 2 ||
-      !files.some((f) => f.kind === "signed_petition") ||
-      !files.some((f) => f.kind === "reg_petition")
+      sourceRows.length !== 2 ||
+      !sourceRows.some((f) => f.kind === "signed_petition") ||
+      !sourceRows.some((f) => f.kind === "reg_petition")
     )
       throw validation(
         "เลือกคำร้องลงนามหนึ่งฉบับและเอกสาร Reg Chula หนึ่งฉบับ",
@@ -757,8 +762,9 @@ export async function mergeFiles(
       throw validation("จำนวนไฟล์ถึงขีดจำกัดแล้ว");
     const pdf = await PDFDocument.create();
     for (const fileId of ids) {
-      const file = files.find((f) => f.id === fileId)!;
-      const source = await PDFDocument.load(file.data);
+      const file = sourceRows.find((f) => f.id === fileId)!;
+      if (!file.fileId) throw conflict("เอกสารยังไม่ได้ย้ายไปที่เก็บไฟล์ใหม่ กรุณาแจ้งผู้ดูแลระบบ");
+      const source = await PDFDocument.load((await readFile(file.fileId, tx)).buffer);
       const form = source.getForm();
       if (form.getFields().some((field) => field instanceof PDFSignature))
         throw validation(
@@ -771,13 +777,20 @@ export async function mergeFiles(
     const data = Buffer.from(await pdf.save());
     if (data.length > 10 * 1024 * 1024 || pdf.getPageCount() > 200)
       throw validation("ไฟล์รวมเกินขนาดหรือจำนวนหน้าที่รองรับ");
+    const stored = await files.save({
+      buffer: data,
+      mime: "application/pdf",
+      originalName: `${r.requestNo}_merged.pdf`,
+      module: "course_change",
+      uploadedBy: me.id,
+    });
     const merged = await tx.courseChangeFile.create({
       data: {
         requestId: id,
         kind: "merged",
         filename: `${r.requestNo}_merged.pdf`,
-        data: new Uint8Array(data),
-        sha256: digest(data),
+        fileId: stored.id,
+        sha256: stored.sha256,
         uploaderId: me.id,
       },
     });
@@ -805,6 +818,7 @@ export async function downloadFile(
   await loadVisible(id, me);
   const file = await prisma.courseChangeFile.findFirst({
     where: { id: fileId, requestId: id },
+    select: { id: true, kind: true, filename: true, fileId: true },
   });
   if (!file) throw notFound("ไม่พบเอกสาร");
   if (!isCcStaff(me) && file.kind === "signed_petition") {
@@ -816,7 +830,8 @@ export async function downloadFile(
     );
     if (!released.includes(file.id)) throw notFound("เอกสารยังไม่ได้ส่งคืน");
   }
-  return file;
+  if (!file.fileId) throw notFound("ไม่พบเอกสาร");
+  return { filename: file.filename, buffer: (await readFile(file.fileId)).buffer };
 }
 
 /** v2 consumers receive real human workflow steps, never the historical mock handoffs. */

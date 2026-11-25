@@ -414,6 +414,14 @@ describe("Private PDF documents and human evidence", () => {
     const downloaded = await get(`/requests/${r.id}/files/${signedId}`);
     expect(downloaded.headers["cache-control"]).toContain("no-store");
     expect(downloaded.headers["content-type"]).toContain("application/pdf");
+    // Step 6: the PDF lives in fileStore; the row only points at files.
+    const stored = await prisma.courseChangeFile.findUniqueOrThrow({
+      where: { id: signedId },
+      select: { fileId: true, file: { select: { module: true, mime: true } } },
+    });
+    expect(stored.fileId).not.toBeNull();
+    expect(stored.file).toMatchObject({ module: "course_change", mime: "application/pdf" });
+    expect(downloaded.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
     expect(r.phase).toBe("student_external");
     expect((await act(r, "documents_checked")).statusCode).toBe(422);
     expect((await act(r, "reg_done", staff)).statusCode).toBe(403);

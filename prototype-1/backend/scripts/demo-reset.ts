@@ -1,3 +1,4 @@
+import { deleteFileRecord, removeStoredFile } from "../src/core/files.js";
 import { prisma } from "../src/db.js";
 
 /**
@@ -70,14 +71,22 @@ async function main() {
       where: { module: "course_change", subjectId: { in: ids } },
     });
     const events = await tx.courseChangeEvent.deleteMany({ where: { requestId: { in: ids } } });
+    const fileIds = (
+      await tx.courseChangeFile.findMany({ where: { requestId: { in: ids }, fileId: { not: null } }, select: { fileId: true } })
+    ).map((f) => f.fileId!);
+    await tx.courseChangeFile.deleteMany({ where: { requestId: { in: ids } } });
+    const storageKeys: string[] = [];
+    for (const fileId of fileIds) storageKeys.push(await deleteFileRecord(tx, fileId));
     const requests = await tx.courseChangeRequest.deleteMany({ where: { id: { in: ids } } });
     if (requests.count !== ids.length) throw new Error("Request count changed during reset — rolled back");
-    return { notifications: notifications.count, events: events.count, requests: requests.count };
+    return { notifications: notifications.count, events: events.count, requests: requests.count, storageKeys };
   });
 
+  for (const key of result.storageKeys) await removeStoredFile(key);
+
   console.log(
-    `Removed ${result.requests} request(s), ${result.events} event(s), ${result.notifications} notification(s). ` +
-      `${DEMO_COURSE} is selectable again for ${DEMO_STUDENT}.`,
+    `Removed ${result.requests} request(s), ${result.events} event(s), ${result.notifications} notification(s), ` +
+      `${result.storageKeys.length} file(s). ${DEMO_COURSE} is selectable again for ${DEMO_STUDENT}.`,
   );
 }
 
