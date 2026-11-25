@@ -77,6 +77,27 @@ describe("not-brought items", () => {
     expect(await prisma.notification.count({ where: { type: "storage.fine_due", subjectId: r100.id } })).toBe(2);
   });
 
+  it("a partly lost bulk row keeps the rest owed and counts the loss; QC and fine tasks open together", async () => {
+    const find = async (itemId: string) => (await listStudentOwed("6800000001")).find((o) => o.requestId === "REQ-B-100" && o.itemId === itemId)!;
+    const pi = (await find("EQ-001")).id;
+    const bb = (await find("EQ-002")).id;
+    await ret("6800000001", { [pi]: rc(0, 1, 0), [bb]: rc(0, 5, 0) });
+    const res = await ret("6800000001", { [pi]: rc(1, 0, 0), [bb]: rc(0, 3, 2) }, { amount: 20000, remark: "หาย 2 ชิ้น" });
+    expect(res).toEqual({ queued: 1, lost: 2 });
+
+    const owed = await listStudentOwed("6800000001");
+    expect(owed.map((o) => [o.itemId, o.qty, o.owedStatus])).toEqual([["EQ-002", 3, "NOT_BROUGHT"]]);
+    expect((await inv("EQ-002")).lost).toBe(2);
+
+    const [a, b] = (await listQc()).slice(0, 2);
+    const tasks = [a!, b!];
+    const open = tasks.find((t) => t.status === "OPEN")!;
+    const fine = tasks.find((t) => t.status === "PENDING_PAYMENT")!;
+    expect(open.items.map((i) => [i.serialNumber ?? i.itemId, i.qty])).toEqual([["EQ-001-011", 1]]);
+    expect(fine.fineAmount).toBe(20000);
+    expect(fine.items.map((i) => [i.itemId, i.qty])).toEqual([["EQ-002", 2]]);
+  });
+
   it("only allows LOST for items already marked not brought", async () => {
     const ids = await owedIds("6800000001");
     await expect(
