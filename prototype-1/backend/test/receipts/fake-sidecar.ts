@@ -15,6 +15,8 @@ export interface SidecarReply {
   status: number;
   body?: unknown;
   delayMs?: number;
+  /** The fake answers only after this promise settles, so a test can finish other requests during the OCR call. */
+  hold?: Promise<unknown>;
 }
 
 export interface FakeSidecar {
@@ -100,11 +102,13 @@ export async function startFakeSidecar(): Promise<FakeSidecar> {
       };
       calls.push(call);
       const r = fake.reply(call);
-      setTimeout(() => {
-        if (res.destroyed) return;
-        res.writeHead(r.status, { "content-type": "application/json" });
-        res.end(JSON.stringify(r.body ?? { error: "fake" }));
-      }, r.delayMs ?? 0);
+      void Promise.resolve(r.hold).then(() => {
+        setTimeout(() => {
+          if (res.destroyed) return;
+          res.writeHead(r.status, { "content-type": "application/json" });
+          res.end(JSON.stringify(r.body ?? { error: "fake" }));
+        }, r.delayMs ?? 0);
+      });
     });
   });
 

@@ -1,7 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, CircleX, Info } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { ApiError } from "@/api/client";
 import { useMyReceipts, useUploadMyReceipt } from "@/api/endpoints";
+import { qk } from "@/api/queryKeys";
 import type { MyReceiptCheck, ReceiptCheckState, ReceiptVerdict } from "@/api/types";
 import { EmptyState, ErrorCard, SkeletonRow, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -139,6 +141,7 @@ function ResultCard({ check, locked }: { check: MyReceiptCheck; locked: boolean 
 export function MyReceiptPage() {
   const [file, setFile] = useState<File | null>(null);
   const [localNotice, setLocalNotice] = useState<string | null>(null);
+  const qc = useQueryClient();
   const upload = useUploadMyReceipt();
   const list = useMyReceipts();
 
@@ -162,7 +165,13 @@ export function MyReceiptPage() {
     const form = new FormData();
     form.append("file", file);
     setLocalNotice(null);
-    upload.mutate(form);
+    upload.mutate(form, {
+      // 409: staff (or an earlier upload) settled the term while this page was open. Reload the list so the
+      // locked note replaces the form.
+      onError: (err) => {
+        if (err instanceof ApiError && err.status === 409) void qc.invalidateQueries({ queryKey: qk.myReceipts });
+      },
+    });
   };
 
   return (

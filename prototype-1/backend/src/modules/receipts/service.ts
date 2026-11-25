@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { config } from "../../config.js";
 import { prisma, type Tx } from "../../db.js";
-import { AppError, notFound } from "../../lib/errors.js";
+import { AppError, conflict, notFound } from "../../lib/errors.js";
 
 /** Receipts are buffered in memory (max 10 MB) and forwarded to the OCR sidecar; nothing is written to disk. */
 export interface UploadedFile {
@@ -153,7 +153,11 @@ export interface CheckInput {
   term?: string;
   file: UploadedFile;
   checkedById: string;
+  /** True for a student's own upload: the save is refused (409) if the term's row got locked meanwhile. */
+  selfService?: boolean;
 }
+
+export const RECEIPT_LOCKED_MESSAGE = "This term's receipt is already checked. Ask staff to change it.";
 
 /** Runs one receipt through the sidecar, records the check (one row per student and term) and returns the fields for display. */
 export async function checkReceipt(input: CheckInput) {
@@ -193,14 +197,23 @@ export async function checkReceipt(input: CheckInput) {
     });
   };
 
-  // With a reference, the lookup and the save run in one transaction holding an advisory lock on that reference:
-  // two concurrent checks with the same reference cannot both read "no duplicate" before either one saves.
-  const check = reference
-    ? await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${reference}))`;
-        return save(tx);
-      })
-    : await save(prisma);
+  // The lookup and the save run in one transaction holding advisory locks. Always taken in this order, so two
+  // transactions cannot wait on each other:
+  //  1. studentId|term: the OCR call took a while, so the term's row may have changed since the route's early check.
+  //     A student's upload re-reads the row here and is refused if it is now locked; staff are never refused.
+  //  2. the reference (when there is one): two concurrent checks with the same reference cannot both read
+  //     "no duplicate" before either one saves.
+  const check = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`receipt-term|${input.studentId}|${term}`}))`;
+    if (input.selfService) {
+      const current = await tx.receiptCheck.findUnique({
+        where: { studentId_term: { studentId: input.studentId, term } },
+      });
+      if (studentLocked(current, input.checkedById)) throw conflict(RECEIPT_LOCKED_MESSAGE);
+    }
+    if (reference) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${reference}))`;
+    return save(tx);
+  });
 
   return { check, fields: sidecar.fields };
 }
@@ -228,7 +241,8 @@ export function studentView(row: {
   checks: unknown;
 }) {
   // The Funding row is a staff note (กยศ. hints, English, sometimes "unreadable"): it never changes the verdict.
-  const checks = (row.checks as { name: string; state: string }[]).filter((c) => c.name !== FUNDING_CHECK);
+  // It is hidden by the allowlist below, like any other name that is not on it.
+  const checks = (row.checks as { name: string; state: string }[]).filter((c) => STUDENT_VISIBLE_CHECKS.has(c.name));
   return {
     id: row.id,
     term: row.term,
@@ -239,7 +253,17 @@ export function studentView(row: {
   };
 }
 
-const FUNDING_CHECK = "Funding";
+/**
+ * The check names a student may see (the ones the frontend has Thai labels for). Anything else, such as the staff-only
+ * Funding note or a check the sidecar adds later, stays hidden until it is added here.
+ */
+const STUDENT_VISIBLE_CHECKS: ReadonlySet<string> = new Set([
+  "All key fields read",
+  "Payment completed",
+  "Current semester",
+  BELONGS_CHECK,
+  DUPLICATE_CHECK,
+]);
 
 /**
  * A student may replace their own check for a term only while it is unsettled: not passed, and not run by staff.

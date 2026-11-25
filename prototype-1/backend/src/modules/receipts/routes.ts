@@ -12,6 +12,7 @@ import {
   listOwnReceiptChecks,
   listReceiptChecks,
   OcrUnavailableError,
+  RECEIPT_LOCKED_MESSAGE,
   studentView,
   type UploadedFile,
 } from "./service.js";
@@ -109,11 +110,12 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     const term = currentTerm();
     // Checked before the OCR call, so a locked upload costs nothing.
     if (studentLocked(await ownCheckForTerm(studentId, term), me.id)) {
-      throw conflict("This term's receipt is already checked. Ask staff to change it.");
+      throw conflict(RECEIPT_LOCKED_MESSAGE);
     }
 
     try {
-      const { check } = await checkReceipt({ studentId, term, file, checkedById: me.id });
+      // selfService: the save re-checks the lock, because staff may have checked the term during the OCR call.
+      const { check } = await checkReceipt({ studentId, term, file, checkedById: me.id, selfService: true });
       return { check: studentView(check) };
     } catch (err) {
       if (err instanceof OcrUnavailableError) {

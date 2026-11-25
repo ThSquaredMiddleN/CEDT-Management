@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import net from "node:net";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.js";
@@ -628,6 +630,57 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
     expect(row.checks as { name: string }[]).toContainEqual(expect.objectContaining({ name: "Funding" }));
   });
 
+  it("shows a student only the check names on the allowlist", async () => {
+    fake.reply = (call) =>
+      sidecarOk(call, {
+        reference: "RC-MINE-ALLOW",
+        checks: [...warnChecks, { name: "X", state: "info", detail: "made-up staff note" }],
+      });
+    const res = await submitMine(studentCookie, {});
+    expect(res.statusCode).toBe(200);
+    const names = (res.json() as { check: { checks: { name: string }[] } }).check.checks.map((c) => c.name);
+    expect(names).toEqual(["Belongs to this student", "Not submitted before"]); // the second is added from the database
+    expect((await listMine(studentCookie)).body).not.toContain('"X"');
+  });
+
+  it("answers 409 and keeps the staff row when staff checked the term while the student's OCR call was running", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    fake.reply = (call) => ({ ...sidecarOk(call, { reference: "RC-RACE-STUDENT" }), hold: gate });
+    const before = fake.calls.length;
+    const studentUpload = submitMine(studentCookie, {});
+    for (let i = 0; i < 500 && fake.calls.length < before + 1; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(fake.calls.length).toBe(before + 1); // the student's call is now waiting in the OCR stub
+
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-RACE-STAFF" });
+    expect((await pdf({ studentId: S_OWN, term: currentTerm() })).statusCode).toBe(200);
+    release();
+
+    const res = await studentUpload;
+    expect(res.statusCode).toBe(409);
+    const row = await prisma.receiptCheck.findUniqueOrThrow({
+      where: { studentId_term: { studentId: S_OWN, term: currentTerm() } },
+    });
+    expect(row.checkedById).toBe(adminId);
+    expect(row.reference).toBe("RC-RACE-STAFF");
+  });
+
+  it("never answers 500 for two first uploads at once with no reference", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    fake.reply = (call) => ({ ...sidecarOk(call, { reference: null }), hold: gate });
+    const before = fake.calls.length;
+    const both = Promise.all([submitMine(studentCookie, {}), submitMine(studentCookie, {})]);
+    for (let i = 0; i < 500 && fake.calls.length < before + 2; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(fake.calls.length).toBe(before + 2); // both are past the early lock check
+    release();
+
+    const [a, b] = await both;
+    for (const res of [a, b]) expect([200, 409]).toContain(res.statusCode);
+    expect([a, b].some((r) => r.statusCode === 200)).toBe(true);
+    expect(await prisma.receiptCheck.count({ where: { studentId: S_OWN, term: currentTerm() } })).toBe(1);
+  });
+
   it("requires a file field with 400", async () => {
     const body = formBody({ studentId: S_A });
     const res = await app.inject({
@@ -704,5 +757,18 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
     expect((await submitMine(noRoleCookie, {})).statusCode).toBe(403);
     expect((await listMine(noRoleCookie)).statusCode).toBe(403);
     expect(fake.calls.length).toBe(before);
+  });
+});
+
+describe("receipts_use migration", () => {
+  it("can run again without a duplicate-key error (ON CONFLICT DO NOTHING)", async () => {
+    const sql = readFileSync(
+      fileURLToPath(new URL("../../prisma/schema/migrations/20261125150000_receipts_use/migration.sql", import.meta.url)),
+      "utf8",
+    );
+    const count = () => prisma.rolePermission.count({ where: { permission: "receipts.use" } });
+    const before = await count();
+    await prisma.$executeRawUnsafe(sql);
+    expect(await count()).toBe(before);
   });
 });

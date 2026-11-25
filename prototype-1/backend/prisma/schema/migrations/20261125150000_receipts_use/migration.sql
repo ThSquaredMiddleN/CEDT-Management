@@ -5,4 +5,5 @@ SELECT r."id", p.permission
 FROM "roles" r
 JOIN (VALUES
   ('student', 'receipts.use')
-) AS p(role_key, permission) ON p.role_key = r."key";
+) AS p(role_key, permission) ON p.role_key = r."key"
+ON CONFLICT DO NOTHING;
