@@ -25,6 +25,7 @@ const TASK_STYLES: Record<string, string> = {
   UNFULFILLED: "border-status-danger-border bg-status-danger-bg text-status-danger-fg",
   PENDING_PAYMENT: "border-status-warning-border bg-status-warning-bg text-status-warning-fg",
   CANCELLED: "border-grey-200 bg-grey-100 text-grey-400",
+  REJECTED: "border-status-danger-border bg-status-danger-bg text-status-danger-fg",
 };
 
 export function TaskStatusBadge({ status }: { status: BorrowStatus | QCRequestStatus }) {

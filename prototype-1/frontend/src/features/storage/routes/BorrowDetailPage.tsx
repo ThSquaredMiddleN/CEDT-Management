@@ -4,8 +4,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { EmptyState, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { useBorrowRequest, useConfirmBorrow, useConfirmPickup, useReopenBorrow } from "../api/hooks";
+import { useBorrowRequest, useConfirmBorrow, useRejectBorrow, useStaffConfirmPickup } from "../api/hooks";
 import { TaskStatusBadge } from "../components/badges";
 import { BarcodeScanner } from "../components/BarcodeScanner";
 import { CartManager } from "../components/CartManager";
@@ -22,14 +23,17 @@ export const formatHold = (ms: number) =>
 function Workspace({ req }: { req: BorrowRequest }) {
   const navigate = useNavigate();
   const confirm = useConfirmBorrow();
-  const reopen = useReopenBorrow();
-  const confirmPickup = useConfirmPickup();
+  const confirmPickup = useStaffConfirmPickup();
+  const reject = useRejectBorrow();
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
   const [pickupAt, setPickupAt] = useState("");
   const [location, setLocation] = useState<PickupDetails["location"]>("locker");
   const [remark, setRemark] = useState("");
   const [result, setResult] = useState<string | null>(null);
 
   const readOnly = req.status !== "OPEN";
+  const canReject = req.status === "OPEN" || req.status === "UNFULFILLED";
 
   const catalog = useMemo<CatalogEntry[]>(
     () =>
@@ -52,7 +56,7 @@ function Workspace({ req }: { req: BorrowRequest }) {
     itemId: it.itemId,
     name: it.name,
     isUnique: it.isUnique,
-    qty: req.status === "UNFULFILLED" || req.status === "CANCELLED" ? 0 : it.issuedQty,
+    qty: req.status === "UNFULFILLED" || req.status === "CANCELLED" || req.status === "REJECTED" ? 0 : it.issuedQty,
     sns: [],
     maxStock: it.available ?? 0,
     reqQty: it.reqQty,
@@ -90,29 +94,25 @@ function Workspace({ req }: { req: BorrowRequest }) {
             </div>
 
             <div className="space-y-4 p-6">
-              {req.status === "UNFULFILLED" && req.restock && (
-                <div className="flex flex-col gap-3 rounded-lg border border-status-info-border bg-status-info-bg p-4 font-body text-body-sm text-status-info-fg sm:flex-row sm:items-center sm:justify-between">
-                  <p>
-                    <span className="font-bold">สต็อกกลับมาแล้ว</span> — จองอุปกรณ์ให้คำขอนี้ถึง {formatHold(req.restock.expiresAt)}
-                    <br />
-                    <span className="text-xs">เปิดคำขอใหม่แล้วจะได้คิวเดิม (ตามเวลาที่ขอ)</span>
-                  </p>
-                  <Button variant="filled" size="small" className="px-4" loading={reopen.isPending} onClick={() => reopen.mutate(req.id)}>
-                    เปิดคำขออีกครั้ง
+              {canReject && (
+                <div className="flex justify-end">
+                  <Button variant="outlined" size="small" className="px-4" onClick={() => setRejecting(true)}>
+                    ปฏิเสธคำขอ
                   </Button>
                 </div>
               )}
-              {reopen.isError && <p role="alert" className="text-sm text-status-danger-fg">{(reopen.error as Error).message}</p>}
 
               {readOnly ? (
                 <div className="flex gap-3 rounded-lg border border-neutral-300 bg-neutral-100 p-3 font-body text-body-sm text-grey-700">
                   <Lock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                  <p className={req.status === "UNFULFILLED" || req.status === "CANCELLED" ? "font-bold text-status-danger-fg" : ""}>
+                  <p className={req.status === "UNFULFILLED" || req.status === "CANCELLED" || req.status === "REJECTED" ? "font-bold text-status-danger-fg" : ""}>
                     {req.status === "UNFULFILLED"
                       ? "คำขอนี้ถูกยกเลิกเนื่องจากอุปกรณ์ในคลังไม่เพียงพอ (UNFULFILLED) - Read-only View"
                       : req.status === "CANCELLED"
                         ? `คำขอนี้ถูกยกเลิก (${req.cancelReason === "RESTOCK_EXPIRED" ? "หมดเวลาเปิดคำขอ" : "ผู้ขอยกเลิก"}) - Read-only View`
-                        : "รายการนี้ถูกจัดการเรียบร้อยแล้ว (Read-only View)"}
+                        : req.status === "REJECTED"
+                          ? `คำขอนี้ถูกปฏิเสธ: ${req.rejectReason ?? ""}`
+                          : "รายการนี้ถูกจัดการเรียบร้อยแล้ว (Read-only View)"}
                   </p>
                 </div>
               ) : (
@@ -225,6 +225,30 @@ function Workspace({ req }: { req: BorrowRequest }) {
         message={result ?? ""}
         onClose={() => navigate("/admin/storage")}
       />
+
+      <Dialog open={rejecting} onOpenChange={(o) => !o && !reject.isPending && setRejecting(false)}>
+        <DialogContent>
+          <DialogTitle>ปฏิเสธคำขอ {req.id}</DialogTitle>
+          <DialogDescription>นิสิตจะเห็นเหตุผลนี้ และได้รับแจ้งเตือน</DialogDescription>
+          <label htmlFor="reject-reason" className="text-xs font-bold text-grey-700">
+            เหตุผล <span className="text-status-danger-fg">*</span>
+          </label>
+          <Textarea id="reject-reason" rows={3} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
+          {reject.isError && <p role="alert" className="text-sm text-status-danger-fg">{(reject.error as Error).message}</p>}
+          <DialogFooter className="gap-2">
+            <Button variant="outlined" size="lg" disabled={reject.isPending} onClick={() => setRejecting(false)}>ย้อนกลับ</Button>
+            <Button
+              variant="filled"
+              size="lg"
+              disabled={!reason.trim()}
+              loading={reject.isPending}
+              onClick={() => reject.mutate({ id: req.id, reason }, { onSuccess: () => { setRejecting(false); setReason(""); } })}
+            >
+              ปฏิเสธคำขอ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

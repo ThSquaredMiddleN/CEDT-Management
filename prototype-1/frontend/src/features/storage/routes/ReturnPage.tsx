@@ -8,6 +8,7 @@ import { usePendingReturns, useStudentLookup, useSubmitReturn } from "../api/hoo
 import { ResultDialog, StoragePage } from "../components/layout";
 import { LIABILITY_FORM_ID, LiabilityForm, type LiabilityValues } from "../components/LiabilityForm";
 import { ReturnItemRow, countsTotal, emptyCounts } from "../components/ReturnItemRow";
+import { bahtToSatang } from "../lib/money";
 import type { ReturnCounts } from "../types";
 
 export function ReturnPage() {
@@ -34,7 +35,7 @@ export function ReturnPage() {
         studentId: student!.studentId,
         results: Object.fromEntries(items.map((i) => [i.id, counts[i.id] ?? emptyCounts()])),
         remark,
-        fine: fine ? { amount: fine.amount, remark: fine.remark } : undefined,
+        fine: fine ? { amount: bahtToSatang(fine.amount), remark: fine.remark } : undefined,
       },
       {
         onSuccess: ({ queued, lost }) => {
