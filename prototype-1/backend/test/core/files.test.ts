@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
+import { utimes } from "node:fs/promises";
+import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { fileStore } from "../../src/core/file-store.js";
+import { sweepOrphanFiles } from "../../scripts/files-sweep.js";
+import { config } from "../../src/config.js";
+import { fileStore, newStorageKey } from "../../src/core/file-store.js";
 import { deleteFileRecord, readFile, removeStoredFile, saveFile, withFileTransaction } from "../../src/core/files.js";
 import { prisma } from "../../src/db.js";
 import { idOf } from "../helpers/session.js";
@@ -76,5 +80,26 @@ describe("deleteFileRecord and removeStoredFile", () => {
     expect(await prisma.file.count({ where: { id: saved.id } })).toBe(0);
     await removeStoredFile(key);
     await expect(fileStore.get(key)).rejects.toThrow();
+  });
+});
+
+describe("sweepOrphanFiles", () => {
+  it("removes old contents with no row, keeps fresh orphans and anything with a row", async () => {
+    const now = new Date();
+    const oldOrphan = newStorageKey(now);
+    const freshOrphan = newStorageKey(now);
+    await fileStore.put(oldOrphan, Buffer.from("old"), "text/plain");
+    await fileStore.put(freshOrphan, Buffer.from("fresh"), "text/plain");
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+    await utimes(path.resolve(config.FILE_STORAGE_DIR, ...oldOrphan.split("/")), twoDaysAgo, twoDaysAgo);
+    const kept = await withFileTransaction((_tx, files) => files.save(input("has a row")));
+    await utimes(path.resolve(config.FILE_STORAGE_DIR, ...kept.storageKey.split("/")), twoDaysAgo, twoDaysAgo);
+
+    const removed = await sweepOrphanFiles({ now, months: 1 });
+
+    expect(removed).toContain(oldOrphan);
+    await expect(fileStore.get(oldOrphan)).rejects.toThrow();
+    expect((await fileStore.get(freshOrphan)).toString()).toBe("fresh");
+    expect((await fileStore.get(kept.storageKey)).toString()).toBe("has a row");
   });
 });

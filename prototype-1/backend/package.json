@@ -22,6 +22,7 @@
     "roles:grant": "tsx --env-file=.env scripts/grant-role.ts",
     "receipts:purge": "tsx --env-file=.env scripts/receipts-purge.ts",
     "files:backfill": "tsx --env-file=.env scripts/files-backfill.ts",
+    "files:sweep": "tsx --env-file=.env scripts/files-sweep.ts",
     "test": "vitest run",
     "test:fresh": "tsx --env-file=.env scripts/test-fresh.ts",
     "test:prepare": "tsx --env-file=.env scripts/prepare-test-db.ts",
