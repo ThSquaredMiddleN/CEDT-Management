@@ -17,10 +17,8 @@ const SAMPLE_ROUTES: Record<string, [HTTPMethods, string]> = {
   line: ["POST", "/api/v1/line/webhook"],
   receipts: ["GET", "/api/v1/receipts"],
   core: ["GET", "/api/v1/access/catalog"],
+  storage: ["GET", "/api/v1/storage/catalog"],
 };
-
-/** Modules registered but with no routes yet. Task 8 moves storage into SAMPLE_ROUTES. */
-const ROUTELESS = ["storage"];
 
 let app: FastifyInstance;
 beforeAll(async () => { app = await buildApp(); await app.ready(); });
@@ -30,7 +28,7 @@ describe("module registry", () => {
   it("lists every module once", () => {
     const names = modules.map((m) => m.name);
     expect(new Set(names).size).toBe(names.length);
-    expect([...names].sort()).toEqual([...Object.keys(SAMPLE_ROUTES), ...ROUTELESS].sort());
+    expect([...names].sort()).toEqual(Object.keys(SAMPLE_ROUTES).sort());
   });
   it("registers each module's routes under /api/v1", () => {
     for (const [name, [method, url]] of Object.entries(SAMPLE_ROUTES)) {
