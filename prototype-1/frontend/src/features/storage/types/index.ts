@@ -16,8 +16,6 @@ export interface InventoryItem {
   total: number;
   /** Serials of available units (Unique items only). */
   availableSerials?: string[];
-  /** One picture per equipment type; serial-numbered units share it. */
-  imageUrl?: string;
 }
 
 /** Student catalog view: only what the cart needs. */
@@ -28,24 +26,6 @@ export interface NewInventoryItem {
   name: string;
   isUnique: boolean;
   total: number;
-}
-
-export type UnitStatus = "AVAILABLE" | "OUT" | "QC" | "DAMAGED" | "LOST";
-
-/** One physical Unique unit, e.g. EQ-001-003. */
-export interface InventoryUnit {
-  serial: string;
-  itemId: string;
-  status: UnitStatus;
-  requestId?: string;
-}
-
-/** Units held back for a restock-flagged request until `expiresAt` (epoch ms). */
-export interface Reservation {
-  requestId: string;
-  itemId: string;
-  qty: number;
-  expiresAt: number;
 }
 
 export type BorrowStatus = "OPEN" | "READY_FOR_PICKUP" | "CLOSED" | "UNFULFILLED" | "CANCELLED" | "REJECTED";
