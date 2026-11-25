@@ -2,7 +2,7 @@ import { TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useCreateBorrowRequest, useCurrentStudent } from "../api/hooks";
-import type { InventoryItem } from "../types";
+import type { CatalogItem } from "../types";
 import { ResultDialog } from "./layout";
 
 export function QtyStepper({
@@ -47,7 +47,7 @@ export function RequestForm({
   onQtyChange,
   onSubmitted,
 }: {
-  inventory: InventoryItem[];
+  inventory: CatalogItem[];
   cart: Record<string, number>;
   onQtyChange: (itemId: string, qty: number) => void;
   onSubmitted: (requestId: string) => void;
@@ -64,7 +64,7 @@ export function RequestForm({
       const item = inventory.find((i) => i.id === itemId);
       return { item, qty: item ? Math.min(qty, item.total) : qty };
     })
-    .filter((l): l is { item: InventoryItem; qty: number } => !!l.item);
+    .filter((l): l is { item: CatalogItem; qty: number } => !!l.item);
   const canSubmit = !!group && lines.length > 0 && !create.isPending;
 
   const submit = () =>

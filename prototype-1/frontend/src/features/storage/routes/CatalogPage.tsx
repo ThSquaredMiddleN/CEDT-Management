@@ -3,16 +3,16 @@ import { EmptyState, SkeletonRow } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { useInventory } from "../api/hooks";
+import { useCatalog } from "../api/hooks";
 import { ItemImage } from "../components/ItemImage";
 import { QtyStepper, RequestForm } from "../components/RequestForm";
-import type { InventoryItem } from "../types";
+import type { CatalogItem } from "../types";
 
-function CatalogCard({ item, qty, onChange }: { item: InventoryItem; qty: number; onChange: (qty: number) => void }) {
+function CatalogCard({ item, qty, onChange }: { item: CatalogItem; qty: number; onChange: (qty: number) => void }) {
   const soldOut = item.available === 0;
   return (
     <div className="flex h-full flex-col gap-2 rounded-xl border border-neutral-200 bg-white p-3">
-      <ItemImage src={item.imageUrl} name={item.name} className="size-auto h-28 w-full" />
+      <ItemImage name={item.name} className="size-auto h-28 w-full" />
       <div className="flex-1">
         <p className="font-body text-body-sm-emphasize text-grey-900">{item.name}</p>
         <p className="font-mono text-xs text-grey-400">{item.id}</p>
@@ -33,7 +33,7 @@ function CatalogCard({ item, qty, onChange }: { item: InventoryItem; qty: number
 
 /** Borrow tab: picture-card catalog with the cart column on the right. */
 export function CatalogPage({ onSubmitted }: { onSubmitted: (requestId: string) => void }) {
-  const inventory = useInventory();
+  const inventory = useCatalog();
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<Record<string, number>>({});
 

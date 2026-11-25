@@ -64,6 +64,7 @@ const REQUEST_PILLS: Record<BorrowStatus, { label: string; cls: string }> = {
   READY_FOR_PICKUP: { label: "พร้อมรับ", cls: TONE.success },
   UNFULFILLED: { label: "ของหมด", cls: TONE.warning },
   CANCELLED: { label: "ยกเลิก", cls: TONE.grey },
+  REJECTED: { label: "ถูกปฏิเสธ", cls: TONE.danger },
   CLOSED: { label: "รับของแล้ว", cls: TONE.grey },
 };
 

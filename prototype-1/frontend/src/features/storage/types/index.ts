@@ -20,12 +20,14 @@ export interface InventoryItem {
   imageUrl?: string;
 }
 
+/** Student catalog view: only what the cart needs. */
+export type CatalogItem = Pick<InventoryItem, "id" | "name" | "isUnique" | "available" | "total">;
+
 export interface NewInventoryItem {
   id: string;
   name: string;
   isUnique: boolean;
   total: number;
-  imageUrl?: string;
 }
 
 export type UnitStatus = "AVAILABLE" | "OUT" | "QC" | "DAMAGED" | "LOST";
@@ -46,7 +48,7 @@ export interface Reservation {
   expiresAt: number;
 }
 
-export type BorrowStatus = "OPEN" | "READY_FOR_PICKUP" | "CLOSED" | "UNFULFILLED" | "CANCELLED";
+export type BorrowStatus = "OPEN" | "READY_FOR_PICKUP" | "CLOSED" | "UNFULFILLED" | "CANCELLED" | "REJECTED";
 
 export type CancelReason = "BY_STUDENT" | "RESTOCK_EXPIRED";
 
@@ -86,6 +88,11 @@ export interface BorrowRequest {
   pickedUpAt?: number;
   /** Epoch ms the items are due back. Copied from the default at pickup; staff may edit it. */
   dueAt?: number;
+  /** "CLICK_COLLECT" or "WALK_IN". */
+  channel?: "CLICK_COLLECT" | "WALK_IN";
+  /** Set when REJECTED: shown to the student. */
+  rejectReason?: string;
+  rejectedAt?: number;
   items: BorrowRequestItem[];
 }
 
@@ -146,6 +153,7 @@ export type ReturnDecision = "RETURNED" | "NOT_BROUGHT" | "LOST";
 export type ReturnCounts = Record<ReturnDecision, number>;
 
 export interface ReturnFine {
+  /** Satang (1 baht = 100). */
   amount: number;
   remark: string;
 }
@@ -175,14 +183,17 @@ export interface QCRequest {
   group: string;
   user: string;
   status: QCRequestStatus;
+  /** Satang (1 baht = 100). */
   fineAmount: number;
   fineRemark: string;
   items: QCItem[];
+  /** amount is satang. */
   slip?: { amount: number; transferredAt: string; refCode: string };
 }
 
 export interface QCSubmission {
   items: { id: string; results: QCResults }[];
+  /** Satang (1 baht = 100). */
   fineAmount: number;
   fineRemark: string;
 }

@@ -125,9 +125,14 @@ const QCDetailPage = lazy(() =>
     default: module.QCDetailPage,
   })),
 );
-const StudentStoragePage = lazy(() =>
-  import("@/features/storage/routes/StudentStoragePage").then((module) => ({
-    default: module.StudentStoragePage,
+const StorageHubPage = lazy(() =>
+  import("@/features/storage/routes/StorageHubPage").then((module) => ({
+    default: module.StorageHubPage,
+  })),
+);
+const InventoryPage = lazy(() =>
+  import("@/features/storage/routes/InventoryPage").then((module) => ({
+    default: module.InventoryPage,
   })),
 );
 const StudentAnnouncementListPage = lazy(() =>
@@ -279,8 +284,7 @@ export function AppRoutes() {
               </RequireAuth>
             }
           />
-          {/* Student storage. No RequireAuth yet: student auth is not decided (mock identity). */}
-          <Route path="student/storage" element={<StudentStoragePage />} />
+          <Route path="student/storage" element={<RequireAuth permission="storage.use"><StorageHubPage /></RequireAuth>} />
           <Route path="*" element={<NotFound />} />
         </Route>
         <Route
@@ -315,48 +319,14 @@ export function AppRoutes() {
           <Route path="news/create" element={<RequireAuth permission="news.manage"><NewsCreatePage /></RequireAuth>} />
           <Route path="news/:id" element={<RequireAuth permission="news.view"><NewsDetailPage /></RequireAuth>} />
           <Route path="news/:id/edit" element={<RequireAuth permission="news.manage"><NewsEditPage /></RequireAuth>} />
-          <Route
-            path="storage"
-            element={
-              <StorageDashboardPage />
-            }
-          />
-          <Route
-            path="storage/borrow"
-            element={
-              <BorrowListPage />
-            }
-          />
-          <Route
-            path="storage/borrow/walk-in"
-            element={
-              <WalkInPage />
-            }
-          />
-          <Route
-            path="storage/borrow/:id"
-            element={
-              <BorrowDetailPage />
-            }
-          />
-          <Route
-            path="storage/return"
-            element={
-              <ReturnPage />
-            }
-          />
-          <Route
-            path="storage/qc"
-            element={
-              <QCListPage />
-            }
-          />
-          <Route
-            path="storage/qc/:id"
-            element={
-              <QCDetailPage />
-            }
-          />
+          <Route path="storage" element={<RequireAuth permission="storage.view"><StorageDashboardPage /></RequireAuth>} />
+          <Route path="storage/inventory" element={<RequireAuth permission="storage.view"><InventoryPage /></RequireAuth>} />
+          <Route path="storage/borrow" element={<RequireAuth permission="storage.manage.counter"><BorrowListPage /></RequireAuth>} />
+          <Route path="storage/borrow/walk-in" element={<RequireAuth permission="storage.manage.counter"><WalkInPage /></RequireAuth>} />
+          <Route path="storage/borrow/:id" element={<RequireAuth permission="storage.manage.counter"><BorrowDetailPage /></RequireAuth>} />
+          <Route path="storage/return" element={<RequireAuth permission="storage.manage.counter"><ReturnPage /></RequireAuth>} />
+          <Route path="storage/qc" element={<RequireAuth permission="storage.manage.qc"><QCListPage /></RequireAuth>} />
+          <Route path="storage/qc/:id" element={<RequireAuth permission="storage.manage.qc"><QCDetailPage /></RequireAuth>} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

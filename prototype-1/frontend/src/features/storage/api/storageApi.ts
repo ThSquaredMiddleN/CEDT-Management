@@ -1,512 +1,60 @@
+import { api, post } from "@/api/client";
 import type {
   BorrowRequest,
+  CatalogItem,
   InventoryItem,
   IssuedLine,
   NewBorrowRequest,
   NewInventoryItem,
   PendingReturnItem,
   PickupDetails,
-  QCDecision,
-  QCItem,
-  QCItemStatus,
   QCRequest,
   QCSubmission,
   ReturnCounts,
   ReturnFine,
   Student,
 } from "../types";
-import {
-  apiConfig,
-  borrowRequests,
-  clock,
-  createUnits,
-  inventory,
-  pendingReturns,
-  qcRequests,
-  session,
-  settings,
-  students,
-  syncAllCounts,
-  syncCounts,
-  units,
-} from "./mockStore";
-import {
-  applyIssue,
-  expireReservations,
-  findItem,
-  issuableQty,
-  releaseReservations,
-  reopenRequest,
-  restockItem,
-  sweepRequests,
-  totalReserved,
-  validateIssue,
-} from "./stockLogic";
 
-const delay = <T,>(value: T): Promise<T> =>
-  new Promise((resolve) => setTimeout(() => resolve(structuredClone(value)), apiConfig.latencyMs));
+const put = <T,>(path: string, body: unknown) => api<T>(path, { method: "PUT", body: JSON.stringify(body) });
+const S = "/storage";
+const id = (v: string) => encodeURIComponent(v);
 
-const fail = (message: string): never => {
-  throw new Error(message);
-};
-
-const availableSerials = (itemId: string) =>
-  units.filter((u) => u.itemId === itemId && u.status === "AVAILABLE").map((u) => u.serial);
-
-/** Group ids the student belongs to (empty when the student is unknown). */
-const groupIdsOf = (studentId: string): Set<string> =>
-  new Set(students.find((s) => s.studentId === studentId)?.groups.map((g) => g.id) ?? []);
-
-/** Owed items of every group the student belongs to. */
-const owedFor = (studentId: string): PendingReturnItem[] => {
-  const ids = groupIdsOf(studentId);
-  return pendingReturns.filter((i) => ids.has(i.groupId));
-};
-
-/** Not brought first, then overdue, then soonest due. */
-export function sortOwed(items: PendingReturnItem[], now: number): PendingReturnItem[] {
-  const rank = (i: PendingReturnItem) => (i.owedStatus === "NOT_BROUGHT" ? 0 : i.dueAt < now ? 1 : 2);
-  return [...items].sort((a, b) => rank(a) - rank(b) || a.dueAt - b.dueAt);
-}
-
-/** UI view of an item: `available` is the general pool, reserved units shown separately. */
-function itemView(item: InventoryItem): InventoryItem {
-  const reserved = totalReserved(item.id);
-  return {
-    ...item,
-    reserved,
-    available: Math.max(0, item.available - reserved),
-    availableSerials: item.isUnique ? availableSerials(item.id) : undefined,
-  };
-}
-
-const QC_ORDER: QCDecision[] = ["AVAILABLE", "DAMAGED", "LOST"];
-const worst = (r: Record<QCDecision, number>): QCItemStatus =>
-  [...QC_ORDER].reverse().find((k) => r[k] > 0) ?? "AVAILABLE";
-
-function nextQcId(): string {
-  const max = qcRequests.reduce((m, r) => Math.max(m, Number(r.id.split("-").pop()) || 0), 0);
-  return `REQ-R-${Math.max(max, 299) + 1}`;
-}
-
-function nextBorrowId(): string {
-  const max = borrowRequests.reduce((m, r) => Math.max(m, Number(r.id.split("-").pop()) || 0), 0);
-  return `REQ-B-${max + 1}`;
-}
-
-function currentStudent(): Student {
-  const s = students.find((x) => x.studentId === session.studentId);
-  if (!s) throw new Error("ไม่พบข้อมูลนิสิต");
-  return s;
-}
-
-/** Request as the UI sees it: what each line could be issued now, and which serials it holds. */
-function decorate(req: BorrowRequest): BorrowRequest {
-  return {
-    ...req,
-    items: req.items.map((it) => ({
-      ...it,
-      available: issuableQty(it.itemId, req.id),
-      availableSerials: it.isUnique ? availableSerials(it.itemId) : undefined,
-      issuedSerials: it.isUnique
-        ? units.filter((u) => u.itemId === it.itemId && u.requestId === req.id).map((u) => u.serial)
-        : undefined,
-    })),
-  };
-}
-
+/** Thin client for /api/v1/storage. Function names match the old mock, so hooks and pages barely change. */
 export const storageApi = {
-  getInventory: async (): Promise<InventoryItem[]> => {
-    expireReservations();
-    syncAllCounts();
-    return delay(inventory.map(itemView));
-  },
+  // ---- Staff
+  getInventory: () => api<InventoryItem[]>(`${S}/items`),
+  addInventoryItem: (input: NewInventoryItem) => post<InventoryItem>(`${S}/items`, input),
+  getBorrowRequests: () => api<BorrowRequest[]>(`${S}/requests`),
+  getBorrowRequest: (requestId: string) => api<BorrowRequest>(`${S}/requests/${id(requestId)}`),
+  /** The datetime-local value is read in the browser's time zone and sent as an ISO instant. */
+  confirmBorrow: (requestId: string, lines: IssuedLine[], pickup: PickupDetails) =>
+    post<{ swept: string[] }>(`${S}/requests/${id(requestId)}/issue`, {
+      lines,
+      pickup: { ...pickup, pickupAt: new Date(pickup.pickupAt).toISOString() },
+    }),
+  rejectBorrow: (requestId: string, reason: string) => post<BorrowRequest>(`${S}/requests/${id(requestId)}/reject`, { reason }),
+  staffConfirmPickup: (requestId: string) => post<BorrowRequest>(`${S}/requests/${id(requestId)}/pickup`),
+  setRequestDueAt: (requestId: string, at: number) => put<BorrowRequest>(`${S}/requests/${id(requestId)}/due`, { dueAt: at }),
+  lookupStudent: (studentId: string) => api<Student>(`${S}/students/${id(studentId.trim())}`),
+  walkInCheckout: (studentId: string, groupId: string, lines: IssuedLine[]) =>
+    post<{ swept: string[]; requestId: string }>(`${S}/walk-in`, { studentId, groupId, lines }),
+  getPendingReturns: (studentId: string) => api<PendingReturnItem[]>(`${S}/students/${id(studentId)}/owed`),
+  submitReturn: (studentId: string, results: Record<string, ReturnCounts>, remark: string, fine?: ReturnFine) =>
+    post<{ queued: number; lost: number }>(`${S}/returns`, { studentId, results, remark, fine }),
+  getQCRequests: () => api<QCRequest[]>(`${S}/qc`),
+  getQCRequest: (taskId: string) => api<QCRequest>(`${S}/qc/${id(taskId)}`),
+  submitQC: (taskId: string, sub: QCSubmission) => post<{ status: QCRequest["status"] }>(`${S}/qc/${id(taskId)}/submit`, sub),
+  verifySlip: (taskId: string, valid: boolean) => post<{ status: QCRequest["status"] }>(`${S}/qc/${id(taskId)}/verify-slip`, { valid }),
+  getDefaultDueAt: async () => (await api<{ defaultDueAt: number }>(`${S}/settings`)).defaultDueAt,
+  setDefaultDueAt: async (at: number) => (await put<{ defaultDueAt: number }>(`${S}/settings/default-due`, { defaultDueAt: at })).defaultDueAt,
 
-  /** Register a new equipment type; all units start as available. Unique items get serial records. */
-  addInventoryItem: async (input: NewInventoryItem): Promise<InventoryItem> => {
-    const id = input.id.trim().toUpperCase();
-    if (inventory.some((i) => i.id === id)) return fail(`รหัสอุปกรณ์ ${id} มีอยู่แล้ว`);
-    const item: InventoryItem = {
-      id,
-      name: input.name.trim(),
-      isUnique: input.isUnique,
-      available: input.total,
-      reserved: 0,
-      qc: 0,
-      damaged: 0,
-      lost: 0,
-      total: input.total,
-      imageUrl: input.imageUrl,
-    };
-    inventory.push(item);
-    if (item.isUnique) {
-      createUnits(id, { AVAILABLE: input.total }); // EQ-005-001 .. EQ-005-00N
-      syncCounts(item);
-    }
-    return delay(itemView(item));
-  },
-
-  /** Mock stores the data URL in memory; a real backend would upload the file and keep its URL. */
-  setItemImage: async (id: string, imageUrl: string | undefined): Promise<InventoryItem> => {
-    const item = findItem(id);
-    if (!item) return fail("ไม่พบอุปกรณ์");
-    item!.imageUrl = imageUrl;
-    return delay(itemView(item!));
-  },
-
-  getBorrowRequests: async (): Promise<BorrowRequest[]> => {
-    expireReservations();
-    return delay(borrowRequests);
-  },
-
-  getBorrowRequest: async (id: string): Promise<BorrowRequest> => {
-    expireReservations();
-    const req = borrowRequests.find((r) => r.id === id);
-    if (!req) return fail("ไม่พบคำขอ");
-    return delay(decorate(req!));
-  },
-
-  /** Click & Collect: partial fulfilment allowed; task becomes READY_FOR_PICKUP. */
-  confirmBorrow: async (
-    id: string,
-    lines: IssuedLine[],
-    pickup: PickupDetails,
-  ): Promise<{ swept: string[] }> => {
-    expireReservations();
-    const req = borrowRequests.find((r) => r.id === id);
-    if (!req) return fail("ไม่พบคำขอ");
-    if (req!.status !== "OPEN") return fail("คำขอนี้ไม่ได้อยู่ในสถานะ OPEN");
-    const issued = lines.filter((l) => l.qty > 0);
-    if (issued.length === 0) return fail("ยังไม่ได้จ่ายอุปกรณ์ชิ้นใดเลย");
-    validateIssue(issued, id);
-    applyIssue(issued, id);
-    for (const l of issued) {
-      const it = req!.items.find((i) => i.itemId === l.itemId);
-      if (it) it.issuedQty = l.qty;
-    }
-    req!.pickup = { ...pickup };
-    req!.status = "READY_FOR_PICKUP";
-    return delay({ swept: sweepRequests() });
-  },
-
-  /** Student reopens a request flagged "stock is back"; it keeps its original queue position. */
-  reopenBorrow: async (id: string): Promise<BorrowRequest> => {
-    expireReservations();
-    const req = borrowRequests.find((r) => r.id === id);
-    if (!req) return fail("ไม่พบคำขอ");
-    reopenRequest(req!);
-    return delay(req!);
-  },
-
-  /** Student cancels before anything was issued. Reserved units go back to the pool. */
-  cancelBorrow: async (id: string): Promise<BorrowRequest> => {
-    expireReservations();
-    const req = borrowRequests.find((r) => r.id === id);
-    if (!req) return fail("ไม่พบคำขอ");
-    if (req!.status !== "OPEN" && req!.status !== "UNFULFILLED") return fail("ยกเลิกได้เฉพาะคำขอที่ยังไม่ได้จ่ายของ");
-    req!.status = "CANCELLED";
-    req!.cancelReason = "BY_STUDENT";
-    delete req!.restock;
-    releaseReservations(req!.id);
-    return delay(req!);
-  },
-
-  /**
-   * A group member (or staff) confirms the items were collected. The request closes, gets
-   * the default due date, and every issued unit / bulk line becomes owed by the group.
-   */
-  confirmPickup: async (id: string): Promise<BorrowRequest> => {
-    const req = borrowRequests.find((r) => r.id === id);
-    if (!req) return fail("ไม่พบคำขอ");
-    if (req!.status !== "READY_FOR_PICKUP") return fail("คำขอนี้ยังไม่พร้อมให้รับของ");
-    req!.status = "CLOSED";
-    req!.pickedUpAt = clock.now();
-    req!.dueAt = settings.defaultDueAt;
-    const base = {
-      requestId: req!.id,
-      groupId: req!.groupId,
-      group: req!.group,
-      dueAt: req!.dueAt,
-      owedStatus: "OWED" as const,
-    };
-    for (const line of req!.items) {
-      if (line.issuedQty <= 0) continue;
-      if (line.isUnique) {
-        for (const u of units.filter((x) => x.requestId === req!.id && x.itemId === line.itemId && x.status === "OUT")) {
-          pendingReturns.push({
-            ...base, id: `${req!.id}-${u.serial}`, itemId: line.itemId, name: line.name, isUnique: true, qty: 1, serialNumber: u.serial,
-          });
-        }
-      } else {
-        pendingReturns.push({
-          ...base, id: `${req!.id}-${line.itemId}`, itemId: line.itemId, name: line.name, isUnique: false, qty: line.issuedQty,
-        });
-      }
-    }
-    return delay(req!);
-  },
-
-  /** Owed items of all the current student's groups. */
-  getMyPendingReturns: async (): Promise<PendingReturnItem[]> =>
-    delay(sortOwed(owedFor(session.studentId), clock.now())),
-
-  getDefaultDueAt: async (): Promise<number> => delay(settings.defaultDueAt),
-
-  /** Applies to future pickups only. */
-  setDefaultDueAt: async (at: number): Promise<number> => {
-    if (!Number.isFinite(at) || at <= clock.now()) return fail("กำหนดคืนต้องเป็นเวลาในอนาคต");
-    settings.defaultDueAt = at;
-    return delay(at);
-  },
-
-  /** Staff extends (or shortens) one request's due date; its owed items follow. */
-  setRequestDueAt: async (id: string, at: number): Promise<BorrowRequest> => {
-    const req = borrowRequests.find((r) => r.id === id);
-    if (!req) return fail("ไม่พบคำขอ");
-    if (req!.status !== "CLOSED") return fail("แก้กำหนดคืนได้เฉพาะคำขอที่รับของแล้ว");
-    if (!Number.isFinite(at) || at < (req!.pickedUpAt ?? 0)) return fail("กำหนดคืนต้องไม่ก่อนวันที่รับของ");
-    req!.dueAt = at;
-    for (const i of pendingReturns) if (i.requestId === id) i.dueAt = at;
-    return delay(req!);
-  },
-
-  lookupStudent: (studentId: string): Promise<Student> => {
-    const s = students.find((x) => x.studentId === studentId.trim());
-    return s ? delay(s) : Promise.reject(new Error("ไม่พบรหัสนิสิตนี้"));
-  },
-
-  // ---- Student side (mock identity until real student auth exists) ----
-
-  getCurrentStudent: async (): Promise<Student> => delay(currentStudent()),
-
-  /** Dev switcher: every seeded student. */
-  listStudents: async (): Promise<Student[]> => delay(students),
-
-  setCurrentStudent: async (studentId: string): Promise<{ studentId: string }> => {
-    if (!students.some((s) => s.studentId === studentId)) return fail("ไม่พบรหัสนิสิตนี้");
-    session.studentId = studentId;
-    return delay({ studentId });
-  },
-
-  /**
-   * A line may ask for more than is available (it waits in the queue) but never more
-   * than the item's total. A request with nothing issuable is swept to UNFULFILLED at once.
-   */
-  createBorrowRequest: async (input: NewBorrowRequest): Promise<BorrowRequest> => {
-    expireReservations();
-    syncAllCounts();
-    const student = currentStudent();
-    const group = student.groups.find((g) => g.id === input.groupId);
-    if (!group) return fail("คุณไม่ได้อยู่ในกลุ่มนี้");
-    if (input.items.length === 0) return fail("ยังไม่ได้เลือกอุปกรณ์");
-    if (new Set(input.items.map((l) => l.itemId)).size !== input.items.length) return fail("รายการอุปกรณ์ซ้ำกัน");
-    const lines = input.items.map((l) => {
-      const item = findItem(l.itemId);
-      if (!item) return fail(`ไม่พบอุปกรณ์ ${l.itemId}`);
-      if (!Number.isInteger(l.qty) || l.qty < 1 || l.qty > item!.total) {
-        return fail(`จำนวน ${item!.name} ต้องอยู่ระหว่าง 1–${item!.total}`);
-      }
-      return { itemId: item!.id, name: item!.name, isUnique: item!.isUnique, reqQty: l.qty, issuedQty: 0 };
-    });
-    const req: BorrowRequest = {
-      id: nextBorrowId(),
-      type: group!.type,
-      groupId: group!.id,
-      group: group!.label,
-      user: student.name,
-      studentId: student.studentId,
-      status: "OPEN",
-      createdAt: clock.now(),
-      items: lines,
-    };
-    borrowRequests.push(req);
-    sweepRequests();
-    return delay(req);
-  },
-
-  /** Requests of all the current student's groups, newest first. */
-  getMyRequests: async (): Promise<BorrowRequest[]> => {
-    expireReservations();
-    const ids = groupIdsOf(session.studentId);
-    return delay(
-      borrowRequests
-        .filter((r) => ids.has(r.groupId))
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .map(decorate),
-    );
-  },
-
-  /** Walk-in POS checkout: takes from the general pool (reserved units are off limits). */
-  walkInCheckout: async (_studentId: string, _groupId: string, lines: IssuedLine[]) => {
-    expireReservations();
-    if (lines.length === 0) return fail("ตะกร้าว่าง");
-    validateIssue(lines);
-    applyIssue(lines);
-    return delay({ swept: sweepRequests() });
-  },
-
-  /** Staff: owed items of all the student's groups. Not brought first, then overdue, then soonest due. */
-  getPendingReturns: (studentId: string): Promise<PendingReturnItem[]> =>
-    delay(sortOwed(owedFor(studentId), clock.now())),
-
-  /**
-   * Face-to-face return. Each owed line is split by counts that must add up to its qty:
-   * RETURNED -> goes to QC; NOT_BROUGHT -> stays owed (overdue); LOST (only for lines
-   * already overdue) -> counted lost and a fine task is opened. A partly returned bulk
-   * line keeps only its not-brought remainder owed.
-   */
-  submitReturn: async (
-    studentId: string,
-    results: Record<string, ReturnCounts>,
-    _remark: string,
-    fine?: ReturnFine,
-  ): Promise<{ queued: number; lost: number }> => {
-    const owed = owedFor(studentId);
-    const plan = owed.map((i) => {
-      const r = results[i.id];
-      if (!r) return fail("ยังระบุสถานะไม่ครบทุกรายการ");
-      const counts = [r.RETURNED, r.NOT_BROUGHT, r.LOST];
-      if (counts.some((n) => !Number.isInteger(n) || n < 0)) return fail("จำนวนไม่ถูกต้อง");
-      if (counts.reduce((a, b) => a + b, 0) !== i.qty) return fail(`จำนวนของ ${i.name} ต้องรวมได้ ${i.qty} ชิ้น`);
-      if (r.LOST > 0 && i.owedStatus !== "NOT_BROUGHT") {
-        return fail("ระบุสูญหายได้เฉพาะรายการที่ค้างส่ง (ไม่ได้นำมา) แล้ว");
-      }
-      return { i, r };
-    });
-    const lostLines = plan.filter(({ r }) => r.LOST > 0);
-    if (lostLines.length > 0 && !(fine && fine.amount > 0)) return fail("กรุณาระบุยอดค่าปรับ");
-    for (const { i, r } of plan) {
-      if (i.isUnique && (r.RETURNED > 0 || r.LOST > 0)) {
-        const unit = units.find((u) => u.serial === i.serialNumber && u.itemId === i.itemId);
-        if (!unit || unit.status !== "OUT") return fail(`Serial ${i.serialNumber} ไม่อยู่ในสถานะที่ยืมออกไป`);
-      }
-    }
-
-    const move = (i: PendingReturnItem, qty: number, to: "QC" | "LOST") => {
-      const item = findItem(i.itemId)!;
-      if (i.isUnique) {
-        units.find((u) => u.serial === i.serialNumber)!.status = to;
-        syncCounts(item);
-      } else if (to === "QC") item.qc += qty;
-      else item.lost += qty;
-    };
-    const received: QCItem[] = [];
-    const lost: QCItem[] = [];
-    const toQcItem = (i: PendingReturnItem, qty: number, status: QCItemStatus, id: string): QCItem => ({
-      id, itemId: i.itemId, name: i.name, isUnique: i.isUnique, qty, serialNumber: i.serialNumber, status,
-      ...(status === "LOST" ? { results: { AVAILABLE: 0, DAMAGED: 0, LOST: qty } } : {}),
-    });
-    for (const { i, r } of plan) {
-      if (r.RETURNED > 0) {
-        move(i, r.RETURNED, "QC");
-        received.push(toQcItem(i, r.RETURNED, "PENDING_TEST", i.id));
-      }
-      if (r.LOST > 0) {
-        move(i, r.LOST, "LOST");
-        lost.push(toQcItem(i, r.LOST, "LOST", `${i.id}-L`));
-      }
-    }
-
-    const student = students.find((s) => s.studentId === studentId);
-    const base = { type: "Face-to-Face Return", group: [...new Set(owed.map((i) => i.group))].join(", ") || "-", user: student?.name ?? studentId };
-    if (received.length > 0) {
-      qcRequests.unshift({ id: nextQcId(), ...base, status: "OPEN", fineAmount: 0, fineRemark: "", items: received });
-    }
-    if (lost.length > 0) {
-      qcRequests.unshift({
-        id: nextQcId(), ...base, status: "PENDING_PAYMENT", fineAmount: fine!.amount, fineRemark: fine!.remark, items: lost,
-      });
-    }
-
-    const now = clock.now();
-    const handled = new Set(owed.map((i) => i.id));
-    for (let k = pendingReturns.length - 1; k >= 0; k--) {
-      if (handled.has(pendingReturns[k].id)) pendingReturns.splice(k, 1);
-    }
-    pendingReturns.push(
-      ...plan
-        .filter(({ r }) => r.NOT_BROUGHT > 0)
-        .map(({ i, r }) => ({ ...i, qty: r.NOT_BROUGHT, owedStatus: "NOT_BROUGHT" as const, notBroughtAt: i.notBroughtAt ?? now })),
-    );
-    return delay({
-      queued: received.reduce((n, q) => n + q.qty, 0),
-      lost: lost.reduce((n, q) => n + q.qty, 0),
-    });
-  },
-
-  getQCRequests: async (): Promise<QCRequest[]> => delay(qcRequests),
-
-  getQCRequest: (id: string): Promise<QCRequest> => {
-    const r = qcRequests.find((x) => x.id === id);
-    return r ? delay(r) : Promise.reject(new Error("ไม่พบรายการ QC"));
-  },
-
-  /**
-   * Each item's results (available/damaged/lost counts) must add up to its qty, so a bulk
-   * batch can be split. Any damaged/lost needs a fine -> PENDING_PAYMENT; otherwise CLOSED.
-   * Units that pass QC are restocked, which flags and reserves for waiting requests.
-   */
-  submitQC: async (id: string, sub: QCSubmission): Promise<{ status: QCRequest["status"] }> => {
-    const req = qcRequests.find((r) => r.id === id);
-    if (!req) return fail("ไม่พบรายการ QC");
-    if (req!.status !== "OPEN") return fail("รายการนี้ถูกตรวจแล้ว");
-
-    const pending = req!.items.filter((i) => i.status === "PENDING_TEST");
-    const plan = pending.map((it) => {
-      const entry = sub.items.find((s) => s.id === it.id);
-      if (!entry) return fail("ยังระบุผลตรวจไม่ครบทุกรายการ");
-      const r = entry!.results;
-      const counts = QC_ORDER.map((k) => r[k]);
-      if (counts.some((n) => !Number.isInteger(n) || n < 0)) return fail("จำนวนผลตรวจไม่ถูกต้อง");
-      if (counts.reduce((a, b) => a + b, 0) !== it.qty) return fail(`ผลตรวจของ ${it.name} ต้องรวมได้ ${it.qty} ชิ้น`);
-      return { it, r };
-    });
-
-    const hasLiability = plan.some(({ r }) => r.DAMAGED > 0 || r.LOST > 0);
-    if (hasLiability && !(sub.fineAmount > 0)) return fail("กรุณาระบุยอดค่าปรับ");
-
-    for (const { it } of plan) {
-      const item = findItem(it.itemId);
-      if (it.isUnique) {
-        const unit = units.find((u) => u.serial === it.serialNumber && u.itemId === it.itemId);
-        if (!unit || unit.status !== "QC") return fail(`Serial ${it.serialNumber} ไม่ได้อยู่ในคิว QC`);
-      } else if (item && item.qc < it.qty) {
-        return fail(`ยอด QC ของ ${item.name} ไม่ตรงกับรายการ`);
-      }
-    }
-
-    const restocked = new Map<string, number>();
-    for (const { it, r } of plan) {
-      const item = findItem(it.itemId);
-      if (item) {
-        if (it.isUnique) {
-          units.find((u) => u.serial === it.serialNumber)!.status = r.LOST ? "LOST" : r.DAMAGED ? "DAMAGED" : "AVAILABLE";
-          syncCounts(item);
-        } else {
-          item.qc -= it.qty;
-          item.available += r.AVAILABLE;
-          item.damaged += r.DAMAGED;
-          item.lost += r.LOST;
-        }
-        if (r.AVAILABLE > 0) restocked.set(it.itemId, (restocked.get(it.itemId) ?? 0) + r.AVAILABLE);
-      }
-      it.results = { ...r };
-      it.status = worst(r);
-    }
-    for (const [itemId, qty] of restocked) restockItem(itemId, qty);
-
-    req!.fineAmount = hasLiability ? sub.fineAmount : 0;
-    req!.fineRemark = hasLiability ? sub.fineRemark : "";
-    req!.status = hasLiability ? "PENDING_PAYMENT" : "CLOSED";
-    return delay({ status: req!.status });
-  },
-
-  /** Slip verification: only a valid slip may close a PENDING_PAYMENT task. */
-  verifySlip: async (id: string, valid: boolean): Promise<{ status: QCRequest["status"] }> => {
-    const req = qcRequests.find((r) => r.id === id);
-    if (!req) return fail("ไม่พบรายการ QC");
-    if (req!.status !== "PENDING_PAYMENT") return fail("รายการนี้ไม่ได้รอชำระเงิน");
-    if (valid) req!.status = "CLOSED";
-    return delay({ status: req!.status });
-  },
+  // ---- Student (the signed-in user)
+  getCatalog: () => api<CatalogItem[]>(`${S}/catalog`),
+  getCurrentStudent: () => api<Student>(`${S}/me`),
+  getMyRequests: () => api<BorrowRequest[]>(`${S}/my/requests`),
+  createBorrowRequest: (input: NewBorrowRequest) => post<BorrowRequest>(`${S}/my/requests`, input),
+  cancelBorrow: (requestId: string) => post<BorrowRequest>(`${S}/my/requests/${id(requestId)}/cancel`),
+  reopenBorrow: (requestId: string) => post<BorrowRequest>(`${S}/my/requests/${id(requestId)}/reopen`),
+  confirmPickup: (requestId: string) => post<BorrowRequest>(`${S}/my/requests/${id(requestId)}/pickup`),
+  getMyPendingReturns: () => api<PendingReturnItem[]>(`${S}/my/owed`),
 };

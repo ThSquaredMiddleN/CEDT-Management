@@ -1,4 +1,5 @@
 import {
+  ArchiveBoxIcon,
   CalendarIcon,
   ChatBubbleLeftRightIcon,
   CpuChipIcon,
@@ -25,7 +26,8 @@ const ADMIN_SIDEBAR_ITEMS: (SidebarItem & { permission?: string })[] = [
   { label: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon />, to: "/admin/news", permission: "news.view" },
   { label: "จัดการห้องเรียน", icon: <CalendarIcon />, permission: "bookings.view" },
   { label: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon />, to: "/admin/course-change", permission: "course_change.view" },
-  { label: "จัดการคลังอุปกรณ์", icon: <CpuChipIcon />, to: "/admin/storage" },
+  { label: "จัดการคลังอุปกรณ์", icon: <CpuChipIcon />, to: "/admin/storage", permission: "storage.view" },
+  { label: "รายการอุปกรณ์", icon: <ArchiveBoxIcon />, to: "/admin/storage/inventory", permission: "storage.view" },
   { label: "Receipt checks", icon: <DocumentMagnifyingGlassIcon />, to: RECEIPTS_PATH, permission: "receipts.view" },
   { label: "การแจ้งเตือน LINE", icon: <ChatBubbleLeftRightIcon />, to: "/admin/line", permission: "line.use" },
   { label: "สิทธิ์ผู้ใช้", icon: <KeyIcon />, to: "/admin/access", permission: "core.permissions.manage" },
@@ -44,7 +46,10 @@ export function AdminLayout() {
         item.to === "/admin" || item.to === "/"
           ? pathname === item.to
           : item.to
-            ? pathname.startsWith(item.to)
+            ? item.to === "/admin/storage"
+              ? pathname === item.to ||
+                (pathname.startsWith(item.to + "/") && !pathname.startsWith("/admin/storage/inventory"))
+              : pathname.startsWith(item.to)
             : false,
     }),
   );

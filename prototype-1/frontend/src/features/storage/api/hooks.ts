@@ -18,7 +18,6 @@ export const storageKeys = {
   qc: ["storage", "qc"] as const,
   qcOne: (id: string) => ["storage", "qc", id] as const,
   me: ["storage", "me"] as const,
-  students: ["storage", "students"] as const,
   myRequests: ["storage", "my-requests"] as const,
   myReturns: ["storage", "my-returns"] as const,
   defaultDueAt: ["storage", "default-due-at"] as const,
@@ -66,11 +65,6 @@ export const useConfirmBorrow = () =>
 
 export const useAddInventoryItem = () => useStorageMutation(storageApi.addInventoryItem);
 
-export const useSetItemImage = () =>
-  useStorageMutation((v: { id: string; imageUrl: string | undefined }) =>
-    storageApi.setItemImage(v.id, v.imageUrl),
-  );
-
 export const useWalkInCheckout = () =>
   useStorageMutation((v: { studentId: string; groupId: string; lines: IssuedLine[] }) =>
     storageApi.walkInCheckout(v.studentId, v.groupId, v.lines),
@@ -95,9 +89,6 @@ export const useVerifySlip = () =>
 export const useCurrentStudent = () =>
   useQuery({ queryKey: storageKeys.me, queryFn: storageApi.getCurrentStudent });
 
-export const useStudents = () =>
-  useQuery({ queryKey: storageKeys.students, queryFn: storageApi.listStudents });
-
 export const useMyRequests = () =>
   useQuery({ queryKey: storageKeys.myRequests, queryFn: storageApi.getMyRequests });
 
@@ -106,9 +97,6 @@ export const useMyPendingReturns = () =>
 
 export const useDefaultDueAt = () =>
   useQuery({ queryKey: storageKeys.defaultDueAt, queryFn: storageApi.getDefaultDueAt });
-
-export const useSetCurrentStudent = () =>
-  useStorageMutation((studentId: string) => storageApi.setCurrentStudent(studentId));
 
 export const useCreateBorrowRequest = () =>
   useStorageMutation((input: NewBorrowRequest) => storageApi.createBorrowRequest(input));
@@ -121,3 +109,10 @@ export const useSetDefaultDueAt = () => useStorageMutation((at: number) => stora
 
 export const useSetRequestDueAt = () =>
   useStorageMutation((v: { id: string; at: number }) => storageApi.setRequestDueAt(v.id, v.at));
+
+export const useCatalog = () => useQuery({ queryKey: ["storage", "catalog"] as const, queryFn: storageApi.getCatalog });
+
+export const useRejectBorrow = () =>
+  useStorageMutation((v: { id: string; reason: string }) => storageApi.rejectBorrow(v.id, v.reason));
+
+export const useStaffConfirmPickup = () => useStorageMutation((id: string) => storageApi.staffConfirmPickup(id));

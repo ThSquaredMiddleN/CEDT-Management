@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAddInventoryItem } from "../api/hooks";
-import { IMAGE_ACCEPT, readItemImage } from "./imageFile";
-import { ItemImage } from "./ItemImage";
 
 const schema = z.object({
   id: z
@@ -67,9 +65,6 @@ const TYPE_OPTIONS = [
 export function AddItemDialog() {
   const [open, setOpen] = useState(false);
   const add = useAddInventoryItem();
-  const [imageUrl, setImageUrl] = useState<string | undefined>();
-  const [imageError, setImageError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const {
     register,
     handleSubmit,
@@ -87,14 +82,12 @@ export function AddItemDialog() {
     if (!next) {
       reset();
       add.reset();
-      setImageUrl(undefined);
-      setImageError(null);
     }
   };
 
   const onSubmit = handleSubmit((v) =>
     add.mutate(
-      { id: v.id, name: v.name, isUnique: v.type === "UNIQUE", total: v.total, imageUrl },
+      { id: v.id, name: v.name, isUnique: v.type === "UNIQUE", total: v.total },
       { onSuccess: () => onOpenChange(false) },
     ),
   );
@@ -150,43 +143,6 @@ export function AddItemDialog() {
                 ))}
               </div>
             </fieldset>
-
-            <div>
-              <span className="mb-1 block font-body text-body-sm-emphasize text-grey-700">รูปอุปกรณ์ (ไม่บังคับ)</span>
-              <div className="flex items-center gap-3">
-                <ItemImage src={imageUrl} name="ตัวอย่างรูปอุปกรณ์" className="size-16" />
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-                    {imageUrl ? "เปลี่ยนรูป" : "เลือกรูป"}
-                  </Button>
-                  {imageUrl && (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setImageUrl(undefined)}>
-                      ลบรูป
-                    </Button>
-                  )}
-                </div>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept={IMAGE_ACCEPT}
-                  className="sr-only"
-                  aria-label="เลือกไฟล์รูปอุปกรณ์"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = ""; // allow re-picking the same file
-                    if (!file) return;
-                    try {
-                      setImageUrl(await readItemImage(file));
-                      setImageError(null);
-                    } catch (err) {
-                      setImageError((err as Error).message);
-                    }
-                  }}
-                />
-              </div>
-              <p className="mt-1 text-xs text-grey-400">JPG, PNG หรือ WebP ไม่เกิน 2 MB</p>
-              {imageError && <p role="alert" className="mt-1 text-xs text-status-danger-fg">{imageError}</p>}
-            </div>
 
             <Field id="item-total" label="จำนวนทั้งหมด (ชิ้น)" error={errors.total?.message}>
               <Input

@@ -1,9 +1,8 @@
 import { ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useInventory } from "../api/hooks";
 
 interface ItemImageProps {
-  /** Look the picture up by equipment id (cached inventory query), or pass `src` directly. */
+  /** Kept for callers; pictures come from the files service later (spec piece 3). */
   itemId?: string;
   src?: string;
   name: string;
@@ -11,10 +10,7 @@ interface ItemImageProps {
 }
 
 /** Equipment thumbnail with a neutral placeholder so lists never show a broken image. */
-export function ItemImage({ itemId, src, name, className }: ItemImageProps) {
-  const { data } = useInventory();
-  const url = src ?? data?.find((i) => i.id === itemId)?.imageUrl;
-
+export function ItemImage({ src, name, className }: ItemImageProps) {
   return (
     <span
       className={cn(
@@ -22,8 +18,8 @@ export function ItemImage({ itemId, src, name, className }: ItemImageProps) {
         className,
       )}
     >
-      {url ? (
-        <img src={url} alt={name} className="size-full object-cover" />
+      {src ? (
+        <img src={src} alt={name} className="size-full object-cover" />
       ) : (
         <ImageIcon className="size-5" aria-label={`ไม่มีรูป ${name}`} role="img" />
       )}
