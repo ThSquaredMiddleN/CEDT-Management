@@ -127,16 +127,24 @@ export function columnsFrom(fields: SidecarFields) {
 export function applyReferenceCheck(
   checks: SidecarCheck[],
   reference: string | null,
-  dup: { studentId: string; term: string } | null,
+  dup: { studentId: string; term: string; settled: boolean } | null,
 ): SidecarCheck[] {
   if (!reference) return checks;
-  const check: SidecarCheck = dup
-    ? {
-        name: DUPLICATE_CHECK,
-        state: "fail",
-        detail: `reference already used for student ${dup.studentId}, term ${dup.term}`,
-      }
-    : { name: DUPLICATE_CHECK, state: "ok", detail: "reference not used in any other check" };
+  // Only a settled row (passed, or checked by staff) makes this a duplicate. An unchecked student upload can be
+  // someone else's screenshot (the "Belongs" check only saw an ID prefix), so staff decide between the two.
+  const check: SidecarCheck = !dup
+    ? { name: DUPLICATE_CHECK, state: "ok", detail: "reference not used in any other check" }
+    : dup.settled
+      ? {
+          name: DUPLICATE_CHECK,
+          state: "fail",
+          detail: `reference already used for student ${dup.studentId}, term ${dup.term}`,
+        }
+      : {
+          name: DUPLICATE_CHECK,
+          state: "warn",
+          detail: `same reference as another unchecked upload (student ${dup.studentId}, term ${dup.term}); staff to decide`,
+        };
   const i = checks.findIndex((c) => c.name === DUPLICATE_CHECK);
   if (i === -1) return [...checks, check];
   return checks.map((c, j) => (j === i ? check : c));
@@ -169,13 +177,27 @@ export async function checkReceipt(input: CheckInput) {
 
   // The duplicate lookup and the save. A re-check replaces the earlier row, so it starts a new retention clock.
   const save = async (db: Tx) => {
-    const dup = reference
-      ? await db.receiptCheck.findFirst({
+    // Other rows with this reference, newest first. A settled one wins, so a pending upload never hides a real duplicate.
+    const others = reference
+      ? await db.receiptCheck.findMany({
           where: { reference, NOT: { studentId: input.studentId, term } },
-          select: { studentId: true, term: true },
+          select: {
+            studentId: true,
+            term: true,
+            verdict: true,
+            checkedById: true,
+            checkedBy: { select: { studentNo: true } },
+          },
           orderBy: { createdAt: "desc" },
         })
-      : null;
+      : [];
+    const withSettled = others.map((r) => ({
+      studentId: r.studentId,
+      term: r.term,
+      // Same rule as studentLocked, from the row student's side: their own check is the one whose checker has their number.
+      settled: studentLocked(r, r.checkedBy.studentNo === r.studentId ? r.checkedById : ""),
+    }));
+    const dup = withSettled.find((r) => r.settled) ?? withSettled[0] ?? null;
 
     const checks = applyReferenceCheck(sidecar.checks, reference, dup);
     // A receipt that isn't this student's must not claim its reference: otherwise anyone who uploads a classmate's

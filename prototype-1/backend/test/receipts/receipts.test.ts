@@ -33,7 +33,8 @@ const S_F = "6500000006"; // list filters (warn)
 const S_G = "6500000007"; // delete
 const S_H = "6500000008"; // sidecar errors
 const S_OWN = "6800000001"; // the seeded student@test.local account's student number
-const TEST_STUDENTS = [S_A, S_B, S_C, S_D, S_E, S_F, S_G, S_H, S_OWN];
+const S_OWN2 = "6800000002"; // the seeded student2@test.local account's student number
+const TEST_STUDENTS = [S_A, S_B, S_C, S_D, S_E, S_F, S_G, S_H, S_OWN, S_OWN2];
 
 const BOUNDARY = "----receipt-test-boundary";
 const PDF_BYTES = Buffer.from("%PDF-1.4 made-up test bytes, not a real receipt");
@@ -482,6 +483,7 @@ describe("DELETE /receipts/:id", () => {
 describe("student receipts (POST and GET /receipts/mine)", () => {
   const TERM_OLD = "3/2598"; // made-up term for an older row
   let studentCookie: string;
+  let student2Cookie: string;
   let staffCookie: string;
   let noRoleCookie: string;
   let studentUserId: string;
@@ -501,6 +503,7 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
 
   beforeAll(async () => {
     studentCookie = await login("student@test.local", "test1234");
+    student2Cookie = await login("student2@test.local", "test1234");
     staffCookie = await login("staff@test.local", "test1234");
     noRoleCookie = await login("norole@test.local", "test1234");
     studentUserId = (await prisma.user.findUniqueOrThrow({ where: { email: "student@test.local" } })).id;
@@ -509,7 +512,7 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
   });
   // Each case starts with no row for the student, so a passed row from one case can't lock the next.
   beforeEach(async () => {
-    await prisma.receiptCheck.deleteMany({ where: { studentId: S_OWN } });
+    await prisma.receiptCheck.deleteMany({ where: { studentId: { in: [S_OWN, S_OWN2] } } });
   });
   const warnChecks: SidecarCheckRow[] = [{ name: "Belongs to this student", state: "warn", detail: "prefix only" }];
 
@@ -573,6 +576,72 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
       (c) => c.name === "Not submitted before",
     );
     expect(dup?.state).toBe("ok");
+  });
+
+  describe("duplicate check against an unsettled row", () => {
+    const dupOf = (res: { json: () => unknown }) =>
+      (res.json() as { check: { verdict: string; checks: { name: string; state: string }[] } }).check;
+
+    it("is only a warn when the other row is an unchecked student upload; both rows keep the reference", async () => {
+      // B (a student whose ID matches the visible prefix) uploads A's screenshot first: warn, unsettled.
+      fake.reply = (call) => sidecarOk(call, { reference: "RC-UNSETTLED-1", checks: warnChecks });
+      expect((await submitMine(student2Cookie, {})).json()).toMatchObject({ check: { verdict: "warn" } });
+
+      // A's genuine upload: warn, not fail, and not ok.
+      fake.reply = (call) => sidecarOk(call, { reference: "RC-UNSETTLED-1" });
+      const a = await submitMine(studentCookie, {});
+      expect(a.statusCode).toBe(200);
+      const check = dupOf(a);
+      expect(check.verdict).toBe("warn");
+      expect(check.checks).toContainEqual({ name: "Not submitted before", state: "warn" });
+      // Student-facing view: no other student's ID, reference or detail text.
+      expect(a.body).not.toContain(S_OWN2);
+      expect(a.body).not.toContain("RC-UNSETTLED-1");
+      expect(a.body).not.toContain("detail");
+
+      const rowA = await prisma.receiptCheck.findUniqueOrThrow({
+        where: { studentId_term: { studentId: S_OWN, term: currentTerm() } },
+      });
+      expect(rowA.reference).toBe("RC-UNSETTLED-1");
+      expect(rowA.checks as unknown as SidecarCheckRow[]).toContainEqual(
+        expect.objectContaining({ name: "Not submitted before", state: "warn", detail: expect.stringContaining("staff") }),
+      );
+      const rowB = await prisma.receiptCheck.findUniqueOrThrow({
+        where: { studentId_term: { studentId: S_OWN2, term: currentTerm() } },
+      });
+      expect(rowB.reference).toBe("RC-UNSETTLED-1");
+      expect(rowB.verdict).toBe("warn");
+    });
+
+    it("is also a warn for a staff check against an unchecked student upload", async () => {
+      fake.reply = (call) => sidecarOk(call, { reference: "RC-UNSETTLED-2", checks: warnChecks });
+      expect((await submitMine(student2Cookie, {})).statusCode).toBe(200);
+      fake.reply = (call) => sidecarOk(call, { reference: "RC-UNSETTLED-2" });
+      const res = await pdf({ studentId: S_A, term: currentTerm() });
+      const check = dupOf(res);
+      expect(check.verdict).toBe("warn");
+      expect(check.checks).toContainEqual(expect.objectContaining({ name: "Not submitted before", state: "warn" }));
+      await prisma.receiptCheck.deleteMany({ where: { studentId: S_A, term: currentTerm() } });
+    });
+
+    it("is still a fail when the other row passed", async () => {
+      expect((await submitMine(studentCookie, {}, "RC-SETTLED-OK")).json()).toMatchObject({ check: { verdict: "ok" } });
+      const res = await submitMine(student2Cookie, {}, "RC-SETTLED-OK");
+      expect(res.statusCode).toBe(200);
+      expect(dupOf(res).verdict).toBe("fail");
+      expect(dupOf(res).checks).toContainEqual({ name: "Not submitted before", state: "fail" });
+      expect(res.body).not.toContain(S_OWN);
+    });
+
+    it("is still a fail when staff checked the other row, even if it only warned", async () => {
+      fake.reply = (call) => sidecarOk(call, { reference: "RC-SETTLED-STAFF", checks: warnChecks });
+      const staffRes = await pdf({ studentId: S_OWN, term: currentTerm() });
+      expect(dupOf(staffRes).verdict).toBe("warn");
+      const res = await submitMine(student2Cookie, {}, "RC-SETTLED-STAFF");
+      expect(res.statusCode).toBe(200);
+      expect(dupOf(res).verdict).toBe("fail");
+      expect(dupOf(res).checks).toContainEqual({ name: "Not submitted before", state: "fail" });
+    });
   });
 
   it("replaces the term's row on a re-upload while the student's own check is unsettled", async () => {
