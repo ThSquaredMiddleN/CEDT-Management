@@ -38,7 +38,9 @@ model NewsArticle {
 model NewsImage {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   newsId       String   @map("news_id") @db.Uuid
-  storageKey   String   @unique @map("storage_key") @db.VarChar(80)
+  /// Legacy file name in NEWS_UPLOAD_DIR, dropped in 20261125140100_files_drop_legacy after files:backfill.
+  storageKey   String?  @unique @map("storage_key") @db.VarChar(80)
+  fileId       String?  @unique @map("file_id") @db.Uuid
   originalName String   @map("original_name") @db.VarChar(255)
   mimeType     String   @map("mime_type") @db.VarChar(32)
   sizeBytes    Int      @map("size_bytes")
@@ -46,6 +48,7 @@ model NewsImage {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   news NewsArticle @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  file File?       @relation(fields: [fileId], references: [id], onDelete: Restrict)
 
   @@index([newsId, position])
   @@map("news_images")
