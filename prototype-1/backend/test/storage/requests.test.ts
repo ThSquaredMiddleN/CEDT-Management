@@ -263,6 +263,12 @@ describe("walk-in and lookup", () => {
     expect(await lookupStudent("6800000004")).toMatchObject({ studentId: "6800000004", name: "6800000004" });
     await expect(lookupStudent("6899999999")).rejects.toThrow(/ไม่พบรหัสนิสิตนี้/);
   });
+
+  it("looks up a student with no account and no group but a personal request", async () => {
+    const res = await lookupStudent("6800000005");
+    expect(res.studentId).toBe("6800000005");
+    expect(res.groups).toEqual(expect.arrayContaining([expect.objectContaining({ id: "personal" })]));
+  });
 });
 
 describe("concurrency", () => {

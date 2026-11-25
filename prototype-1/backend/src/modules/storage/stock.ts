@@ -120,6 +120,7 @@ export async function releaseHolds(tx: Tx, requestId: string, now: Date): Promis
  * (restock_expired); a flag that no longer holds any units is cleared.
  */
 export async function expireHolds(tx: Tx, now: Date): Promise<void> {
+  const expired = await tx.storageReservation.findMany({ where: { expiresAt: { lte: now } } });
   await tx.storageReservation.deleteMany({ where: { expiresAt: { lte: now } } });
   const flagged = await tx.storageRequest.findMany({ where: { status: "unfulfilled", restockExpiresAt: { not: null } } });
   for (const req of flagged) {
@@ -142,6 +143,8 @@ export async function expireHolds(tx: Tx, now: Date): Promise<void> {
       await tx.storageRequest.update({ where: { id: req.id }, data: { restockFlaggedAt: null, restockExpiresAt: null } });
     }
   }
+  // After the cancel loop, so a request that just expired is not offered its own units again.
+  for (const hold of expired) await restockItem(tx, hold.itemId, hold.qty, now);
 }
 
 /** Throws a Thai message on the first line that cannot be issued; changes nothing. Returns items by code. */

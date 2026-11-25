@@ -259,7 +259,8 @@ export function setDue(actorId: string, requestNo: string, dueAt: number) {
 export const lookupStudent = (studentNo: string) =>
   storageTx(async (tx) => {
     const user = await findUserByStudentNo(tx, studentNo);
-    const groups = await groupsOfStudent(tx, studentNo);
-    if (!user && groups.length === 0) throw notFound("ไม่พบรหัสนิสิตนี้");
+    if (!user && (await groupIdsOfStudent(tx, studentNo)).length === 0 && (await tx.storageRequest.count({ where: { studentNo } })) === 0) {
+      throw notFound("ไม่พบรหัสนิสิตนี้");
+    }
     return { studentId: studentNo, name: user?.name ?? studentNo, groups: await studentGroups(tx, studentNo) };
   });
