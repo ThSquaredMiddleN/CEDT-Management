@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { rm } from "node:fs/promises";
 import { PrismaClient } from "@prisma/client";
 
 /** Every invocation owns a new disposable database; never reset an existing database. */
@@ -16,7 +17,7 @@ let created = false;
 try {
   await admin.$executeRawUnsafe(`CREATE DATABASE "${name}"`);
   created = true;
-  const env = { ...process.env, DATABASE_URL: testUrl.toString(), TEST_DATABASE_URL: testUrl.toString(), NODE_ENV: "test" };
+  const env = { ...process.env, DATABASE_URL: testUrl.toString(), TEST_DATABASE_URL: testUrl.toString(), NODE_ENV: "test", FILE_STORAGE_DIR: `var/test-files/${name}` };
   console.log("Preparing a new isolated test database (no demo data will be changed).");
   execFileSync("npx", ["prisma", "migrate", "deploy"], { env, stdio: "inherit", shell: process.platform === "win32" });
   execFileSync("npx", ["tsx", "prisma/seed.ts"], { env, stdio: "inherit", shell: process.platform === "win32" });
@@ -34,5 +35,6 @@ try {
       console.error(`Test database cleanup failed: ${name}`);
     }
   }
+  await rm(`var/test-files/${name}`, { recursive: true, force: true });
   await admin.$disconnect();
 }
