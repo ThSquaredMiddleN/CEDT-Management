@@ -7,6 +7,9 @@ export const TEST_EMAIL_DOMAIN = "@test.local";
 
 export const TEST_ACCOUNTS = [
   { email: "student@test.local", name: "นิสิต ทดสอบ", studentNo: "6800000001", roles: [] },
+  { email: "student2@test.local", name: "นิสิต ทดสอบ สอง", studentNo: "6800000002", roles: [] },
+  { email: "ta@test.local", name: "TA ตรวจสภาพ ทดสอบ", studentNo: "6800000003", roles: ["storage_ta"] },
+  { email: "storekeeper@test.local", name: "เจ้าหน้าที่คลัง ทดสอบ", studentNo: null, roles: ["storage_staff"] },
   { email: "teacher@test.local", name: "อาจารย์ ทดสอบ", studentNo: null, roles: ["teacher"] },
   { email: "staff@test.local", name: "เจ้าหน้าที่ ทดสอบ", studentNo: null, roles: ["staff"] },
   { email: "itadmin@test.local", name: "IT Admin ทดสอบ", studentNo: null, roles: ["it_admin"] },

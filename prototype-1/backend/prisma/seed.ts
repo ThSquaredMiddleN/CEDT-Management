@@ -10,6 +10,7 @@ import { dateFromISO } from "../src/lib/time.js";
 import { seedCourseChange } from "./seed-course-change.js";
 import { assignRole } from "../src/core/permissions.js";
 import { seedTestAccounts } from "./seed-test-accounts.js";
+import { seedStorage } from "./seed-storage.js";
 
 /**
  * Seeds the dataset the wireframes were designed against (§9). Idempotent: every write is
@@ -386,6 +387,9 @@ async function main() {
     staff: { admin, anucha, pimchanok },
     hash,
   });
+
+  // ----------------------------------------------------------------- storage
+  await seedStorage(prisma);
 
   // ---------------------------------------------------------------- bookings
   // Bookings go through the real service so occurrences, snapshots, request numbers and
