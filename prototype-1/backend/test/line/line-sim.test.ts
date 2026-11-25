@@ -133,7 +133,7 @@ describe("line:sim accepted by the webhook (app.inject, dry-run client)", () => 
 
   it("message from an unlinked user is answered with a fresh link", async () => {
     logged.length = 0;
-    const res = await send({ type: "message", text: "hi" });
+    const res = await send({ type: "message", text: "เชื่อม" });
     expect(res.statusCode).toBe(200);
     expect(logged).toHaveLength(1);
     expect(logged[0]).toContain("/line/link?token=");

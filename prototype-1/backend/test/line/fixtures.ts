@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { expect } from "vitest";
 import { config } from "../../src/config.js";
 import { prisma } from "../../src/db.js";
-import type { LineClient, LineResult } from "../../src/modules/line/client.js";
+import type { LineClient, LineMessage, LineResult } from "../../src/modules/line/client.js";
 
 /**
  * Shared helpers for the LINE DB tests. Every ID here is fake. The LINE secret and token come from the
@@ -66,6 +66,8 @@ export interface SentMessage {
   to?: string;
   replyToken?: string;
   text: string;
+  /** The messages as sent, quick replies included. */
+  messages: LineMessage[];
   retryKey?: string;
 }
 
@@ -91,11 +93,11 @@ export function fakeLine(): FakeLine {
     },
     client: {
       async reply(replyToken, messages) {
-        sent.push({ kind: "reply", replyToken, text: messages.map((m) => m.text).join("\n") });
+        sent.push({ kind: "reply", replyToken, text: messages.map((m) => m.text).join("\n"), messages });
         return answer();
       },
       async push(to, messages, retryKey) {
-        sent.push({ kind: "push", to, text: messages.map((m) => m.text).join("\n"), retryKey });
+        sent.push({ kind: "push", to, text: messages.map((m) => m.text).join("\n"), messages, retryKey });
         return answer();
       },
     },

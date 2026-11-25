@@ -39,7 +39,7 @@ function formatDate(ymd: string, lang: "th" | "en"): string {
 }
 
 /** Clips by code points, so an emoji is never split into a lone surrogate. */
-function clip(s: string, max: number): string {
+export function clip(s: string, max: number): string {
   const cps = Array.from(s);
   return cps.length > max ? `${cps.slice(0, max - 1).join("")}…` : s;
 }
