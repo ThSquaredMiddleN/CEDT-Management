@@ -27,7 +27,6 @@ const CHECK_LABELS: Record<string, string> = {
   "Current semester": "เป็นของภาคการศึกษานี้",
   "Belongs to this student": "เป็นของนิสิตคนนี้",
   "Not submitted before": "ใบเสร็จนี้ยังไม่เคยถูกส่งมาก่อน",
-  Funding: "แหล่งทุน",
 };
 
 const checkLabel = (name: string) => CHECK_LABELS[name] ?? name;
@@ -84,6 +83,8 @@ function describeUploadError(err: unknown): string {
         return "บัญชีนี้ยังไม่มีเลขประจำตัวนิสิต จึงส่งใบเสร็จไม่ได้ กรุณาติดต่อเจ้าหน้าที่";
       case 413:
         return "ไฟล์ใหญ่เกิน 10 MB กรุณาเลือกไฟล์ที่เล็กกว่า";
+      case 409:
+        return "ใบเสร็จของภาคการศึกษานี้ตรวจแล้ว หากต้องการเปลี่ยน กรุณาติดต่อเจ้าหน้าที่";
       case 415:
         return "รองรับเฉพาะไฟล์ PDF, JPG หรือ PNG";
       case 422:
@@ -99,8 +100,9 @@ function describeUploadError(err: unknown): string {
   return "ตรวจใบเสร็จไม่สำเร็จ กรุณาลองอีกครั้ง";
 }
 
-function ResultCard({ check }: { check: MyReceiptCheck }) {
-  const needsAction = check.verdict !== "ok";
+function ResultCard({ check, locked }: { check: MyReceiptCheck; locked: boolean }) {
+  // No "upload again" hint once the term is locked: only staff can change it then.
+  const needsAction = check.verdict !== "ok" && !locked;
   return (
     <Card className="flex flex-col gap-5 p-6">
       <div className="flex flex-wrap items-center gap-3">
@@ -143,6 +145,8 @@ export function MyReceiptPage() {
   const uploading = upload.isPending;
   const notice = localNotice ?? (upload.isError ? describeUploadError(upload.error) : null);
   const items = list.data?.items ?? [];
+  // Settled (passed, or checked by staff): no form. A 409 from a stale page gets the same message.
+  const locked = list.data?.locked ?? false;
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -170,42 +174,50 @@ export function MyReceiptPage() {
         </p>
       </header>
 
-      <Card className="p-6">
-        <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="my-receipt-file">ไฟล์ใบเสร็จ</Label>
-            <Input
-              id="my-receipt-file"
-              type="file"
-              accept={ACCEPT}
-              disabled={uploading}
-              onChange={(e) => {
-                setFile(e.target.files?.[0] ?? null);
-                setLocalNotice(null);
-              }}
-            />
-            <p className="text-xs text-neutral-500">PDF, JPG หรือ PNG ไม่เกิน 10 MB</p>
-          </div>
-
-          <div className="flex justify-end">
-            <Button type="submit" disabled={uploading || !file}>
-              {uploading && <Spinner />}
-              อัปโหลด
-            </Button>
-          </div>
-
-          {notice && (
-            <div
-              role="alert"
-              className="rounded-md border-2 border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger-fg"
-            >
-              {notice}
+      {locked ? (
+        <Card className="p-6">
+          <p role="status" className="text-sm text-neutral-700">
+            ใบเสร็จของภาคการศึกษานี้ตรวจแล้ว หากต้องการเปลี่ยนใบเสร็จ กรุณาติดต่อเจ้าหน้าที่
+          </p>
+        </Card>
+      ) : (
+        <Card className="p-6">
+          <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="my-receipt-file">ไฟล์ใบเสร็จ</Label>
+              <Input
+                id="my-receipt-file"
+                type="file"
+                accept={ACCEPT}
+                disabled={uploading}
+                onChange={(e) => {
+                  setFile(e.target.files?.[0] ?? null);
+                  setLocalNotice(null);
+                }}
+              />
+              <p className="text-xs text-neutral-500">PDF, JPG หรือ PNG ไม่เกิน 10 MB</p>
             </div>
-          )}
-        </form>
-      </Card>
 
-      {(upload.data?.check ?? items[0]) && <ResultCard check={upload.data?.check ?? items[0]!} />}
+            <div className="flex justify-end">
+              <Button type="submit" disabled={uploading || !file}>
+                {uploading && <Spinner />}
+                อัปโหลด
+              </Button>
+            </div>
+
+            {notice && (
+              <div
+                role="alert"
+                className="rounded-md border-2 border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger-fg"
+              >
+                {notice}
+              </div>
+            )}
+          </form>
+        </Card>
+      )}
+
+      {(upload.data?.check ?? items[0]) && <ResultCard check={upload.data?.check ?? items[0]!} locked={locked} />}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold tracking-tight">ที่ส่งแล้ว</h2>

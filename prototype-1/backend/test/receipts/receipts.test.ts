@@ -505,6 +505,11 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
     staffUserId = (await prisma.user.findUniqueOrThrow({ where: { email: "staff@test.local" } })).id;
     await prisma.receiptCheck.deleteMany({ where: { studentId: { in: TEST_STUDENTS } } });
   });
+  // Each case starts with no row for the student, so a passed row from one case can't lock the next.
+  beforeEach(async () => {
+    await prisma.receiptCheck.deleteMany({ where: { studentId: S_OWN } });
+  });
+  const warnChecks: SidecarCheckRow[] = [{ name: "Belongs to this student", state: "warn", detail: "prefix only" }];
 
   it("saves the row under the student's own number, ignoring a studentId or term sent in the form", async () => {
     const before = fake.calls.length;
@@ -568,14 +573,59 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
     expect(dup?.state).toBe("ok");
   });
 
-  it("replaces the term's row on a re-upload", async () => {
-    const first = (await submitMine(studentCookie, {}, "RC-MINE-1")).json() as { check: { id: string } };
+  it("replaces the term's row on a re-upload while the student's own check is unsettled", async () => {
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-MINE-1", checks: warnChecks });
+    const first = (await submitMine(studentCookie, {})).json() as { check: { id: string } };
+    expect((await listMine(studentCookie)).json()).toMatchObject({ locked: false });
     const again = await submitMine(studentCookie, {}, "RC-MINE-2");
     expect(again.statusCode).toBe(200);
     const rows = await prisma.receiptCheck.findMany({ where: { studentId: S_OWN } });
     expect(rows.length).toBe(1);
     expect(rows[0]!.reference).toBe("RC-MINE-2");
     expect((again.json() as { check: { id: string } }).check.id).toBe(first.check.id);
+  });
+
+  it("refuses a re-upload once the term's receipt passed (409), without calling the OCR service", async () => {
+    expect((await submitMine(studentCookie, {}, "RC-MINE-OK")).json()).toMatchObject({ check: { verdict: "ok" } });
+    expect((await listMine(studentCookie)).json()).toMatchObject({ locked: true });
+    const before = fake.calls.length;
+    const res = await submitMine(studentCookie, {}, "RC-MINE-LATER");
+    expect(res.statusCode).toBe(409);
+    expect(fake.calls.length).toBe(before);
+    const row = await prisma.receiptCheck.findUniqueOrThrow({
+      where: { studentId_term: { studentId: S_OWN, term: currentTerm() } },
+    });
+    expect(row.reference).toBe("RC-MINE-OK");
+  });
+
+  it("refuses a re-upload once staff checked the term (409), even when it did not pass", async () => {
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-MINE-STAFF", checks: warnChecks });
+    expect((await pdf({ studentId: S_OWN, term: currentTerm() })).statusCode).toBe(200);
+    expect((await listMine(studentCookie)).json()).toMatchObject({ locked: true });
+    const res = await submitMine(studentCookie, {}, "RC-MINE-AFTER-STAFF");
+    expect(res.statusCode).toBe(409);
+    // Staff can still check again.
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-MINE-STAFF-2" });
+    expect((await pdf({ studentId: S_OWN, term: currentTerm() })).statusCode).toBe(200);
+  });
+
+  it("hides the Funding row from students; staff still see it", async () => {
+    fake.reply = (call) =>
+      sidecarOk(call, {
+        reference: "RC-MINE-LOAN",
+        checks: [...warnChecks, { name: "Funding", state: "info", detail: "กยศ. student loan" }],
+      });
+    const res = await submitMine(studentCookie, {});
+    expect(res.statusCode).toBe(200);
+    const names = (res.json() as { check: { checks: { name: string }[] } }).check.checks.map((c) => c.name);
+    expect(names).not.toContain("Funding");
+    expect(res.body).not.toContain("กยศ");
+    const listed = await listMine(studentCookie);
+    expect(listed.body).not.toContain("Funding");
+    const row = await prisma.receiptCheck.findUniqueOrThrow({
+      where: { studentId_term: { studentId: S_OWN, term: currentTerm() } },
+    });
+    expect(row.checks as { name: string }[]).toContainEqual(expect.objectContaining({ name: "Funding" }));
   });
 
   it("requires a file field with 400", async () => {
@@ -613,8 +663,11 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
       },
     });
 
+    expect((await submitMine(studentCookie, {}, "RC-MINE-NOW")).statusCode).toBe(200);
+
     const res = await listMine(studentCookie);
     expect(res.statusCode).toBe(200);
+    expect(Object.keys(res.json()).sort()).toEqual(["items", "locked"]);
     const items = (res.json() as { items: Record<string, unknown>[] }).items;
     expect(items.map((i) => i.term)).toEqual([currentTerm(), TERM_OLD]);
     expect(items[1]!.id).toBe(old.id);

@@ -227,7 +227,8 @@ export function studentView(row: {
   createdAt: Date;
   checks: unknown;
 }) {
-  const checks = row.checks as { name: string; state: string }[];
+  // The Funding row is a staff note (กยศ. hints, English, sometimes "unreadable"): it never changes the verdict.
+  const checks = (row.checks as { name: string; state: string }[]).filter((c) => c.name !== FUNDING_CHECK);
   return {
     id: row.id,
     term: row.term,
@@ -236,6 +237,21 @@ export function studentView(row: {
     createdAt: row.createdAt,
     checks: checks.map((c) => ({ name: c.name, state: c.state })),
   };
+}
+
+const FUNDING_CHECK = "Funding";
+
+/**
+ * A student may replace their own check for a term only while it is unsettled: not passed, and not run by staff.
+ * Staff can always check again.
+ */
+export function studentLocked(row: { verdict: string; checkedById: string | null } | null, viewerId: string): boolean {
+  if (!row) return false;
+  return row.verdict === "ok" || row.checkedById !== viewerId;
+}
+
+export async function ownCheckForTerm(studentId: string, term: string) {
+  return prisma.receiptCheck.findUnique({ where: { studentId_term: { studentId, term } } });
 }
 
 /** The student's own checks, all terms, newest first. */

@@ -308,7 +308,7 @@ export interface LineStatus {
 /** Student view of a check (GET/POST /receipts/mine). No fields read, no name, no reference. */
 export interface MyReceiptCheckItem {
   name: string;
-  /** "info" is sent for the Funding row; the student page shows it as a neutral note. */
+  /** "info" is shown as a neutral note. The Funding row is staff-only and never sent here. */
   state: ReceiptCheckState;
 }
 

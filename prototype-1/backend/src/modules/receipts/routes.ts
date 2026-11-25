@@ -1,11 +1,13 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { AppError, badRequest, forbidden } from "../../lib/errors.js";
+import { AppError, badRequest, conflict, forbidden } from "../../lib/errors.js";
 import type { SessionUser } from "../../core/permissions.js";
 import { requireUser } from "../../plugins/auth.js";
 import {
   checkReceipt,
   currentTerm,
+  ownCheckForTerm,
+  studentLocked,
   deleteReceiptCheck,
   listOwnReceiptChecks,
   listReceiptChecks,
@@ -104,8 +106,14 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     const { file } = await readUpload(req);
     if (!file) throw badRequest("A `file` field is required");
 
+    const term = currentTerm();
+    // Checked before the OCR call, so a locked upload costs nothing.
+    if (studentLocked(await ownCheckForTerm(studentId, term), me.id)) {
+      throw conflict("This term's receipt is already checked. Ask staff to change it.");
+    }
+
     try {
-      const { check } = await checkReceipt({ studentId, term: currentTerm(), file, checkedById: me.id });
+      const { check } = await checkReceipt({ studentId, term, file, checkedById: me.id });
       return { check: studentView(check) };
     } catch (err) {
       if (err instanceof OcrUnavailableError) {
@@ -119,7 +127,9 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     const me = requireUser(req);
     const studentId = ownStudentNo(me);
     const rows = await listOwnReceiptChecks(studentId);
-    return { items: rows.map(studentView) };
+    const term = currentTerm();
+    // `locked`: this term's upload is settled, so the page shows "contact staff" instead of the form.
+    return { items: rows.map(studentView), locked: studentLocked(rows.find((r) => r.term === term) ?? null, me.id) };
   });
 
   app.get("/receipts", { config: { auth: "user", permission: "receipts.view" } }, async (req) => {

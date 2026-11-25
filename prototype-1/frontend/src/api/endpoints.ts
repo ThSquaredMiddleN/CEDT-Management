@@ -411,7 +411,7 @@ export function useDeleteReceiptCheck() {
 export function useMyReceipts() {
   return useQuery({
     queryKey: qk.myReceipts,
-    queryFn: () => api<{ items: MyReceiptCheck[] }>("/receipts/mine"),
+    queryFn: () => api<{ items: MyReceiptCheck[]; locked: boolean }>("/receipts/mine"),
   });
 }
 
