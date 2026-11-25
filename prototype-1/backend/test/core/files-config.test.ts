@@ -34,4 +34,21 @@ describe("file storage config", () => {
     const { config } = await load();
     expect(config.FILE_STORAGE).toBe("supabase");
   });
+
+  it("refuses the local driver in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("FILE_STORAGE", "local");
+    vi.stubEnv("FILE_STORAGE_ALLOW_LOCAL", "");
+    vi.resetModules();
+    await expect(load()).rejects.toThrow(/FILE_STORAGE_ALLOW_LOCAL/);
+  });
+
+  it("allows the local driver in production when FILE_STORAGE_ALLOW_LOCAL is set", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("FILE_STORAGE", "local");
+    vi.stubEnv("FILE_STORAGE_ALLOW_LOCAL", "true");
+    vi.resetModules();
+    const { config } = await load();
+    expect(config.FILE_STORAGE).toBe("local");
+  });
 });
