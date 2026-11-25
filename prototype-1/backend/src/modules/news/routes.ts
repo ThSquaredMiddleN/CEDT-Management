@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { removeStoredFile } from "../../core/files.js";
 import { can } from "../../core/permissions.js";
 import { requireUser } from "../../plugins/auth.js";
 import { badRequest } from "../../lib/errors.js";
@@ -20,10 +21,10 @@ import {
   getNewsImageRecord,
   listNews,
   publishNews,
+  readNewsImageBytes,
   removeNewsImageRecord,
   updateNews,
 } from "./service.js";
-import { readNewsImage, removeNewsImage } from "./storage.js";
 
 const multipartLimits = {
   fileSize: MAX_NEWS_IMAGE_BYTES,
@@ -130,10 +131,13 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
   app.delete("/news/:id/images/:imageId", { config: { auth: "user", permission: "news.manage" } }, async (req) => {
     const { id, imageId } = newsImageIdSchema.parse(req.params);
     const { storageKey } = await removeNewsImageRecord(id, imageId);
-    try {
-      await removeNewsImage(storageKey);
-    } catch (error) {
-      req.log.error({ err: error, storageKey }, "Failed to remove news image from disk");
+    if (storageKey) {
+      try {
+        await removeStoredFile(storageKey);
+      } catch (error) {
+        // The row is gone; scripts/files-sweep.ts removes the orphaned contents later.
+        req.log.error({ err: error, storageKey }, "Failed to remove news image contents");
+      }
     }
     return { ok: true };
   });
@@ -141,7 +145,7 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
   app.get("/news/:id/images/:imageId", { config: { auth: "public" } }, async (req, reply) => {
     const { id, imageId } = newsImageIdSchema.parse(req.params);
     const image = await getNewsImageRecord(id, imageId, { publishedOnly: !can(req.user, "news.view") });
-    const bytes = await readNewsImage(image.storageKey);
+    const bytes = await readNewsImageBytes(image.fileId);
     return reply
       .type(image.mimeType)
       .header("Content-Disposition", `inline; filename="${encodeURIComponent(image.originalName)}"`)
