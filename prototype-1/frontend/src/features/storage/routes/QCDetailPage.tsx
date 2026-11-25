@@ -1,6 +1,8 @@
 import { CircleCheck, Lock, User, Users } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useAuth } from "@/app/AuthProvider";
+import { can } from "@/app/permissions";
 import { EmptyState, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,6 +11,7 @@ import { ResultDialog, StoragePage } from "../components/layout";
 import { LIABILITY_FORM_ID, LiabilityForm, type LiabilityValues } from "../components/LiabilityForm";
 import { PromptPayQR } from "../components/PromptPayQR";
 import { QCItemRow, emptyResults, resultsTotal } from "../components/QCItemRow";
+import { bahtToSatang, formatBaht, satangToBaht } from "../lib/money";
 import type { QCRequest, QCResults } from "../types";
 
 type Outcome = { title: string; message: string; qrAmount?: number };
@@ -46,7 +49,7 @@ function InspectView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) => 
               : {
                   title: "สร้างบิลสำเร็จ",
                   message: "Task เปลี่ยนสถานะเป็น PENDING_PAYMENT และส่ง QR Code ให้กลุ่มเรียบร้อย (Task ยังไม่ปิด)",
-                  qrAmount: fineAmount,
+                  qrAmount: satangToBaht(fineAmount),
                 },
           ),
       },
@@ -87,7 +90,7 @@ function InspectView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) => 
           </div>
 
           {!readOnly && hasLiability && (
-            <LiabilityForm onSubmit={(v: LiabilityValues) => send(v.amount, v.remark)} />
+            <LiabilityForm onSubmit={(v: LiabilityValues) => send(bahtToSatang(v.amount), v.remark)} />
           )}
 
           {submitQC.isError && <p role="alert" className="text-sm text-status-danger-fg">{(submitQC.error as Error).message}</p>}
@@ -140,7 +143,7 @@ function SlipVerifyView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) 
           <div className="flex w-full justify-center md:w-1/2">
             <div className="flex aspect-[3/5] w-full max-w-sm flex-col items-center justify-center rounded-xl border border-neutral-200 bg-neutral-50 p-2 text-center text-grey-200">
               <p className="font-bold">Bank Slip</p>
-              <p>{(slip?.amount ?? req.fineAmount).toFixed(2)} THB</p>
+              <p>{formatBaht(slip?.amount ?? req.fineAmount)} THB</p>
               <p className="mt-2 text-xs">(พื้นที่แสดงรูปสลิปที่นิสิตอัปโหลด)</p>
             </div>
           </div>
@@ -149,7 +152,7 @@ function SlipVerifyView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) 
             <dl className="mb-4 space-y-4 rounded-xl border border-neutral-200 bg-neutral-50 p-6">
               <div className="flex items-center justify-between">
                 <dt className="text-grey-400">ยอดเรียกเก็บ:</dt>
-                <dd className="text-xl font-bold text-status-danger-fg">{req.fineAmount.toLocaleString()}.00 บาท</dd>
+                <dd className="text-xl font-bold text-status-danger-fg">{formatBaht(req.fineAmount)} บาท</dd>
               </div>
               {slip && (
                 <>
@@ -163,7 +166,7 @@ function SlipVerifyView({ req, onDone }: { req: QCRequest; onDone: (o: Outcome) 
             </dl>
 
             <div className="mb-4 flex items-center gap-4 rounded-xl border border-neutral-200 p-4">
-              <PromptPayQR amount={req.fineAmount} size={96} />
+              <PromptPayQR amount={satangToBaht(req.fineAmount)} size={96} />
               <p className="text-xs text-grey-400">QR PromptPay ที่ส่งให้นิสิต ใช้เทียบยอดกับสลิป</p>
             </div>
 
@@ -187,6 +190,8 @@ export function QCDetailPage() {
   const { id = "" } = useParams();
   const { data, isError } = useQCRequest(id);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canVerify = !!user && can(user, "storage.manage.payment");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
@@ -196,7 +201,11 @@ export function QCDetailPage() {
       ) : !data ? (
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : data.status === "PENDING_PAYMENT" ? (
-        <SlipVerifyView req={data} onDone={setOutcome} />
+        canVerify ? (
+          <SlipVerifyView req={data} onDone={setOutcome} />
+        ) : (
+          <p className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm text-grey-400">รอเจ้าหน้าที่ยืนยันการชำระเงิน</p>
+        )
       ) : (
         <InspectView req={data} onDone={setOutcome} />
       )}
@@ -209,7 +218,7 @@ export function QCDetailPage() {
         {outcome?.qrAmount ? (
           <div className="flex flex-col items-center gap-2">
             <PromptPayQR amount={outcome.qrAmount} />
-            <p className="text-sm font-bold text-status-danger-fg">{outcome.qrAmount.toLocaleString()} บาท</p>
+            <p className="text-sm font-bold text-status-danger-fg">{formatBaht(bahtToSatang(outcome.qrAmount))} บาท</p>
           </div>
         ) : null}
       </ResultDialog>

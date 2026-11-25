@@ -30,6 +30,8 @@ model User {
   auditLogs           AuditLog[]
   lineAccount         LineAccount?
   filesUploaded       File[]         @relation("filesUploaded")
+  storageRequests     StorageRequest[] @relation("storageRequestedBy")
+  storageRejected     StorageRequest[] @relation("storageRejectedBy")
 
   advisor                      User?                        @relation("advisor", fields: [advisorId], references: [id], onDelete: Restrict)
   advisees                     User[]                       @relation("advisor")
@@ -220,6 +222,7 @@ model Group {
   term      Term?         @relation(fields: [termId], references: [id], onDelete: Restrict)
   createdBy User?         @relation(fields: [createdById], references: [id], onDelete: Restrict)
   members   GroupMember[]
+  storageRequests StorageRequest[]
 
   @@unique([termId, courseId, section, nameKey])
   @@index([type, isActive])

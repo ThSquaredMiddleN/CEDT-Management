@@ -11,7 +11,7 @@ import { StoragePage } from "../components/layout";
 export function BorrowListPage() {
   const { data, isLoading, isError } = useBorrowRequests();
   const [showCancelled, setShowCancelled] = useState(false);
-  const rows = data?.filter((r) => showCancelled || r.status !== "CANCELLED");
+  const rows = data?.filter((r) => showCancelled || (r.status !== "CANCELLED" && r.status !== "REJECTED"));
 
   return (
     <StoragePage
@@ -27,7 +27,7 @@ export function BorrowListPage() {
             onChange={(e) => setShowCancelled(e.target.checked)}
             className="size-4 accent-brand-primary"
           />
-          แสดงที่ยกเลิก
+          แสดงที่ยกเลิก/ปฏิเสธ
         </label>
         <Button asChild variant="outlined" size="medium">
           <Link to="/admin/storage/borrow/walk-in">จ่ายหน้าเคาน์เตอร์ (Walk-in)</Link>
@@ -39,8 +39,8 @@ export function BorrowListPage() {
         {isError && <EmptyState title="โหลดรายการไม่สำเร็จ" />}
         {rows?.length === 0 && <EmptyState
             title={
-              !showCancelled && data?.some((r) => r.status === "CANCELLED")
-                ? "ไม่มีคำขอ (ซ่อนคำขอที่ยกเลิกไว้)"
+              !showCancelled && data?.some((r) => r.status === "CANCELLED" || r.status === "REJECTED")
+                ? "ไม่มีคำขอ (ซ่อนคำขอที่ยกเลิก/ปฏิเสธไว้)"
                 : "ไม่มีคำขอ"
             }
           />}
@@ -61,6 +61,9 @@ export function BorrowListPage() {
                   <span className="text-xs text-grey-400">
                     {r.cancelReason === "RESTOCK_EXPIRED" ? "หมดเวลาเปิดคำขอ" : "ผู้ขอยกเลิก"}
                   </span>
+                )}
+                {r.status === "REJECTED" && r.rejectReason && (
+                  <span className="text-xs text-grey-400">เหตุผล: {r.rejectReason}</span>
                 )}
                 {r.restock && (
                   <span className="rounded-full border border-status-info-border bg-status-info-bg px-2 py-0.5 text-[10px] font-bold text-status-info-fg">

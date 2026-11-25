@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useQCRequests } from "../api/hooks";
 import { TaskStatusBadge } from "../components/badges";
 import { StoragePage } from "../components/layout";
+import { formatBaht } from "../lib/money";
 
 export function QCListPage() {
   const { data, isLoading, isError } = useQCRequests();
@@ -34,7 +35,7 @@ export function QCListPage() {
               </p>
               {r.fineAmount > 0 && (
                 <p className="mt-2 flex items-center gap-1 font-body text-body-sm-emphasize text-status-danger-fg">
-                  <Receipt className="size-4" aria-hidden="true" /> ยอดรอชำระ: {r.fineAmount.toLocaleString()} บาท
+                  <Receipt className="size-4" aria-hidden="true" /> ยอดรอชำระ: {formatBaht(r.fineAmount)} บาท
                 </p>
               )}
             </div>

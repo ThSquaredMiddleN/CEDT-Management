@@ -1,6 +1,5 @@
 import { useSearchParams } from "react-router-dom";
 import { useCurrentStudent, useMyPendingReturns, useMyRequests } from "../api/hooks";
-import { DevStudentSwitcher } from "../components/DevStudentSwitcher";
 import { StoragePage } from "../components/layout";
 import { RestockBanner } from "../components/RestockBanner";
 import { Tabs } from "../components/Tabs";
@@ -11,8 +10,8 @@ import { OwedPage } from "./OwedPage";
 const TABS = ["borrow", "requests", "owed"] as const;
 type TabValue = (typeof TABS)[number];
 
-/** /student/storage?tab=borrow|requests|owed&id=<requestId> */
-export function StudentStoragePage() {
+/** /student/storage?tab=borrow|requests|owed&id=<requestId> (the signed-in student) */
+export function StorageHubPage() {
   const [params, setParams] = useSearchParams();
   const raw = params.get("tab");
   const tab: TabValue = TABS.includes(raw as TabValue) ? (raw as TabValue) : "borrow";
@@ -30,11 +29,6 @@ export function StudentStoragePage() {
 
   return (
     <StoragePage wide title="คลังอุปกรณ์" subtitle="ยืมอุปกรณ์ ติดตามคำขอ และดูรายการที่ต้องคืน">
-      {import.meta.env.DEV && (
-        <div className="flex justify-end">
-          <DevStudentSwitcher />
-        </div>
-      )}
       <RestockBanner requests={requests.data ?? []} />
       <Tabs
         label="เมนูคลังอุปกรณ์"

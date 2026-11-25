@@ -63,6 +63,14 @@ function RequestDetail({ req }: { req: BorrowRequest }) {
         <RequestStatusPill req={req} />
       </div>
 
+      {req.status === "REJECTED" && (
+        <div role="note" className="rounded-lg border border-status-danger-border bg-status-danger-bg p-4 font-body text-body-sm text-status-danger-fg">
+          <p className="font-bold">คำขอนี้ถูกปฏิเสธ</p>
+          {req.rejectReason && <p className="mt-1">เหตุผล: {req.rejectReason}</p>}
+          <p className="mt-1 text-xs">ถ้ายังต้องการยืม ส่งคำขอใหม่ได้ที่แท็บ "ยืมอุปกรณ์"</p>
+        </div>
+      )}
+
       {(req.status === "READY_FOR_PICKUP" || req.status === "CLOSED") && req.pickup && <PickupCard pickup={req.pickup} />}
 
       {req.status === "CLOSED" && (

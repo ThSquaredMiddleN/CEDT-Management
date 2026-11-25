@@ -25,6 +25,7 @@ const TASK_STYLES: Record<string, string> = {
   UNFULFILLED: "border-status-danger-border bg-status-danger-bg text-status-danger-fg",
   PENDING_PAYMENT: "border-status-warning-border bg-status-warning-bg text-status-warning-fg",
   CANCELLED: "border-grey-200 bg-grey-100 text-grey-400",
+  REJECTED: "border-status-danger-border bg-status-danger-bg text-status-danger-fg",
 };
 
 export function TaskStatusBadge({ status }: { status: BorrowStatus | QCRequestStatus }) {
@@ -64,6 +65,7 @@ const REQUEST_PILLS: Record<BorrowStatus, { label: string; cls: string }> = {
   READY_FOR_PICKUP: { label: "พร้อมรับ", cls: TONE.success },
   UNFULFILLED: { label: "ของหมด", cls: TONE.warning },
   CANCELLED: { label: "ยกเลิก", cls: TONE.grey },
+  REJECTED: { label: "ถูกปฏิเสธ", cls: TONE.danger },
   CLOSED: { label: "รับของแล้ว", cls: TONE.grey },
 };
 
