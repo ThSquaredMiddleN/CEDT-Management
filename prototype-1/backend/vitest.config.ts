@@ -54,6 +54,9 @@ export default defineConfig({
       LINE_CHANNEL_SECRET: "test-line-channel-secret",
       LINE_CHANNEL_ACCESS_TOKEN: "test-line-access-token",
       LINE_DRY_RUN: "false",
+      // Tests never upload to a real bucket, even if .env selects supabase.
+      FILE_STORAGE: "local",
+      FILE_STORAGE_DIR: process.env.FILE_STORAGE_DIR ?? "var/test-files",
     },
   },
 });

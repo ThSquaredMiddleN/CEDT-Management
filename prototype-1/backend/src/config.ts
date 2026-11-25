@@ -14,7 +14,19 @@ const schema = z.object({
   SESSION_COOKIE_NAME: z.string().default("labsync_session"),
   SESSION_TTL_HOURS: z.coerce.number().default(168),
   APP_TZ: z.string().default("Asia/Bangkok"),
+  // Legacy: where news images lived before step 6. Read only by scripts/files-backfill.ts.
   NEWS_UPLOAD_DIR: z.string().default("var/news-uploads"),
+  // Where file contents live (shared plan 2.9). Rows in `files` hold the metadata.
+  FILE_STORAGE: z.preprocess(emptyAsUnset, z.enum(["local", "supabase"]).default("local")),
+  // local driver: folder for file contents (relative to the backend folder). Never served directly.
+  FILE_STORAGE_DIR: z.preprocess(emptyAsUnset, z.string().default("storage")),
+  // Production refuses the local driver unless this is set: most hosts (e.g. Render free) wipe the disk on restart.
+  // Set it only when FILE_STORAGE_DIR is on a persistent disk.
+  FILE_STORAGE_ALLOW_LOCAL: flag.transform((v) => v === "true" || v === "1"),
+  // supabase driver: a PRIVATE bucket, reached only by the backend with the service role key.
+  SUPABASE_URL: z.preprocess(emptyAsUnset, z.string().url().optional()),
+  SUPABASE_SERVICE_ROLE_KEY: z.preprocess(emptyAsUnset, z.string().min(1).optional()),
+  SUPABASE_STORAGE_BUCKET: z.preprocess(emptyAsUnset, z.string().min(1).default("files")),
   // LINE is optional: it runs when the secret is set and either the token or LINE_DRY_RUN is set (see lineEnabled).
   LINE_CHANNEL_SECRET: z.string().optional(),
   LINE_CHANNEL_ACCESS_TOKEN: z.string().optional(),
@@ -54,6 +66,15 @@ export const isProd = config.NODE_ENV === "production";
 // Dry-run logs one-time link tokens and LINE IDs and marks every notification delivered without sending it.
 if (isProd && config.LINE_DRY_RUN) {
   throw new Error("LINE_DRY_RUN must not be set in production");
+}
+if (config.FILE_STORAGE === "supabase" && !(config.SUPABASE_URL && config.SUPABASE_SERVICE_ROLE_KEY)) {
+  throw new Error("FILE_STORAGE=supabase needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+}
+if (isProd && config.FILE_STORAGE === "local" && !config.FILE_STORAGE_ALLOW_LOCAL) {
+  throw new Error(
+    "FILE_STORAGE=local in production loses files when the host wipes its disk. " +
+      "Set FILE_STORAGE=supabase, or FILE_STORAGE_ALLOW_LOCAL=true if FILE_STORAGE_DIR is on a persistent disk.",
+  );
 }
 export const lineEnabled = Boolean(
   config.LINE_CHANNEL_SECRET && (config.LINE_CHANNEL_ACCESS_TOKEN || config.LINE_DRY_RUN),

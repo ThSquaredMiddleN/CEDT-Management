@@ -7,7 +7,7 @@ import {
   type IncomingNewsImage,
 } from "./image-validation.js";
 import type { NewsFields, NewsUpdate } from "./schemas.js";
-import { removeNewsImage, saveNewsImage } from "./storage.js";
+import { deleteFileRecord, readFile, withFileTransaction, type FileWriter } from "../../core/files.js";
 
 const newsSelection = {
   id: true,
@@ -62,41 +62,41 @@ export async function getNews(id: string, options: { publishedOnly?: boolean } =
   return { news };
 }
 
+async function storeImages(files: FileWriter, images: readonly IncomingNewsImage[], firstPosition: number, authorId: string | null) {
+  const stored = [];
+  for (const [index, image] of images.entries()) {
+    const file = await files.save({
+      buffer: image.buffer,
+      mime: image.mimeType,
+      originalName: image.filename,
+      module: "news",
+      uploadedBy: authorId,
+    });
+    stored.push({
+      fileId: file.id,
+      originalName: image.filename,
+      mimeType: image.mimeType,
+      sizeBytes: image.buffer.length,
+      position: firstPosition + index,
+    });
+  }
+  return stored;
+}
+
 export async function createNews(
   authorId: string,
   fields: NewsFields,
   incomingImages: readonly IncomingNewsImage[],
 ) {
   const images = validateNewsImages(incomingImages);
-  const savedKeys: string[] = [];
-
-  try {
-    const storedImages = [];
-    for (const [position, image] of images.entries()) {
-      const storageKey = await saveNewsImage(image);
-      savedKeys.push(storageKey);
-      storedImages.push({
-        storageKey,
-        originalName: image.filename,
-        mimeType: image.mimeType,
-        sizeBytes: image.buffer.length,
-        position,
-      });
-    }
-
-    const news = await prisma.newsArticle.create({
-      data: {
-        ...sanitizedFields(fields),
-        authorId,
-        images: { create: storedImages },
-      },
+  const news = await withFileTransaction(async (tx, files) => {
+    const storedImages = await storeImages(files, images, 0, authorId);
+    return tx.newsArticle.create({
+      data: { ...sanitizedFields(fields), authorId, images: { create: storedImages } },
       select: newsSelection,
     });
-    return { news };
-  } catch (error) {
-    await Promise.all(savedKeys.map((storageKey) => removeNewsImage(storageKey)));
-    throw error;
-  }
+  });
+  return { news };
 }
 
 export async function updateNews(id: string, fields: NewsUpdate) {
@@ -115,40 +115,25 @@ export async function addNewsImages(id: string, incomingImages: readonly Incomin
   const images = validateNewsImages(incomingImages);
   if (images.length === 0) return getNews(id);
 
-  const savedKeys: string[] = [];
-  try {
-    const news = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "news_articles" WHERE "id" = ${id}::uuid FOR UPDATE`;
-      const existing = await tx.newsArticle.findUnique({
-        where: { id },
-        select: { id: true, _count: { select: { images: true } } },
-      });
-      if (!existing) throw notFound("News not found");
-      validateNewsImageCount(existing._count.images, images.length);
-
-      const storedImages = [];
-      for (const [index, image] of images.entries()) {
-        const storageKey = await saveNewsImage(image);
-        savedKeys.push(storageKey);
-        storedImages.push({
-          newsId: id,
-          storageKey,
-          originalName: image.filename,
-          mimeType: image.mimeType,
-          sizeBytes: image.buffer.length,
-          position: existing._count.images + index,
-        });
-      }
-
-      await tx.newsImage.createMany({ data: storedImages });
-      await tx.newsArticle.update({ where: { id }, data: { updatedAt: new Date() } });
-      return tx.newsArticle.findUniqueOrThrow({ where: { id }, select: newsSelection });
+  const news = await withFileTransaction(async (tx, files) => {
+    await tx.$queryRaw`SELECT "id" FROM "news_articles" WHERE "id" = ${id}::uuid FOR UPDATE`;
+    const existing = await tx.newsArticle.findUnique({
+      where: { id },
+      select: { id: true, _count: { select: { images: true } } },
     });
-    return { news };
-  } catch (error) {
-    await Promise.all(savedKeys.map((storageKey) => removeNewsImage(storageKey)));
-    throw error;
-  }
+    if (!existing) throw notFound("News not found");
+    validateNewsImageCount(existing._count.images, images.length);
+
+    const storedImages = (await storeImages(files, images, existing._count.images, null)).map((img) => ({
+      ...img,
+      newsId: id,
+    }));
+
+    await tx.newsImage.createMany({ data: storedImages });
+    await tx.newsArticle.update({ where: { id }, data: { updatedAt: new Date() } });
+    return tx.newsArticle.findUniqueOrThrow({ where: { id }, select: newsSelection });
+  });
+  return { news };
 }
 
 export async function removeNewsImageRecord(id: string, imageId: string) {
@@ -156,11 +141,12 @@ export async function removeNewsImageRecord(id: string, imageId: string) {
     await tx.$queryRaw`SELECT "id" FROM "news_articles" WHERE "id" = ${id}::uuid FOR UPDATE`;
     const image = await tx.newsImage.findFirst({
       where: { id: imageId, newsId: id },
-      select: { id: true, storageKey: true },
+      select: { id: true, fileId: true },
     });
     if (!image) throw notFound("News image not found");
 
     await tx.newsImage.delete({ where: { id: imageId } });
+    const storageKey = await deleteFileRecord(tx, image.fileId);
     const remaining = await tx.newsImage.findMany({
       where: { newsId: id },
       select: { id: true },
@@ -171,7 +157,7 @@ export async function removeNewsImageRecord(id: string, imageId: string) {
     }
     await tx.newsArticle.update({ where: { id }, data: { updatedAt: new Date() } });
 
-    return { storageKey: image.storageKey };
+    return { storageKey };
   });
 }
 
@@ -186,10 +172,14 @@ export async function getNewsImageRecord(
       newsId: id,
       ...(options.publishedOnly ? { news: { status: "published" } } : {}),
     },
-    select: { storageKey: true, mimeType: true, originalName: true },
+    select: { fileId: true, mimeType: true, originalName: true },
   });
   if (!image) throw notFound("News image not found");
   return image;
+}
+
+export async function readNewsImageBytes(fileId: string): Promise<Buffer> {
+  return (await readFile(fileId)).buffer;
 }
 
 export async function publishNews(id: string) {

@@ -29,6 +29,7 @@ model User {
   groupsCreated       Group[]
   auditLogs           AuditLog[]
   lineAccount         LineAccount?
+  filesUploaded       File[]         @relation("filesUploaded")
 
   advisor                      User?                        @relation("advisor", fields: [advisorId], references: [id], onDelete: Restrict)
   advisees                     User[]                       @relation("advisor")
@@ -301,4 +302,27 @@ model UserPermission {
 
   @@id([userId, permission])
   @@map("user_permissions")
+}
+
+/// File metadata (shared plan 3.7). Contents live in fileStore, never in the database.
+/// Write only through src/core/files.ts. Module tables point here with file_id.
+model File {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// "<year>/<month>/<uuid>" in the local folder or the bucket.
+  storageKey   String   @unique @map("storage_key")
+  originalName String   @map("original_name")
+  mime         String
+  /// Bytes.
+  size         Int
+  sha256       String   @db.Char(64)
+  module       String
+  uploadedById String?  @map("uploaded_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  uploadedBy       User?             @relation("filesUploaded", fields: [uploadedById], references: [id], onDelete: Restrict)
+  courseChangeFile CourseChangeFile?
+  newsImage        NewsImage?
+
+  @@index([module, createdAt])
+  @@map("files")
 }
