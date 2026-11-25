@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "../../src/db.js";
+import { runExpirySweep } from "../../src/modules/storage/job.js";
 import { listMyOwed } from "../../src/modules/storage/returns.js";
 import {
   cancelMyRequest, createRequest, getMe, getRequest, issueRequest, listMyRequests, listRequests, lookupStudent,
@@ -136,6 +137,16 @@ describe("cancel and restock expiry", () => {
     expect(await prisma.auditLog.count({ where: { action: "storage.request.expired" } })).toBeGreaterThan(0);
     const pi = await inv("EQ-001");
     expect([pi.reserved, pi.available]).toEqual([0, 2]);
+  });
+
+  it("the background sweep cancels expired holds without any request", async () => {
+    await restock();
+    const start = Date.now();
+    clock.now = () => new Date(start + 25 * HOUR);
+    await runExpirySweep();
+    const row = await prisma.storageRequest.findUniqueOrThrow({ where: { requestNo: "REQ-B-101" } });
+    expect([row.status, row.cancelReason]).toEqual(["cancelled", "restock_expired"]);
+    expect(await prisma.notification.count({ where: { type: "storage.hold_expired", subjectId: row.id } })).toBe(2);
   });
 });
 

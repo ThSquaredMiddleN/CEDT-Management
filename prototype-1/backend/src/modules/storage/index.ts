@@ -1,4 +1,5 @@
 import { API_PREFIX, type AppModule } from "../types.js";
+import { startExpiryJob } from "./job.js";
 import { storageRoutes } from "./routes.js";
 
 export const storageModule: AppModule = {
@@ -14,5 +15,6 @@ export const storageModule: AppModule = {
   ],
   async setup(app) {
     await app.register(storageRoutes, { prefix: `${API_PREFIX}/storage` });
+    startExpiryJob(app);
   },
 };
