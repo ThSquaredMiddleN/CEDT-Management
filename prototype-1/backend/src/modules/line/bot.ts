@@ -1,6 +1,7 @@
 import { config } from "../../config.js";
 import { listAnnouncements } from "../announcements/service.js";
 import { listNews } from "../news/service.js";
+import { lineSummary } from "../receipts/service.js";
 import type { LineMessage, LineQuickReplyItem } from "./client.js";
 import { FAQ } from "./faq.js";
 import { alreadyLinked, clip, linkFor } from "./messages.js";
@@ -8,7 +9,8 @@ import { alreadyLinked, clip, linkFor } from "./messages.js";
 /**
  * Answers for text sent to the LINE bot (step 1 of the chatbot: fixed keywords, no AI).
  * Reads only published news and announcements, which the web portal shows without login, so an unlinked user
- * gets them too. Nothing here logs: message text and names must not reach the logs.
+ * gets them too. Step 2 adds one personal answer, the receipt status, for linked students. Nothing here logs:
+ * message text, names and the internal user ID must not reach the logs or the reply.
  */
 
 export type Viewer =
@@ -17,13 +19,15 @@ export type Viewer =
       /** The one-time link message text. The caller issues the token; answerText only places it. */
       linkText?: string;
     }
-  | { linked: true; name: string };
+  /** `userId` is the internal user ID, used only to look up that user's own data. It is never shown. */
+  | { linked: true; name: string; userId: string; canReceipts: boolean };
 
 export type Intent =
   | { kind: "menu" }
   | { kind: "news" }
   | { kind: "announcements" }
   | { kind: "faqList" }
+  | { kind: "receipt" }
   | { kind: "faq"; index: number }
   | { kind: "link" }
   | { kind: "unknown" };
@@ -38,6 +42,10 @@ const MENU_EXACT = ["เมนู", "ช่วย", "ช่วยเหลือ
 const NEWS_WORDS = ["ข่าว", "news"];
 const ANNOUNCEMENT_WORDS = ["ประกาศ", "announcement"];
 const FAQ_WORDS = ["faq", "คำถาม"];
+/** Receipt words are matched inside the text ("ใบเสร็จค่าเทอม"); none of them is part of another intent's words. */
+const RECEIPT_WORDS = ["ใบเสร็จ", "สถานะใบเสร็จ", "receipt"];
+/** "ค่าเทอม" alone is too broad inside a sentence ("ค่าเทอมแพงมาก"), so these match the whole text. */
+const RECEIPT_EXACT = ["ค่าเทอม", "สถานะค่าเทอม"];
 /** Link words match the whole text too: "blink 182" or "เชื่อมั่น" must not issue a login link. */
 const LINK_EXACT = ["เชื่อม", "เชื่อมบัญชี", "link", "link account"];
 /** A word that contains "ประกาศ" but is not about announcements; removed before matching. */
@@ -54,7 +62,7 @@ const hasAny = (text: string, words: readonly string[]): boolean => words.some((
 
 /**
  * The most specific match wins: an FAQ entry's own keywords first (so "unlink" is not taken for "link"),
- * then news, announcements, the FAQ list, linking, and last the exact menu words.
+ * then news, announcements, receipts, the FAQ list, linking, and last the exact menu words.
  */
 export function intentOf(rawText: string): Intent {
   const text = normalise(rawText);
@@ -62,6 +70,7 @@ export function intentOf(rawText: string): Intent {
   if (faqIndex >= 0) return { kind: "faq", index: faqIndex };
   if (hasAny(text, NEWS_WORDS)) return { kind: "news" };
   if (hasAny(text.replaceAll(NOT_ANNOUNCEMENT, ""), ANNOUNCEMENT_WORDS)) return { kind: "announcements" };
+  if (hasAny(text, RECEIPT_WORDS) || RECEIPT_EXACT.includes(text)) return { kind: "receipt" };
   if (hasAny(text, FAQ_WORDS)) return { kind: "faqList" };
   if (LINK_EXACT.includes(text)) return { kind: "link" };
   if (MENU_EXACT.includes(text)) return { kind: "menu" };
@@ -70,7 +79,7 @@ export function intentOf(rawText: string): Intent {
 
 /** True when an unlinked user's answer should carry a one-time link (asked to link, or the text was not understood). */
 export function needsLinkOffer(intent: Intent, viewer: { linked: boolean }): boolean {
-  return !viewer.linked && (intent.kind === "link" || intent.kind === "unknown");
+  return !viewer.linked && (intent.kind === "link" || intent.kind === "unknown" || intent.kind === "receipt");
 }
 
 const quickItem = (label: string, text: string): LineQuickReplyItem => ({
@@ -81,6 +90,7 @@ const quickItem = (label: string, text: string): LineQuickReplyItem => ({
 function quickReplies(viewer: Viewer): NonNullable<LineMessage["quickReply"]> {
   const items = [quickItem("ข่าว", "ข่าว"), quickItem("ประกาศ", "ประกาศ"), quickItem("คำถามที่พบบ่อย", "คำถาม"), quickItem("เมนู", "เมนู")];
   if (!viewer.linked) items.push(quickItem("เชื่อมบัญชี", "เชื่อม"));
+  else if (viewer.canReceipts) items.push(quickItem("ใบเสร็จ", "ใบเสร็จ"));
   return { items };
 }
 
@@ -117,6 +127,17 @@ async function messagesFor(intent: Intent, viewer: Viewer): Promise<LineMessage[
     case "faq": {
       const entry = FAQ[intent.index];
       return [text(entry ? entry.answer(config.APP_ORIGIN) : "ยังตอบไม่ได้")];
+    }
+    case "receipt": {
+      if (!viewer.linked) {
+        const ask = "ต้องเชื่อมบัญชี LINE ก่อน จึงจะดูสถานะใบเสร็จได้";
+        return viewer.linkText ? [text(ask), text(viewer.linkText)] : [text(`${ask}\nพิมพ์ "เชื่อม" เพื่อรับลิงก์เชื่อมบัญชี`)];
+      }
+      const summary = await lineSummary(viewer.userId);
+      if ("reason" in summary) {
+        return [text(summary.reason === "not-student" ? "เมนูนี้สำหรับนักศึกษา" : "บัญชีนี้ยังไม่มีสิทธิ์ดูสถานะใบเสร็จ ติดต่อเจ้าหน้าที่")];
+      }
+      return [text(`${summary.text}\n${linkFor(config.APP_ORIGIN, summary.link)}`)];
     }
     case "link": {
       if (viewer.linked) return [text(alreadyLinked(viewer.name))];
