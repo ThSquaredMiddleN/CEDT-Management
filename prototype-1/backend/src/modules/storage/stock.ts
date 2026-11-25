@@ -54,7 +54,7 @@ export async function issuableQty(tx: Tx, itemId: string, requestId?: string): P
  * with some sold-out lines stays OPEN so staff can still hand out the rest. Returns the swept request numbers.
  */
 export async function sweep(tx: Tx): Promise<string[]> {
-  const open = await tx.storageRequest.findMany({ where: { status: "open" }, include: { lines: true }, orderBy: { createdAt: "asc" } });
+  const open = await tx.storageRequest.findMany({ where: { status: "open" }, include: { lines: true }, orderBy: [{ createdAt: "asc" }, { requestNo: "asc" }] });
   const swept: string[] = [];
   for (const req of open) {
     let issuable = false;
@@ -83,7 +83,7 @@ export async function restockItem(tx: Tx, itemId: string, qty: number, now: Date
   const queue = await tx.storageRequest.findMany({
     where: { status: "unfulfilled", lines: { some: { itemId } } },
     include: { lines: true },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "asc" }, { requestNo: "asc" }],
   });
   for (const req of queue) {
     if (free <= 0) break;
@@ -102,7 +102,9 @@ export async function restockItem(tx: Tx, itemId: string, qty: number, now: Date
       where: { id: req.id },
       data: { restockFlaggedAt: req.restockFlaggedAt ?? now, restockExpiresAt: expiresAt },
     });
-    await notifyRequest(tx, flagged, "storage.restock", `อุปกรณ์ในคำขอ ${req.requestNo} มีของแล้ว เปิดคำขอใหม่ภายใน 24 ชั่วโมง`);
+    if (!req.restockFlaggedAt) {
+      await notifyRequest(tx, flagged, "storage.restock", `อุปกรณ์ในคำขอ ${req.requestNo} มีของแล้ว เปิดคำขอใหม่ภายใน 24 ชั่วโมง`);
+    }
   }
 }
 
@@ -134,6 +136,7 @@ export async function expireHolds(tx: Tx, now: Date): Promise<void> {
         before: { status: "unfulfilled" },
         after: { status: "cancelled", cancelReason: "restock_expired" },
       });
+      await releaseHolds(tx, req.id, now);
       await notifyRequest(tx, cancelled, "storage.hold_expired", `คำขอ ${req.requestNo} ถูกยกเลิก เพราะไม่ได้เปิดคำขอใหม่ภายในเวลาที่จองไว้`);
     } else if ((await tx.storageReservation.count({ where: { requestId: req.id } })) === 0) {
       await tx.storageRequest.update({ where: { id: req.id }, data: { restockFlaggedAt: null, restockExpiresAt: null } });
