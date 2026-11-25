@@ -33,6 +33,10 @@ function Workspace({ req }: { req: BorrowRequest }) {
   const [result, setResult] = useState<string | null>(null);
 
   const readOnly = req.status !== "OPEN";
+  const closeReject = () => {
+    setRejecting(false);
+    reject.reset();
+  };
   const canReject = req.status === "OPEN" || req.status === "UNFULFILLED";
 
   const catalog = useMemo<CatalogEntry[]>(
@@ -226,7 +230,7 @@ function Workspace({ req }: { req: BorrowRequest }) {
         onClose={() => navigate("/admin/storage")}
       />
 
-      <Dialog open={rejecting} onOpenChange={(o) => !o && !reject.isPending && setRejecting(false)}>
+      <Dialog open={rejecting} onOpenChange={(o) => !o && !reject.isPending && closeReject()}>
         <DialogContent>
           <DialogTitle>ปฏิเสธคำขอ {req.id}</DialogTitle>
           <DialogDescription>นิสิตจะเห็นเหตุผลนี้ และได้รับแจ้งเตือน</DialogDescription>
@@ -236,7 +240,7 @@ function Workspace({ req }: { req: BorrowRequest }) {
           <Textarea id="reject-reason" rows={3} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
           {reject.isError && <p role="alert" className="text-sm text-status-danger-fg">{(reject.error as Error).message}</p>}
           <DialogFooter className="gap-2">
-            <Button variant="outlined" size="lg" disabled={reject.isPending} onClick={() => setRejecting(false)}>ย้อนกลับ</Button>
+            <Button variant="outlined" size="lg" disabled={reject.isPending} onClick={closeReject}>ย้อนกลับ</Button>
             <Button
               variant="filled"
               size="lg"

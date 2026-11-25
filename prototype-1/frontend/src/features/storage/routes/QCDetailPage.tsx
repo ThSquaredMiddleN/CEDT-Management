@@ -218,7 +218,7 @@ export function QCDetailPage() {
         {outcome?.qrAmount ? (
           <div className="flex flex-col items-center gap-2">
             <PromptPayQR amount={outcome.qrAmount} />
-            <p className="text-sm font-bold text-status-danger-fg">{outcome.qrAmount.toLocaleString()} บาท</p>
+            <p className="text-sm font-bold text-status-danger-fg">{formatBaht(bahtToSatang(outcome.qrAmount))} บาท</p>
           </div>
         ) : null}
       </ResultDialog>

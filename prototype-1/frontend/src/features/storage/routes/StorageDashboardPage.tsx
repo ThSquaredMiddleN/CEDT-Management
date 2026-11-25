@@ -39,10 +39,18 @@ export function StorageDashboardPage() {
       subtitle="การจัดการคลังอุปกรณ์และรายการคำขอต่างๆ"
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <ActionCard to="/admin/storage/borrow" icon={<PackageOpen />} title="Click & Collect" desc="รายการสั่งเบิกล่วงหน้า" tone="bg-brand-primary hover:bg-button-primary-hover" />
-        <ActionCard to="/admin/storage/borrow/walk-in" icon={<Barcode />} title="Scan-to-Cart" desc="จ่ายหน้าเคาน์เตอร์" tone="bg-brand-primary hover:bg-button-primary-hover" />
-        <ActionCard to="/admin/storage/return" icon={<Users />} title="Face-to-Face" desc="รับคืนหน้าเคาน์เตอร์" tone="bg-brand-primary hover:bg-button-primary-hover" />
-        <ActionCard to="/admin/storage/qc" icon={<ClipboardCheck />} title="QC & Liability" desc="รอตรวจสภาพ / ปรับเงิน" tone="bg-brand-primary hover:bg-button-primary-hover" />
+        {user && can(user, "storage.manage.counter") && (
+          <ActionCard to="/admin/storage/borrow" icon={<PackageOpen />} title="Click & Collect" desc="รายการสั่งเบิกล่วงหน้า" tone="bg-brand-primary hover:bg-button-primary-hover" />
+        )}
+        {user && can(user, "storage.manage.counter") && (
+          <ActionCard to="/admin/storage/borrow/walk-in" icon={<Barcode />} title="Scan-to-Cart" desc="จ่ายหน้าเคาน์เตอร์" tone="bg-brand-primary hover:bg-button-primary-hover" />
+        )}
+        {user && can(user, "storage.manage.counter") && (
+          <ActionCard to="/admin/storage/return" icon={<Users />} title="Face-to-Face" desc="รับคืนหน้าเคาน์เตอร์" tone="bg-brand-primary hover:bg-button-primary-hover" />
+        )}
+        {user && can(user, "storage.manage.qc") && (
+          <ActionCard to="/admin/storage/qc" icon={<ClipboardCheck />} title="QC & Liability" desc="รอตรวจสภาพ / ปรับเงิน" tone="bg-brand-primary hover:bg-button-primary-hover" />
+        )}
       </div>
 
       {user && can(user, "storage.manage.inventory") && <DefaultDueDateField />}

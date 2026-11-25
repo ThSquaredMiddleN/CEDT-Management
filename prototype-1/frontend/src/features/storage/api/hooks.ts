@@ -53,7 +53,7 @@ function useStorageMutation<TVars, TData>(fn: (vars: TVars) => Promise<TData>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => qc.invalidateQueries({ queryKey: storageKeys.all }),
+    onSettled: () => qc.invalidateQueries({ queryKey: storageKeys.all }),
   });
 }
 
