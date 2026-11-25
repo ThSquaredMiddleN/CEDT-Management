@@ -33,6 +33,8 @@ describe("storage routes", () => {
     expect((await call("norole", "GET", "/catalog")).statusCode).toBe(403);
     expect((await call("ta", "POST", "/walk-in", { studentId: "6800000001", groupId: "personal", lines: [] })).statusCode).toBe(403);
     expect((await call("ta", "POST", "/qc/REQ-R-202/verify-slip", { valid: true })).statusCode).toBe(403);
+    expect((await call("ta", "POST", "/items", { id: "EQ-099", name: "x", isUnique: false, total: 1 })).statusCode).toBe(403);
+    expect((await call("ta", "PUT", "/settings/default-due", { defaultDueAt: Date.now() + 86400000 })).statusCode).toBe(403);
     expect((await call("student", "GET", "/requests")).statusCode).toBe(403);
     expect((await call("ta", "GET", "/requests")).statusCode).toBe(200); // storage.view
   });
@@ -48,6 +50,10 @@ describe("storage routes", () => {
     const ok = await call("storekeeper", "POST", "/requests/REQ-B-101/reject", { reason: "ไม่มีรายวิชานี้" });
     expect(ok.statusCode).toBe(200);
     expect(ok.json()).toMatchObject({ status: "REJECTED", rejectReason: "ไม่มีรายวิชานี้" });
+  });
+
+  it("rejects out-of-range due dates with 422", async () => {
+    expect((await call("storekeeper", "PUT", "/requests/REQ-B-100/due", { dueAt: 9e15 })).statusCode).toBe(422);
   });
 
   it("returns money in satang and the student's own data", async () => {

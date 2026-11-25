@@ -20,8 +20,9 @@ export const issueBody = z.object({
   }),
 });
 export const rejectBody = z.object({ reason: z.string().trim().min(1, "กรุณาระบุเหตุผลที่ปฏิเสธ").max(500) });
-export const dueBody = z.object({ dueAt: z.number().int() });
-export const settingsDueBody = z.object({ defaultDueAt: z.number().int() });
+const epochMs = z.number().int().min(0).max(253402300799999); // end of year 9999
+export const dueBody = z.object({ dueAt: epochMs });
+export const settingsDueBody = z.object({ defaultDueAt: epochMs });
 export const addItemBody = z.object({
   id: z.string().trim().min(1).max(20),
   name: z.string().trim().min(1).max(200),
@@ -33,14 +34,14 @@ export const walkInBody = z.object({ studentId: studentNo, groupId: z.string().m
 const counts = z.object({ RETURNED: z.number().int(), NOT_BROUGHT: z.number().int(), LOST: z.number().int() });
 export const returnBody = z.object({
   studentId: studentNo,
-  results: z.record(z.string(), counts),
+  results: z.record(z.string().max(40), counts).refine((r) => Object.keys(r).length <= 200, "รายการมากเกินไป"),
   remark: z.string().max(1000).default(""),
   fine: z.object({ amount: z.number().int().min(0), remark: z.string().max(500) }).optional(),
 });
 
 const qcResults = z.object({ AVAILABLE: z.number().int(), DAMAGED: z.number().int(), LOST: z.number().int() });
 export const qcSubmitBody = z.object({
-  items: z.array(z.object({ id: z.string().min(1), results: qcResults })).max(200),
+  items: z.array(z.object({ id: z.string().min(1).max(40), results: qcResults })).max(200),
   fineAmount: z.number().int().min(0),
   fineRemark: z.string().max(500).default(""),
 });
