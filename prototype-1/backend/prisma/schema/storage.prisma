@@ -1,0 +1,241 @@
+// Storage module (equipment lending). Spec: docs/superpowers/specs/2026-11-25-storage-backend-design.md
+// Money is integer satang. Times are timestamptz, UTC.
+
+enum StorageUnitStatus {
+  available
+  out
+  qc
+  damaged
+  lost
+  @@map("storage_unit_status")
+}
+
+enum StorageRequestStatus {
+  open
+  ready_for_pickup
+  closed
+  unfulfilled
+  cancelled
+  rejected
+  @@map("storage_request_status")
+}
+
+enum StorageCancelReason {
+  by_student
+  restock_expired
+  @@map("storage_cancel_reason")
+}
+
+enum StorageChannel {
+  click_collect
+  walk_in
+  @@map("storage_channel")
+}
+
+enum StoragePickupLocation {
+  locker
+  counter
+  lab
+  @@map("storage_pickup_location")
+}
+
+enum StorageOwedStatus {
+  owed
+  not_brought
+  @@map("storage_owed_status")
+}
+
+enum StorageQcStatus {
+  open
+  pending_payment
+  closed
+  @@map("storage_qc_status")
+}
+
+enum StorageQcItemStatus {
+  pending_test
+  available
+  damaged
+  lost
+  @@map("storage_qc_item_status")
+}
+
+/// One equipment type. Unique items count their units; bulk items keep counts here.
+model StorageItem {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// "EQ-001", also the barcode
+  code          String   @unique
+  name          String
+  isUnique      Boolean  @map("is_unique")
+  bulkAvailable Int      @default(0) @map("bulk_available")
+  bulkQc        Int      @default(0) @map("bulk_qc")
+  bulkDamaged   Int      @default(0) @map("bulk_damaged")
+  bulkLost      Int      @default(0) @map("bulk_lost")
+  bulkTotal     Int      @default(0) @map("bulk_total")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  units        StorageUnit[]
+  lines        StorageRequestLine[]
+  reservations StorageReservation[]
+  owed         StorageOwedItem[]
+  qcItems      StorageQcTaskItem[]
+
+  @@map("storage_items")
+}
+
+/// One physical unit of a unique item, e.g. EQ-001-003.
+model StorageUnit {
+  id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  serial    String            @unique
+  itemId    String            @map("item_id") @db.Uuid
+  status    StorageUnitStatus @default(available)
+  /// The request this unit was last issued against.
+  requestId String?           @map("request_id") @db.Uuid
+
+  item    StorageItem     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  request StorageRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+
+  @@index([itemId, status])
+  @@map("storage_units")
+}
+
+model StorageRequest {
+  id               String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// "REQ-B-105", the id the API and URLs use
+  requestNo        String                 @unique @map("request_no")
+  channel          StorageChannel
+  /// Null = personal request, owned by studentNo only.
+  groupId          String?                @map("group_id") @db.Uuid
+  /// Null for a walk-in by a student without an account.
+  requestedById    String?                @map("requested_by") @db.Uuid
+  studentNo        String                 @map("student_no") @db.Char(10)
+  status           StorageRequestStatus   @default(open)
+  cancelReason     StorageCancelReason?   @map("cancel_reason")
+  rejectReason     String?                @map("reject_reason")
+  rejectedById     String?                @map("rejected_by") @db.Uuid
+  rejectedAt       DateTime?              @map("rejected_at") @db.Timestamptz(6)
+  pickupAt         DateTime?              @map("pickup_at") @db.Timestamptz(6)
+  pickupLocation   StoragePickupLocation? @map("pickup_location")
+  pickupRemark     String?                @map("pickup_remark")
+  pickedUpAt       DateTime?              @map("picked_up_at") @db.Timestamptz(6)
+  dueAt            DateTime?              @map("due_at") @db.Timestamptz(6)
+  restockFlaggedAt DateTime?              @map("restock_flagged_at") @db.Timestamptz(6)
+  restockExpiresAt DateTime?              @map("restock_expires_at") @db.Timestamptz(6)
+  /// Queue order: earlier is served first; reopening keeps it.
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  group        Group?               @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  requestedBy  User?                @relation("storageRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  rejectedBy   User?                @relation("storageRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  lines        StorageRequestLine[]
+  reservations StorageReservation[]
+  owed         StorageOwedItem[]
+  units        StorageUnit[]
+  qcItems      StorageQcTaskItem[]
+
+  @@index([status, createdAt])
+  @@index([groupId])
+  @@index([studentNo])
+  @@map("storage_requests")
+}
+
+model StorageRequestLine {
+  requestId String @map("request_id") @db.Uuid
+  itemId    String @map("item_id") @db.Uuid
+  reqQty    Int    @map("req_qty")
+  issuedQty Int    @default(0) @map("issued_qty")
+
+  request StorageRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  item    StorageItem    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@id([requestId, itemId])
+  @@map("storage_request_lines")
+}
+
+/// Units held for a restock-flagged request until expiresAt.
+model StorageReservation {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId String   @map("request_id") @db.Uuid
+  itemId    String   @map("item_id") @db.Uuid
+  qty       Int
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+
+  request StorageRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  item    StorageItem    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, itemId])
+  @@map("storage_reservations")
+}
+
+/// What a request's owners still hold. Owner and due date come from the request.
+model StorageOwedItem {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId    String            @map("request_id") @db.Uuid
+  itemId       String            @map("item_id") @db.Uuid
+  serial       String?
+  qty          Int
+  status       StorageOwedStatus @default(owed)
+  notBroughtAt DateTime?         @map("not_brought_at") @db.Timestamptz(6)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  request StorageRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  item    StorageItem    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([requestId])
+  @@map("storage_owed_items")
+}
+
+model StorageQcTask {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// "REQ-R-300"
+  taskNo            String          @unique @map("task_no")
+  status            StorageQcStatus @default(open)
+  /// Snapshots for display: "Face-to-Face Return", the groups' names, the student's name or number.
+  kind              String
+  groupLabel        String          @map("group_label")
+  requesterLabel    String          @map("requester_label")
+  fineSatang        Int             @default(0) @map("fine_satang")
+  fineRemark        String          @default("") @map("fine_remark")
+  slipAmountSatang  Int?            @map("slip_amount_satang")
+  /// Free text until slip upload exists (piece 3).
+  slipTransferredAt String?         @map("slip_transferred_at")
+  slipRef           String?         @map("slip_ref")
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  items StorageQcTaskItem[]
+
+  @@map("storage_qc_tasks")
+}
+
+model StorageQcTaskItem {
+  id           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId       String              @map("task_id") @db.Uuid
+  /// The request the item was borrowed on (for fine notifications).
+  requestId    String?             @map("request_id") @db.Uuid
+  itemId       String              @map("item_id") @db.Uuid
+  serial       String?
+  qty          Int
+  status       StorageQcItemStatus @default(pending_test)
+  resAvailable Int                 @default(0) @map("res_available")
+  resDamaged   Int                 @default(0) @map("res_damaged")
+  resLost      Int                 @default(0) @map("res_lost")
+
+  task    StorageQcTask   @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  request StorageRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  item    StorageItem     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([taskId])
+  @@map("storage_qc_task_items")
+}
+
+/// Exactly one row (id = 1, CHECK in migration).
+model StorageSetting {
+  id           Int      @id @default(1)
+  defaultDueAt DateTime @map("default_due_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("storage_settings")
+}

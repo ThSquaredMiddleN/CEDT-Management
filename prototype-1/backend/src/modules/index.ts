@@ -11,6 +11,7 @@ import { masterdataModule } from "./masterdata/index.js";
 import { newsModule } from "./news/index.js";
 import { notificationsModule } from "./notifications/index.js";
 import { receiptsModule } from "./receipts/index.js";
+import { storageModule } from "./storage/index.js";
 import type { AppModule } from "./types.js";
 
 /** Every module, in registration order. Adding a module is one line here. */
@@ -26,6 +27,7 @@ export const modules: AppModule[] = [
   courseChangeModule,
   lineModule,
   receiptsModule,
+  storageModule,
   accessModule,
 ];
 
