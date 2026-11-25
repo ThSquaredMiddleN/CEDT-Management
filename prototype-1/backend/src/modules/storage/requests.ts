@@ -139,8 +139,9 @@ export function createRequest(user: StorageActor, input: { groupId: string; item
       data: { requestNo: await nextRequestNo(tx), channel: "click_collect", groupId, requestedById: user.id, studentNo, createdAt: now, lines: { create: lines } },
     });
     await sweep(tx);
-    await audit(tx, { actorId: user.id, action: "storage.request.created", subjectType: "storage_request", subjectId: created.id, after: { status: "open", lines: lines.length } });
-    return requestView(await loadRow(tx, created.requestNo));
+    const row = await loadRow(tx, created.requestNo);
+    await audit(tx, { actorId: user.id, action: "storage.request.created", subjectType: "storage_request", subjectId: created.id, after: { status: row.status, lines: lines.length } });
+    return requestView(row);
   });
 }
 

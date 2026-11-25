@@ -68,6 +68,22 @@ describe("student requests", () => {
   it("hides another group's request (404)", async () => {
     await expect(cancelMyRequest(await student(), "REQ-B-103")).rejects.toThrow(/ไม่พบคำขอ/);
   });
+
+  it("hides another group's request from reopen and pickup (404)", async () => {
+    await expect(reopenMyRequest(await student(), "REQ-B-103")).rejects.toThrow(/ไม่พบคำขอ/);
+    await expect(pickupMyRequest(await student(), "REQ-B-103")).rejects.toThrow(/ไม่พบคำขอ/);
+  });
+
+  it("cannot choose an inactive group, but still sees its requests", async () => {
+    const id = await groupId("Group 09");
+    await prisma.group.update({ where: { id }, data: { isActive: false } });
+    try {
+      await expect(createRequest(await student(), { groupId: id, items: [{ itemId: "EQ-002", qty: 1 }] })).rejects.toThrow(/ไม่ได้อยู่ในกลุ่ม/);
+      expect((await listMyRequests(await student())).map((r) => r.id)).toContain("REQ-B-100");
+    } finally {
+      await prisma.group.update({ where: { id }, data: { isActive: true } });
+    }
+  });
 });
 
 describe("cancel and restock expiry", () => {
@@ -170,6 +186,10 @@ describe("issue, pickup and due dates", () => {
     await expect(setDue(await staffId(), "REQ-B-101", later)).rejects.toThrow(/เฉพาะคำขอที่รับของแล้ว/);
   });
 
+  it("refuses to issue an item that is not in the request", async () => {
+    await expect(issueRequest(await staffId(), "REQ-B-101", [bulk("EQ-003", 1)], pickup)).rejects.toThrow(/ไม่อยู่ในคำขอนี้/);
+  });
+
   it("rejects issuing more than requested", async () => {
     await expect(issueRequest(await staffId(), "REQ-B-101", [bulk("EQ-002", 6)], pickup)).rejects.toThrow(/เกินจำนวนที่ขอ/);
   });
@@ -189,6 +209,10 @@ describe("reject", () => {
   it("requires a reason and refuses issued requests", async () => {
     await expect(rejectRequest(await staffId(), "REQ-B-101", "   ")).rejects.toThrow(/เหตุผล/);
     await expect(rejectRequest(await staffId(), "REQ-B-100", "x")).rejects.toThrow(/ปฏิเสธได้เฉพาะ/);
+  });
+
+  it("rejects an UNFULFILLED request", async () => {
+    expect(await rejectRequest(await staffId(), "REQ-B-104", "หมดรุ่น")).toMatchObject({ status: "REJECTED" });
   });
 
   it("offers a rejected request's held units to the queue", async () => {
