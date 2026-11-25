@@ -131,13 +131,11 @@ export async function newsRoutes(app: FastifyInstance): Promise<void> {
   app.delete("/news/:id/images/:imageId", { config: { auth: "user", permission: "news.manage" } }, async (req) => {
     const { id, imageId } = newsImageIdSchema.parse(req.params);
     const { storageKey } = await removeNewsImageRecord(id, imageId);
-    if (storageKey) {
-      try {
-        await removeStoredFile(storageKey);
-      } catch (error) {
-        // The row is gone; scripts/files-sweep.ts removes the orphaned contents later.
-        req.log.error({ err: error, storageKey }, "Failed to remove news image contents");
-      }
+    try {
+      await removeStoredFile(storageKey);
+    } catch (error) {
+      // The row is gone; scripts/files-sweep.ts removes the orphaned contents later.
+      req.log.error({ err: error, storageKey }, "Failed to remove news image contents");
     }
     return { ok: true };
   });

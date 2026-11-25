@@ -146,7 +146,7 @@ export async function removeNewsImageRecord(id: string, imageId: string) {
     if (!image) throw notFound("News image not found");
 
     await tx.newsImage.delete({ where: { id: imageId } });
-    const storageKey = image.fileId ? await deleteFileRecord(tx, image.fileId) : null;
+    const storageKey = await deleteFileRecord(tx, image.fileId);
     const remaining = await tx.newsImage.findMany({
       where: { newsId: id },
       select: { id: true },
@@ -178,8 +178,7 @@ export async function getNewsImageRecord(
   return image;
 }
 
-export async function readNewsImageBytes(fileId: string | null): Promise<Buffer> {
-  if (!fileId) throw notFound("News image not found");
+export async function readNewsImageBytes(fileId: string): Promise<Buffer> {
   return (await readFile(fileId)).buffer;
 }
 

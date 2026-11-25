@@ -763,7 +763,6 @@ export async function mergeFiles(
     const pdf = await PDFDocument.create();
     for (const fileId of ids) {
       const file = sourceRows.find((f) => f.id === fileId)!;
-      if (!file.fileId) throw conflict("เอกสารยังไม่ได้ย้ายไปที่เก็บไฟล์ใหม่ กรุณาแจ้งผู้ดูแลระบบ");
       const source = await PDFDocument.load((await readFile(file.fileId, tx)).buffer);
       const form = source.getForm();
       if (form.getFields().some((field) => field instanceof PDFSignature))
@@ -830,7 +829,6 @@ export async function downloadFile(
     );
     if (!released.includes(file.id)) throw notFound("เอกสารยังไม่ได้ส่งคืน");
   }
-  if (!file.fileId) throw notFound("ไม่พบเอกสาร");
   return { filename: file.filename, buffer: (await readFile(file.fileId)).buffer };
 }
 

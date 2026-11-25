@@ -72,8 +72,8 @@ async function main() {
     });
     const events = await tx.courseChangeEvent.deleteMany({ where: { requestId: { in: ids } } });
     const fileIds = (
-      await tx.courseChangeFile.findMany({ where: { requestId: { in: ids }, fileId: { not: null } }, select: { fileId: true } })
-    ).map((f) => f.fileId!);
+      await tx.courseChangeFile.findMany({ where: { requestId: { in: ids } }, select: { fileId: true } })
+    ).map((f) => f.fileId);
     await tx.courseChangeFile.deleteMany({ where: { requestId: { in: ids } } });
     const storageKeys: string[] = [];
     for (const fileId of fileIds) storageKeys.push(await deleteFileRecord(tx, fileId));
