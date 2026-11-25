@@ -16,13 +16,16 @@ export function requireStudentNo(user: StorageActor): string {
   return user.studentNo;
 }
 
-/** Active groups the student belongs to (by student number; works without an account). */
-export async function groupIdsOfStudent(tx: Tx, studentNo: string): Promise<string[]> {
-  const rows = await tx.groupMember.findMany({ where: { studentNo, group: { isActive: true } }, select: { groupId: true } });
+/** Groups the student belongs to (by student number; works without an account). activeOnly is for choosing a group for a new request. */
+export async function groupIdsOfStudent(tx: Tx, studentNo: string, activeOnly = false): Promise<string[]> {
+  const rows = await tx.groupMember.findMany({
+    where: { studentNo, ...(activeOnly ? { group: { isActive: true } } : {}) },
+    select: { groupId: true },
+  });
   return rows.map((r) => r.groupId);
 }
 
-/** Requests the student owns: their personal ones plus every request of their groups. */
+/** Requests the student owns: their personal ones plus every request of their groups. Includes inactive groups so owed items never disappear. */
 export async function ownedWhere(tx: Tx, studentNo: string): Promise<Prisma.StorageRequestWhereInput> {
   return { OR: [{ groupId: null, studentNo }, { groupId: { in: await groupIdsOfStudent(tx, studentNo) } }] };
 }
@@ -41,8 +44,14 @@ export async function recipientsOf(tx: Tx, req: RequestOwner): Promise<string[]>
   const studentNos = req.groupId
     ? (await tx.groupMember.findMany({ where: { groupId: req.groupId }, select: { studentNo: true } })).map((m) => m.studentNo)
     : [req.studentNo];
-  const users = await tx.user.findMany({ where: { studentNo: { in: studentNos }, isActive: true }, select: { id: true } });
-  return [...new Set([...users.map((u) => u.id), ...(req.requestedById ? [req.requestedById] : [])])];
+  const users = await tx.user.findMany({
+    where: {
+      isActive: true,
+      OR: [{ studentNo: { in: studentNos } }, ...(req.requestedById ? [{ id: req.requestedById }] : [])],
+    },
+    select: { id: true },
+  });
+  return [...new Set(users.map((u) => u.id))];
 }
 
 export async function notifyRequest(tx: Tx, req: RequestOwner, type: string, message: string): Promise<void> {

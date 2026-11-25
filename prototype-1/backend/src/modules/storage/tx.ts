@@ -9,6 +9,7 @@ export const clock = { now: (): Date => new Date() };
  * storage transaction by a transaction-level advisory lock: traffic is tiny, and the restock queue touches
  * requests for other items, which row locks would miss. Expired holds are settled first, so no caller
  * sees a stale hold.
+ * Reads also queue behind the lock and hold a pool connection while waiting; fine at current traffic.
  */
 export async function storageTx<T>(fn: (tx: Tx, now: Date) => Promise<T>): Promise<T> {
   return prisma.$transaction(

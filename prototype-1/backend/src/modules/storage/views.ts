@@ -101,7 +101,7 @@ const upper = (s: string) => s.toUpperCase();
 /** "Course - <name>" for a course group, "Custom" for clubs and projects, "Personal" for none. */
 export function groupType(group: { type: string; course?: { name: string } | null } | null): string {
   if (!group || group.type === "personal") return "Personal";
-  if (group.type === "course_section") return `Course - ${group.course?.name ?? ""}`.trim();
+  if (group.type === "course_section") return group.course?.name ? `Course - ${group.course.name}` : "Course";
   return "Custom";
 }
 
