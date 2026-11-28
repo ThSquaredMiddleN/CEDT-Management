@@ -43,6 +43,19 @@ export function PortalLayout() {
 
   const rightSlot = user ? (
     <>
+      {isStaff(user) && (
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="border-brand-primary/30 bg-white font-body text-body-xs-emphasize text-brand-primary hover:bg-brand-primary/5 hover:text-button-primary-hover"
+        >
+          <Link to="/admin">
+            <LayoutDashboard className="size-3.5" />
+            หน้าเจ้าหน้าที่
+          </Link>
+        </Button>
+      )}
       <NotificationBell variant="topbar" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -65,14 +78,6 @@ export function PortalLayout() {
             <span className="text-xs font-normal text-neutral-500">{user.email}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {isStaff(user) && (
-            <DropdownMenuItem asChild>
-              <Link to="/admin">
-                <LayoutDashboard className="size-4" />
-                หน้าเจ้าหน้าที่
-              </Link>
-            </DropdownMenuItem>
-          )}
           {can(user, "line.use") && (
             <DropdownMenuItem asChild>
               <Link to="/line">
