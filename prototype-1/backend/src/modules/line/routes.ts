@@ -130,10 +130,18 @@ async function offerLink(ctx: Ctx, event: LineEvent, userId: string, text?: stri
   }
 }
 
-/** Whether to offer the receipt quick reply: a student number and receipts.use, so staff and others do not see it. */
+/**
+ * Whether to offer the receipt quick reply: a student number and receipts.use, so staff and others do not see it.
+ * It runs on every linked user's message, so a failed lookup only hides the button: it must not turn "ข่าว" or "เมนู"
+ * into a 500 (and a LINE retry). A receipt question still reads the user again in lineSummary.
+ */
 async function canReceipts(userId: string): Promise<boolean> {
-  const me = await loadSessionUser(userId);
-  return me !== null && canUseReceipts(me);
+  try {
+    const me = await loadSessionUser(userId);
+    return me !== null && canUseReceipts(me);
+  } catch {
+    return false;
+  }
 }
 
 async function hasUsableLinkToken(userId: string): Promise<boolean> {

@@ -217,6 +217,7 @@ describe("receipt status, linked student", () => {
     await addRow(S_OWN, "ok", staffId);
     const m = await ask("ใบเสร็จ");
     expect(m.text).toContain("ผ่าน");
+    expect(m.text).not.toContain("ไม่ผ่าน");
     expect(m.text).toContain("เจ้าหน้าที่ตรวจแล้ว");
     expect(m.text).toContain(LOCKED_NOTE);
     expect(m.text).not.toContain(RESEND);
