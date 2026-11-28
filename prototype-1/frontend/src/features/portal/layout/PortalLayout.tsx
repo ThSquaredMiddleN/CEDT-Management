@@ -121,7 +121,7 @@ export function PortalLayout() {
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex min-h-screen flex-col bg-background">
       <Topbar items={items} rightSlot={rightSlot} />
       <main className="min-h-0 flex-1">
         <Outlet />

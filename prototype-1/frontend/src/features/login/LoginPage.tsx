@@ -64,7 +64,7 @@ export function LoginPage() {
   const isOtherError = !!error && !isLocked && !isBadCredentials;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-neutral-100 p-12">
+    <div className="flex min-h-screen items-center justify-center bg-background p-12">
       <Card className="flex w-full max-w-md flex-col gap-8 rounded-xl p-8 shadow-lg">
         <CardHeader className="items-center gap-4 text-center">
           <Brand size="lg" />

@@ -30,7 +30,7 @@ export function CourseChangePage() {
   };
 
   return (
-    <main className="cc-portal min-h-[calc(100dvh-4rem)] bg-neutral-50/60 px-4 py-6 sm:px-6 lg:px-12 lg:py-8">
+    <main className="cc-portal min-h-[calc(100dvh-4rem)] bg-background px-4 py-6 sm:px-6 lg:px-12 lg:py-8">
       <div className="mx-auto flex min-w-0 max-w-6xl flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1.5">

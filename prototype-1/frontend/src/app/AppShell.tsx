@@ -145,7 +145,7 @@ export function AppShell({
   ) : null;
 
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex min-h-screen bg-background">
       <Sidebar
         items={sidebarItems}
         collapsed={sidebarCollapsed}
