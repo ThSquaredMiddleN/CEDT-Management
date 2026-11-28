@@ -495,8 +495,9 @@ export type LineSummary = { text: string; link: string } | { reason: "not-studen
  * `{ text, link }`, or `{ reason }` when the user has nothing to ask here. The bot adds the app origin to `link`.
  *
  * Same lookups and rules as GET /receipts/mine: the user's own student number, the current term, `studentView`
- * for what may be shown, `studentLocked` for whether they can send again. The text is built only from the verdict
- * and who checked it: never a reference, amount, name, ID, check detail or another student's row.
+ * for what may be shown, `studentLocked` for whether they can send again. The text is built only from the verdict,
+ * who checked it and staff's Pass/Fail settlement: never a reference, amount, name, ID, check detail, the staff note
+ * or another student's row.
  * `no-permission`: unknown or inactive account, or no `receipts.use`. `not-student`: no student number.
  */
 export async function lineSummary(userId: string): Promise<LineSummary> {
@@ -510,7 +511,17 @@ export async function lineSummary(userId: string): Promise<LineSummary> {
   if (!row) return { text: "ยังไม่ได้ส่งใบเสร็จภาคการศึกษานี้", link };
 
   // staffChecked: the same test studentLocked uses (a check run by someone else is a staff check), as on the web page.
-  const { verdict, staffChecked } = studentView(row, me.id);
+  const { verdict, staffChecked, settlement } = studentView(row, me.id);
+  // Staff settled a warn: the same labels as the web page. The Fail note stays on the web page, not in the chat.
+  if (settlement === "pass") {
+    return { text: `ใบเสร็จภาคการศึกษานี้: ${VERDICT_TH.ok} (เจ้าหน้าที่ตรวจแล้ว)\n${LOCKED_NOTE}`, link };
+  }
+  if (settlement === "fail") {
+    return {
+      text: `ใบเสร็จภาคการศึกษานี้: ${VERDICT_TH.fail} (เจ้าหน้าที่ตรวจแล้ว)\nดูเหตุผลและส่งใบเสร็จใหม่ได้ที่หน้าเว็บ`,
+      link,
+    };
+  }
   // A warn that staff already looked at is not "waiting for staff" any more.
   const label = staffChecked && verdict === "warn" ? "เจ้าหน้าที่ตรวจแล้ว มีข้อสังเกต" : (VERDICT_TH[verdict] ?? "รอเจ้าหน้าที่ตรวจ");
   // Locked (passed, or checked by staff): no resend, as on the web page. Otherwise the student may send again.
