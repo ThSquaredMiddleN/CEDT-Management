@@ -14,7 +14,7 @@
   }
 
   body {
-    @apply bg-white text-neutral-950 antialiased;
+    @apply bg-background text-neutral-950 antialiased;
     font-family: var(--font-family-body);
   }
 }

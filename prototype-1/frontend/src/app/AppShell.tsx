@@ -40,7 +40,7 @@ export function AppShell({
   const sidebarRole = user ? (user.isStudent ? "นิสิต" : isStaff(user) ? "เจ้าหน้าที่" : "ผู้ใช้") : "admin";
 
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex min-h-screen bg-background">
       <Sidebar
         items={sidebarItems}
         collapsed={sidebarCollapsed}

@@ -18,7 +18,7 @@ export const useAuth = () => useContext(AuthContext);
 /** Full-page splash while the session bootstraps — never a blank screen. */
 function Splash() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-neutral-100">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
       <div className="flex items-center gap-2">
         <div className="flex size-10 items-center justify-center rounded-lg bg-neutral-900 text-neutral-50">
           <FlaskConical className="size-5" />
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (isPending) return <Splash />;
   if (isError && !(error instanceof ApiError && error.status === 401)) return (
-    <div role="alert" className="flex min-h-screen flex-col items-center justify-center gap-4 bg-neutral-50 px-6 text-center">
+    <div role="alert" className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-6 text-center">
       <FlaskConical className="size-8 text-neutral-500" />
       <h1 className="text-lg font-semibold">เชื่อมต่อระบบไม่สำเร็จ</h1>
       <p className="max-w-md text-sm text-neutral-600">ยังตรวจสอบการเข้าสู่ระบบไม่ได้ กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง ฉบับร่างในแท็บนี้ยังไม่ถูกล้าง</p>

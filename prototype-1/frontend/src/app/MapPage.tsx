@@ -16,7 +16,7 @@ export function MapPage() {
 
 
   return (
-    <main className="min-h-[calc(100vh-4rem)] bg-neutral-50 p-6">
+    <main className="min-h-[calc(100vh-4rem)] bg-background p-6">
       <div className="mx-auto max-w-7xl">
         <h1 className="mb-6 text-2xl font-semibold text-neutral-900">
           Schedule A
