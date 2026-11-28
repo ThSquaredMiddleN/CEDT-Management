@@ -1,8 +1,13 @@
 import type { ReactNode } from "react";
 import {
+  ArchiveBoxIcon,
   CalendarIcon,
+  ChatBubbleLeftRightIcon,
+  CircleStackIcon,
   CpuChipIcon,
+  DocumentMagnifyingGlassIcon,
   DocumentTextIcon,
+  KeyIcon,
   MegaphoneIcon,
   NewspaperIcon,
 } from "@heroicons/react/24/outline";
@@ -13,7 +18,7 @@ import { MenuItem } from "@/features/admin/components/AdminMenuItem";
 interface AdminMenuEntry {
   text: string;
   icon: ReactNode;
-  to?: string;
+  to: string;
   /** Hides the card from users who cannot open its page (same names as the AdminLayout sidebar). */
   permission?: string;
 }
@@ -31,18 +36,33 @@ const MENU_GROUPS: MenuGroup[] = [
     items: [
       { text: "จัดการประกาศ", icon: <MegaphoneIcon />, to: "/admin/announcements", permission: "announcements.view" },
       { text: "จัดการข่าวประชาสัมพันธ์", icon: <NewspaperIcon />, to: "/admin/news", permission: "news.view" },
-      { text: "จัดการห้องเรียน", icon: <CalendarIcon />, to: "/admin/data", permission: "masterdata.manage" },
+      { text: "จัดการการจองห้องเรียน", icon: <CalendarIcon />, to: "/admin/dashboard", permission: "bookings.view" },
+      { text: "จัดการข้อมูลหลัก", icon: <CircleStackIcon />, to: "/admin/data", permission: "masterdata.manage" },
     ],
   },
   {
     title: "ทะเบียน",
-    rowGap: "gap-y-6",
-    items: [{ text: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon />, to: "/admin/course-change", permission: "course_change.view" }],
+    rowGap: "gap-y-4",
+    items: [
+      { text: "ลด - ถอนรายวิชา", icon: <DocumentTextIcon />, to: "/admin/course-change", permission: "course_change.view" },
+      { text: "ตรวจใบเสร็จค่าเทอม", icon: <DocumentMagnifyingGlassIcon />, to: "/admin/receipts", permission: "receipts.view" },
+    ],
+  },
+  {
+    title: "คลังอุปกรณ์",
+    rowGap: "gap-y-4",
+    items: [
+      { text: "จัดการคลังอุปกรณ์", icon: <CpuChipIcon />, to: "/admin/storage", permission: "storage.view" },
+      { text: "รายการอุปกรณ์", icon: <ArchiveBoxIcon />, to: "/admin/storage/inventory", permission: "storage.view" },
+    ],
   },
   {
     title: "อื่น ๆ",
-    rowGap: "gap-y-6",
-    items: [{ text: "ยืมอุปกรณ์", icon: <CpuChipIcon /> }],
+    rowGap: "gap-y-4",
+    items: [
+      { text: "การแจ้งเตือน LINE", icon: <ChatBubbleLeftRightIcon />, to: "/admin/line", permission: "line.use" },
+      { text: "สิทธิ์ผู้ใช้", icon: <KeyIcon />, to: "/admin/access", permission: "core.permissions.manage" },
+    ],
   },
 ];
 
