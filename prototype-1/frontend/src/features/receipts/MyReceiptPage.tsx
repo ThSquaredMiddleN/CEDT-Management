@@ -58,8 +58,12 @@ const STATE: Record<ReceiptCheckState, { label: string; Icon: typeof Info; class
   info: { label: "ข้อมูล", Icon: Info, className: "text-neutral-500" },
 };
 
-function VerdictPill({ verdict }: { verdict: ReceiptVerdict }) {
-  const { label, Icon, box } = VERDICT[verdict];
+// A warn that staff already looked at is not "waiting for staff" any more (the same words as the LINE reply).
+const STAFF_CHECKED_WARN = "เจ้าหน้าที่ตรวจแล้ว มีข้อสังเกต";
+
+function VerdictPill({ verdict, staffChecked }: { verdict: ReceiptVerdict; staffChecked: boolean }) {
+  const { Icon, box } = VERDICT[verdict];
+  const label = staffChecked && verdict === "warn" ? STAFF_CHECKED_WARN : VERDICT[verdict].label;
   return (
     <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium", box)}>
       <Icon className="size-3.5" aria-hidden="true" />
@@ -108,7 +112,7 @@ function ResultCard({ check, locked }: { check: MyReceiptCheck; locked: boolean 
   return (
     <Card className="flex flex-col gap-5 p-6">
       <div className="flex flex-wrap items-center gap-3">
-        <VerdictPill verdict={check.verdict} />
+        <VerdictPill verdict={check.verdict} staffChecked={check.staffChecked} />
         <span className="text-sm text-neutral-500">
           ภาคการศึกษา {check.term} · {check.kind === "pdf" ? "ไฟล์ PDF" : "ภาพหน้าจอ CU NEX"}
         </span>
@@ -249,7 +253,7 @@ export function MyReceiptPage() {
                     <span className="text-sm font-medium text-neutral-950">ภาคการศึกษา {row.term}</span>
                     <span className="text-xs text-neutral-500">{shortDate(row.createdAt)}</span>
                   </div>
-                  <VerdictPill verdict={row.verdict} />
+                  <VerdictPill verdict={row.verdict} staffChecked={row.staffChecked} />
                 </li>
               ))}
             </ul>

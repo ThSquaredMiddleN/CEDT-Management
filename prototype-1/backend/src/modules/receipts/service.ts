@@ -254,14 +254,18 @@ export async function listReceiptChecks(filter: { term?: string; verdict?: Verdi
  * What a student sees of a check. Only name and state of each check: the `detail` text can name another
  * student's ID (the duplicate check), and the OCR fields carry the student's own name. Neither is returned.
  */
-export function studentView(row: {
-  id: string;
-  term: string;
-  kind: string;
-  verdict: string;
-  createdAt: Date;
-  checks: unknown;
-}) {
+export function studentView(
+  row: {
+    id: string;
+    term: string;
+    kind: string;
+    verdict: string;
+    createdAt: Date;
+    checks: unknown;
+    checkedById: string | null;
+  },
+  viewerId: string,
+) {
   // The Funding row is a staff note (กยศ. hints, English, sometimes "unreadable"): it never changes the verdict.
   // It is hidden by the allowlist below, like any other name that is not on it.
   const checks = (row.checks as { name: string; state: string }[]).filter((c) => STUDENT_VISIBLE_CHECKS.has(c.name));
@@ -272,6 +276,8 @@ export function studentView(row: {
     verdict: row.verdict,
     createdAt: row.createdAt,
     checks: checks.map((c) => ({ name: c.name, state: c.state })),
+    // The same test studentLocked uses: a check run by someone else is a staff check. Only a yes/no, never who.
+    staffChecked: row.checkedById !== viewerId,
   };
 }
 

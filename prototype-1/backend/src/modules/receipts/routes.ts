@@ -116,7 +116,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     try {
       // selfService: the save re-checks the lock, because staff may have checked the term during the OCR call.
       const { check } = await checkReceipt({ studentId, term, file, checkedById: me.id, selfService: true });
-      return { check: studentView(check) };
+      return { check: studentView(check, me.id) };
     } catch (err) {
       if (err instanceof OcrUnavailableError) {
         throw new AppError("SERVICE_UNAVAILABLE", "OCR service unavailable");
@@ -131,7 +131,7 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
     const rows = await listOwnReceiptChecks(studentId);
     const term = currentTerm();
     // `locked`: this term's upload is settled, so the page shows "contact staff" instead of the form.
-    return { items: rows.map(studentView), locked: studentLocked(rows.find((r) => r.term === term) ?? null, me.id) };
+    return { items: rows.map((r) => studentView(r, me.id)), locked: studentLocked(rows.find((r) => r.term === term) ?? null, me.id) };
   });
 
   app.get("/receipts", { config: { auth: "user", permission: "receipts.view" } }, async (req) => {

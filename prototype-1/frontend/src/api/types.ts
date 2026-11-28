@@ -319,4 +319,6 @@ export interface MyReceiptCheck {
   verdict: ReceiptVerdict;
   createdAt: string;
   checks: MyReceiptCheckItem[];
+  /** True when staff ran this check (the term is then locked). */
+  staffChecked: boolean;
 }

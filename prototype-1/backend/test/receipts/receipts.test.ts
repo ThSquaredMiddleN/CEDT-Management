@@ -541,7 +541,7 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as { check: Record<string, unknown>; fields?: unknown };
     expect(Object.keys(body)).toEqual(["check"]);
-    expect(Object.keys(body.check).sort()).toEqual(["checks", "createdAt", "id", "kind", "term", "verdict"]);
+    expect(Object.keys(body.check).sort()).toEqual(["checks", "createdAt", "id", "kind", "staffChecked", "term", "verdict"]);
     expect(body.check).toMatchObject({ term: currentTerm(), kind: "pdf", verdict: "fail" });
     expect(body.check.checks).toContainEqual({ name: "Not submitted before", state: "fail" });
     expect(res.body).not.toContain(S_B);
@@ -672,7 +672,10 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
   it("refuses a re-upload once staff checked the term (409), even when it did not pass", async () => {
     fake.reply = (call) => sidecarOk(call, { reference: "RC-MINE-STAFF", checks: warnChecks });
     expect((await pdf({ studentId: S_OWN, term: currentTerm() })).statusCode).toBe(200);
-    expect((await listMine(studentCookie)).json()).toMatchObject({ locked: true });
+    expect((await listMine(studentCookie)).json()).toMatchObject({
+      locked: true,
+      items: [{ verdict: "warn", staffChecked: true }],
+    });
     const res = await submitMine(studentCookie, {}, "RC-MINE-AFTER-STAFF");
     expect(res.statusCode).toBe(409);
     // Staff can still check again.
@@ -794,7 +797,7 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
     expect(items.map((i) => i.term)).toEqual([currentTerm(), TERM_OLD]);
     expect(items[1]!.id).toBe(old.id);
     for (const item of items) {
-      expect(Object.keys(item).sort()).toEqual(["checks", "createdAt", "id", "kind", "term", "verdict"]);
+      expect(Object.keys(item).sort()).toEqual(["checks", "createdAt", "id", "kind", "staffChecked", "term", "verdict"]);
       for (const c of item.checks as Record<string, unknown>[]) expect(Object.keys(c).sort()).toEqual(["name", "state"]);
     }
     expect(res.body).not.toContain(S_A);
