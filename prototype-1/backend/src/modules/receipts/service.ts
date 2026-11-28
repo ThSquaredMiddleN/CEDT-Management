@@ -525,7 +525,8 @@ export async function lineSummary(userId: string): Promise<LineSummary> {
   const label = VERDICT_TH[verdict] ?? "รอเจ้าหน้าที่ตรวจ";
   // Locked (passed, or checked by staff): no resend, as on the web page. Otherwise the student may send again.
   const second = studentLocked(row, me.id)
-    ? `${staffChecked ? "เจ้าหน้าที่ตรวจแล้ว" : "ระบบตรวจอัตโนมัติแล้ว"} ${LOCKED_NOTE}`
+    ? // A warn staff ran is still waiting for their decision, so it doesn't say "checked".
+      `${verdict === "warn" ? "" : staffChecked ? "เจ้าหน้าที่ตรวจแล้ว " : "ระบบตรวจอัตโนมัติแล้ว "}${LOCKED_NOTE}`
     : "เจ้าหน้าที่ยังไม่ตรวจ ส่งใหม่ได้ที่หน้าเว็บ";
   return { text: `ใบเสร็จภาคการศึกษานี้: ${label}\n${second}`, link };
 }

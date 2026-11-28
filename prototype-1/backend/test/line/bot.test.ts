@@ -118,9 +118,9 @@ describe("intentOf", () => {
     expect(intentOf("how do I unlink").kind).toBe("faq");
   });
 
-  it("sends the unlink words to the unlink FAQ", () => {
+  it("sends the unlink words to the unlink FAQ, spaces or not", () => {
     const unlink = FAQ.findIndex((entry) => entry.question.includes("ยกเลิก"));
-    for (const text of ["ยกเลิกการเชื่อม", "unlink", "disconnect", "เลิกเชื่อม", "ยกเลิก LINE"]) {
+    for (const text of ["ยกเลิกการเชื่อม", "unlink", "disconnect", "เลิกเชื่อม", "ยกเลิก เชื่อม", "ยกเลิก  เชื่อมบัญชี", "ยกเลิก LINE"]) {
       expect(intentOf(text)).toEqual({ kind: "faq", index: unlink });
     }
   });

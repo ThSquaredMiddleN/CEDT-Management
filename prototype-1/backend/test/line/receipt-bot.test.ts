@@ -197,6 +197,7 @@ describe("receipt status, linked student", () => {
     const m = await ask("ใบเสร็จ");
     expect(m.text).toContain("รอเจ้าหน้าที่ตรวจ");
     expect(m.text).not.toContain("มีข้อสังเกต");
+    expect(m.text).not.toContain("ตรวจแล้ว");
     expect(m.text).toContain(LOCKED_NOTE);
     expect(m.text).not.toContain(RESEND);
     expect(m.text).toContain(RECEIPT_LINK);

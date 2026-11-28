@@ -41,7 +41,8 @@ export const FAQ: readonly FaqEntry[] = [
   {
     question: "ยกเลิกการเชื่อม LINE ทำอย่างไร",
     // Not a bare "ยกเลิก": it would catch "ยกเลิกการจอง" (cancel a booking) and other modules' words.
-    keywords: ["เลิกเชื่อม", "ยกเลิกเชื่อม", "ยกเลิกการเชื่อม", "ยกเลิก line", "ยกเลิกไลน์", "unlink", "disconnect"],
+    // The first keyword is shown as a hint; the spaced form stays because people type it that way.
+    keywords: ["เลิกเชื่อม", "ยกเลิกเชื่อม", "ยกเลิก เชื่อม", "ยกเลิกการเชื่อม", "ยกเลิก line", "ยกเลิกไลน์", "unlink", "disconnect"],
     answer: (origin) =>
       [
         "ยกเลิกการเชื่อมได้ที่หน้าตั้งค่า LINE (ต้องเข้าสู่ระบบ) แล้วกด ยืนยันการยกเลิก",
