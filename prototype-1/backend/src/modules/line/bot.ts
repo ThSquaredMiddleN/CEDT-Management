@@ -126,7 +126,7 @@ async function messagesFor(intent: Intent, viewer: Viewer): Promise<LineMessage[
     }
     case "faq": {
       const entry = FAQ[intent.index];
-      return [text(entry ? entry.answer(config.APP_ORIGIN) : "ยังตอบไม่ได้")];
+      return [text(entry ? entry.answer(config.APP_ORIGIN) : "ยังไม่มีคำตอบสำหรับหัวข้อนี้")];
     }
     case "receipt": {
       if (!viewer.linked) {
@@ -135,7 +135,7 @@ async function messagesFor(intent: Intent, viewer: Viewer): Promise<LineMessage[
       }
       const summary = await lineSummary(viewer.userId);
       if ("reason" in summary) {
-        return [text(summary.reason === "not-student" ? "เมนูนี้สำหรับนักศึกษา" : "บัญชีนี้ยังไม่มีสิทธิ์ดูสถานะใบเสร็จ ติดต่อเจ้าหน้าที่")];
+        return [text(summary.reason === "not-student" ? "เมนูนี้สำหรับนิสิต" : "บัญชีนี้ยังไม่มีสิทธิ์ดูสถานะใบเสร็จ กรุณาติดต่อเจ้าหน้าที่")];
       }
       return [text(`${summary.text}\n${linkFor(config.APP_ORIGIN, summary.link)}`)];
     }
@@ -144,9 +144,9 @@ async function messagesFor(intent: Intent, viewer: Viewer): Promise<LineMessage[
       return viewer.linkText ? [text(viewer.linkText)] : [text('พิมพ์ "เชื่อม" เพื่อรับลิงก์เชื่อมบัญชี')];
     }
     case "menu":
-      return [text(["ถามได้เลย เลือกหัวข้อด้านล่าง หรือพิมพ์ข้อความ เช่น", "ข่าว · ประกาศ · คำถาม · เมนู"].join("\n"))];
+      return [text(["เลือกหัวข้อด้านล่าง หรือพิมพ์ เช่น", "ข่าว · ประกาศ · คำถาม"].join("\n"))];
     case "unknown": {
-      const unknown = text('ขออภัย ยังตอบเรื่องนี้ไม่ได้ ลองเลือกหัวข้อด้านล่าง หรือพิมพ์ "เมนู"');
+      const unknown = text('ขออภัย ไม่เข้าใจข้อความนี้ เลือกหัวข้อด้านล่าง หรือพิมพ์ "เมนู"');
       return !viewer.linked && viewer.linkText ? [unknown, text(viewer.linkText)] : [unknown];
     }
   }

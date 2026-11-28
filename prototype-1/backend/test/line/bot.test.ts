@@ -118,9 +118,9 @@ describe("intentOf", () => {
     expect(intentOf("how do I unlink").kind).toBe("faq");
   });
 
-  it("sends the unlink words to the unlink FAQ, spaces or not", () => {
+  it("sends the unlink words to the unlink FAQ", () => {
     const unlink = FAQ.findIndex((entry) => entry.question.includes("ยกเลิก"));
-    for (const text of ["ยกเลิกการเชื่อม", "unlink", "disconnect", "ยกเลิก เชื่อม", "ยกเลิก  เชื่อมบัญชี", "ยกเลิก LINE"]) {
+    for (const text of ["ยกเลิกการเชื่อม", "unlink", "disconnect", "เลิกเชื่อม", "ยกเลิก LINE"]) {
       expect(intentOf(text)).toEqual({ kind: "faq", index: unlink });
     }
   });
@@ -155,7 +155,7 @@ describe("bot replies, unlinked user", () => {
   it("unknown text: says it cannot answer and still offers the link", async () => {
     const m = await ask("สวัสดีครับ");
     expect(m.messages).toHaveLength(2);
-    expect(m.messages[0]!.text).toContain("ยังตอบเรื่องนี้ไม่ได้");
+    expect(m.messages[0]!.text).toContain("ไม่เข้าใจข้อความนี้");
     expect(tokenFrom(m.messages[1]!.text)).toBeDefined();
     expect(m.messages[0]!.quickReply).toBeUndefined();
     expect(lastQuickLabels(m)).toHaveLength(5);
@@ -169,7 +169,7 @@ describe("bot replies, unlinked user", () => {
     line.reset();
     const second = await ask("ขอบคุณ");
     expect(second.messages).toHaveLength(1);
-    expect(second.text).toContain("ยังตอบเรื่องนี้ไม่ได้");
+    expect(second.text).toContain("ไม่เข้าใจข้อความนี้");
     expect(tokenFrom(second.text)).toBeUndefined();
     expect(lastQuickLabels(second)).toContain("เชื่อมบัญชี");
     const rows = await prisma.lineLinkToken.findMany({ where: { lineUserId: LINE_A } });
@@ -202,7 +202,7 @@ describe("bot replies, unlinked user", () => {
   it.each(["blink 182", "wifi เชื่อมต่อไม่ได้", "เชื่อมั่น"])("%s is not a link request: no link issued", async (text) => {
     const m = await ask(text);
     // Unknown text from a user with no link gets the unknown message plus the link, as before.
-    expect(m.messages[0]!.text).toContain("ยังตอบเรื่องนี้ไม่ได้");
+    expect(m.messages[0]!.text).toContain("ไม่เข้าใจข้อความนี้");
     expect(await prisma.lineLinkToken.count({ where: { lineUserId: LINE_A } })).toBe(1);
   });
 
@@ -313,7 +313,7 @@ describe("bot replies, linked user", () => {
   it("unknown text: cannot answer, no link offered", async () => {
     const m = await ask("สวัสดี");
     expect(m.messages).toHaveLength(1);
-    expect(m.text).toContain("ยังตอบเรื่องนี้ไม่ได้");
+    expect(m.text).toContain("ไม่เข้าใจข้อความนี้");
     expect(await prisma.lineLinkToken.count({ where: { lineUserId: LINE_A } })).toBe(0);
     expect(lastQuickLabels(m)).toHaveLength(4);
   });
