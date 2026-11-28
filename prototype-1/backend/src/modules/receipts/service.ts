@@ -349,9 +349,8 @@ export async function lineSummary(userId: string): Promise<LineSummary> {
   const row = await ownCheckForTerm(me.studentNo, currentTerm());
   if (!row) return { text: "ยังไม่ได้ส่งใบเสร็จภาคการศึกษานี้", link };
 
-  const { verdict } = studentView(row);
-  // The same test studentLocked uses: a check run by someone else is a staff check.
-  const staffChecked = row.checkedById !== me.id;
+  // staffChecked: the same test studentLocked uses (a check run by someone else is a staff check), as on the web page.
+  const { verdict, staffChecked } = studentView(row, me.id);
   // A warn that staff already looked at is not "waiting for staff" any more.
   const label = staffChecked && verdict === "warn" ? "เจ้าหน้าที่ตรวจแล้ว มีข้อสังเกต" : (VERDICT_TH[verdict] ?? "รอเจ้าหน้าที่ตรวจ");
   // Locked (passed, or checked by staff): no resend, as on the web page. Otherwise the student may send again.
