@@ -178,7 +178,8 @@ describe("link and status texts", () => {
     expect(en).not.toMatch(THAI);
     expect(th).toContain("15 นาที");
     expect(en).toContain("15 minutes");
-    expect(en).toContain("send any message here");
+    expect(th).toContain('พิมพ์ "เชื่อม"');
+    expect(en).toContain('type "link"');
     expect(link).toBe(url);
     expect(text.split(url)).toHaveLength(2);
   });

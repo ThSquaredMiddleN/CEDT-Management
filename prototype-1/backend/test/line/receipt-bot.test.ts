@@ -21,8 +21,8 @@ const OTHER_NOTE = "student 6899999999 holds the same reference";
 
 const NO_ROW = "ยังไม่ได้ส่งใบเสร็จภาคการศึกษานี้";
 const RESEND = "ส่งใหม่ได้ที่หน้าเว็บ";
-const STUDENT_ONLY = "เมนูนี้สำหรับนักศึกษา";
-const NO_PERMISSION = "บัญชีนี้ยังไม่มีสิทธิ์ดูสถานะใบเสร็จ ติดต่อเจ้าหน้าที่";
+const STUDENT_ONLY = "เมนูนี้สำหรับนิสิต";
+const NO_PERMISSION = "บัญชีนี้ยังไม่มีสิทธิ์ดูสถานะใบเสร็จ กรุณาติดต่อเจ้าหน้าที่";
 const LOCKED_NOTE = "หากต้องการเปลี่ยน กรุณาติดต่อเจ้าหน้าที่";
 const RECEIPT_LINK = `${config.APP_ORIGIN}/receipts`;
 
@@ -192,11 +192,12 @@ describe("receipt status, linked student", () => {
     expectNoLeak(m);
   });
 
-  it("staff-checked warn: says staff checked it, no resend", async () => {
+  it("staff-checked warn: still waits for staff settlement, no resend", async () => {
     await addRow(S_OWN, "warn", staffId);
     const m = await ask("ใบเสร็จ");
-    expect(m.text).toContain("เจ้าหน้าที่ตรวจแล้ว มีข้อสังเกต");
-    expect(m.text).not.toContain("รอเจ้าหน้าที่ตรวจ");
+    expect(m.text).toContain("รอเจ้าหน้าที่ตรวจ");
+    expect(m.text).not.toContain("มีข้อสังเกต");
+    expect(m.text).not.toContain("ตรวจแล้ว");
     expect(m.text).toContain(LOCKED_NOTE);
     expect(m.text).not.toContain(RESEND);
     expect(m.text).toContain(RECEIPT_LINK);

@@ -26,9 +26,9 @@ const shortDate = (iso: string) =>
 const CHECK_LABELS: Record<string, string> = {
   "All key fields read": "อ่านข้อมูลสำคัญในใบเสร็จได้ครบ",
   "Payment completed": "ชำระเงินแล้ว",
-  "Current semester": "เป็นของภาคการศึกษานี้",
-  "Belongs to this student": "เป็นของนิสิตคนนี้",
-  "Not submitted before": "ใบเสร็จนี้ยังไม่เคยถูกส่งมาก่อน",
+  "Current semester": "ตรงกับภาคการศึกษานี้",
+  "Belongs to this student": "เลขประจำตัวนิสิตตรงกับบัญชีนี้",
+  "Not submitted before": "ไม่ซ้ำกับใบเสร็จที่มีในระบบ",
 };
 
 const checkLabel = (name: string) => CHECK_LABELS[name] ?? name;
@@ -53,9 +53,9 @@ const VERDICT: Record<ReceiptVerdict, { label: string; Icon: typeof Info; box: s
 
 const STATE: Record<ReceiptCheckState, { label: string; Icon: typeof Info; className: string }> = {
   ok: { label: "ผ่าน", Icon: CheckCircle2, className: "text-status-success-fg" },
-  warn: { label: "ต้องตรวจสอบ", Icon: AlertTriangle, className: "text-status-warning-fg" },
+  warn: { label: "ต้องดูเพิ่ม", Icon: AlertTriangle, className: "text-status-warning-fg" },
   fail: { label: "ไม่ผ่าน", Icon: CircleX, className: "text-status-danger-fg" },
-  info: { label: "ข้อมูล", Icon: Info, className: "text-neutral-500" },
+  info: { label: "หมายเหตุ", Icon: Info, className: "text-neutral-500" },
 };
 
 // A warn that staff ran but has not settled yet: the student waits for staff's decision.
@@ -93,7 +93,7 @@ function SettleNote({ settlement, note }: { settlement: ReceiptSettlement | null
 /** Client-side checks mirror the server's, so a wrong file is refused before the upload. */
 function validateFile(file: File): string | null {
   if (!ACCEPTED_TYPES.includes(file.type)) return "รองรับเฉพาะไฟล์ PDF, JPG หรือ PNG";
-  if (file.size > MAX_BYTES) return "ไฟล์ใหญ่เกิน 10 MB กรุณาเลือกไฟล์ที่เล็กกว่า";
+  if (file.size > MAX_BYTES) return "ไฟล์ใหญ่เกิน 10 MB ลองย่อขนาดหรือเลือกไฟล์อื่น";
   return null;
 }
 
@@ -102,11 +102,11 @@ function describeUploadError(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.status) {
       case 400:
-        return "กรุณาเลือกไฟล์ใบเสร็จก่อนอัปโหลด";
+        return "เลือกไฟล์ใบเสร็จก่อนอัปโหลด";
       case 403:
         return "บัญชีนี้ยังไม่มีเลขประจำตัวนิสิต จึงส่งใบเสร็จไม่ได้ กรุณาติดต่อเจ้าหน้าที่";
       case 413:
-        return "ไฟล์ใหญ่เกิน 10 MB กรุณาเลือกไฟล์ที่เล็กกว่า";
+        return "ไฟล์ใหญ่เกิน 10 MB ลองย่อขนาดหรือเลือกไฟล์อื่น";
       case 409:
         return "ใบเสร็จของภาคการศึกษานี้ตรวจแล้ว หากต้องการเปลี่ยน กรุณาติดต่อเจ้าหน้าที่";
       case 415:
@@ -115,13 +115,13 @@ function describeUploadError(err: unknown): string {
         return "อ่านใบเสร็จนี้ไม่ได้ ลองอัปโหลดภาพหน้าจอที่ชัดกว่า หรือไฟล์ PDF";
       case 502:
       case 504:
-        return "ระบบตรวจใบเสร็จตอบกลับช้าหรือขัดข้อง กรุณาลองใหม่อีกครั้ง";
+        return "ระบบตรวจใบเสร็จใช้เวลานานเกินไปหรือขัดข้อง ลองใหม่อีกครั้ง";
       case 503:
         return "ระบบตรวจใบเสร็จยังไม่พร้อมใช้งาน กรุณาลองใหม่ภายหลัง";
     }
   }
   if (err instanceof TypeError) return "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่";
-  return "ตรวจใบเสร็จไม่สำเร็จ กรุณาลองอีกครั้ง";
+  return "ตรวจใบเสร็จไม่สำเร็จ ลองใหม่";
 }
 
 function ResultCard({ check, locked }: { check: MyReceiptCheck; locked: boolean }) {
@@ -156,7 +156,7 @@ function ResultCard({ check, locked }: { check: MyReceiptCheck; locked: boolean 
 
       {needsAction && (
         <p className="rounded-md border border-dashed border-neutral-400 p-3 text-sm text-neutral-700">
-          อัปโหลดใบเสร็จที่ชัดกว่าเดิมหรือใบเสร็จที่ถูกต้องอีกครั้ง การอัปโหลดใหม่จะแทนที่รายการนี้
+          อัปโหลดไฟล์ที่ชัดกว่าเดิมหรือใบเสร็จที่ถูกต้อง ไฟล์ใหม่จะบันทึกทับรายการนี้
         </p>
       )}
     </Card>
@@ -257,7 +257,7 @@ export function MyReceiptPage() {
       {(upload.data?.check ?? items[0]) && <ResultCard check={upload.data?.check ?? items[0]!} locked={locked} />}
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold tracking-tight">ที่ส่งแล้ว</h2>
+        <h2 className="text-lg font-semibold tracking-tight">ใบเสร็จที่ส่งแล้ว</h2>
         <Card className="overflow-hidden p-0">
           {list.isPending ? (
             <div className="flex flex-col gap-3 p-6">

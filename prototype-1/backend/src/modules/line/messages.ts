@@ -104,8 +104,8 @@ export function fallbackTextFor(message: string, url: string): string {
 /** Sent after a user adds the bot as a friend or messages it while not linked. `url` is the one-time link. */
 export function linkPrompt(url: string, minutes: number): string {
   return [
-    `เชื่อมบัญชี LINE เพื่อรับการแจ้งเตือนจากระบบ ลิงก์นี้ใช้ได้ ${minutes} นาที หากหมดอายุ ส่งข้อความใดก็ได้มาที่นี่เพื่อรับลิงก์ใหม่`,
-    `Link your LINE account to receive notifications. This link works for ${minutes} minutes. If it expires, send any message here for a new one.`,
+    `เชื่อมบัญชี LINE เพื่อรับการแจ้งเตือนจากระบบ ลิงก์นี้ใช้ได้ ${minutes} นาที หากลิงก์หมดอายุ พิมพ์ "เชื่อม" เพื่อรับลิงก์ใหม่`,
+    `Link your LINE account to receive notifications. This link works for ${minutes} minutes. If it expires, type "link" for a new one.`,
     url,
   ].join("\n\n");
 }
@@ -118,7 +118,7 @@ export function alreadyLinked(name: string): string {
 /** Sent after a successful link from the web app. */
 export function linkedOk(): string {
   return [
-    "เชื่อมบัญชี LINE สำเร็จ คุณจะได้รับการแจ้งเตือนจากระบบ",
+    "เชื่อมบัญชี LINE สำเร็จ ระบบจะส่งการแจ้งเตือนมาที่ LINE นี้",
     "LINE account linked. You will now receive notifications.",
   ].join("\n\n");
 }

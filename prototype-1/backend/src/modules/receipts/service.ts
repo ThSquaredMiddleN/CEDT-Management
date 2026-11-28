@@ -522,11 +522,11 @@ export async function lineSummary(userId: string): Promise<LineSummary> {
       link,
     };
   }
-  // A warn that staff already looked at is not "waiting for staff" any more.
-  const label = staffChecked && verdict === "warn" ? "เจ้าหน้าที่ตรวจแล้ว มีข้อสังเกต" : (VERDICT_TH[verdict] ?? "รอเจ้าหน้าที่ตรวจ");
+  const label = VERDICT_TH[verdict] ?? "รอเจ้าหน้าที่ตรวจ";
   // Locked (passed, or checked by staff): no resend, as on the web page. Otherwise the student may send again.
   const second = studentLocked(row, me.id)
-    ? `${staffChecked ? "เจ้าหน้าที่ตรวจแล้ว" : "ระบบตรวจให้อัตโนมัติ"} ${LOCKED_NOTE}`
-    : "ยังไม่มีเจ้าหน้าที่ตรวจ ส่งใหม่ได้ที่หน้าเว็บ";
+    ? // A warn staff ran is still waiting for their decision, so it doesn't say "checked".
+      `${verdict === "warn" ? "" : staffChecked ? "เจ้าหน้าที่ตรวจแล้ว " : "ระบบตรวจอัตโนมัติแล้ว "}${LOCKED_NOTE}`
+    : "เจ้าหน้าที่ยังไม่ตรวจ ส่งใหม่ได้ที่หน้าเว็บ";
   return { text: `ใบเสร็จภาคการศึกษานี้: ${label}\n${second}`, link };
 }
