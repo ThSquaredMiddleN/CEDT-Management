@@ -54,14 +54,5 @@ export function AdminLayout() {
     }),
   );
 
-  return (
-    <AppShell
-      sidebarItems={items}
-      showGuestProfile
-      hideHeader={
-        pathname.startsWith("/admin/announcements") ||
-        pathname.startsWith("/admin/news")
-      }
-    />
-  );
+  return <AppShell sidebarItems={items} showGuestProfile />;
 }

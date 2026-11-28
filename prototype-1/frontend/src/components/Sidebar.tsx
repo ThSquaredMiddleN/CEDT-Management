@@ -101,8 +101,8 @@ export function Sidebar({ items, collapsed, onToggle, footer }: SidebarProps) {
       {footer && (
         <div
           className={cn(
-            "flex shrink-0 items-center border-t border-[#e8e8e8]",
-            collapsed ? "justify-center px-3 py-4" : "gap-2 p-4",
+            "flex shrink-0 border-t border-[#e8e8e8]",
+            collapsed ? "flex-col items-center gap-2 px-2 py-3" : "items-center gap-1.5 p-2.5",
           )}
         >
           {footer}
