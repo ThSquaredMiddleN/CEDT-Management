@@ -4,7 +4,13 @@
  * Errors never carry the token, the request body or the message text.
  */
 
-export type LineMessage = { type: "text"; text: string };
+/** A quick reply button that sends `text` as the user's own message when tapped (LINE "message" action). */
+export interface LineQuickReplyItem {
+  type: "action";
+  action: { type: "message"; label: string; text: string };
+}
+
+export type LineMessage = { type: "text"; text: string; quickReply?: { items: LineQuickReplyItem[] } };
 
 export type LineResult =
   | { ok: true }

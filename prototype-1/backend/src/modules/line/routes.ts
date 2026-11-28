@@ -6,8 +6,9 @@ import { audit } from "../../core/audit.js";
 import { prisma } from "../../db.js";
 import { AppError, badRequest, isUniqueViolation, unauthenticated } from "../../lib/errors.js";
 import { hashToken, requireUser } from "../../plugins/auth.js";
+import { answerText, intentOf, needsLinkOffer } from "./bot.js";
 import { createLineClient, type LineClient, type LineMessage } from "./client.js";
-import { alreadyLinked, linkedOk, linkPrompt } from "./messages.js";
+import { linkedOk, linkPrompt } from "./messages.js";
 import { verifyLineSignature } from "./signature.js";
 
 export interface LineRouteOptions {
@@ -17,12 +18,16 @@ export interface LineRouteOptions {
 
 const LINK_INVALID = "This link is invalid, expired or already used. Message the LINE account again for a new one.";
 const MAX_EVENTS = 100;
+const MAX_TEXT_CHARS = 500;
 const WEBHOOK_EVENT_ID = /^[0-9A-Za-z]{1,64}$/u;
 const LINE_USER_ID = /^U[0-9a-f]{32}$/u;
 
 const linkBody = z.object({ token: z.string().min(1).max(200) });
 
-/** A LINE event after shape checks. Message text and the raw event are not kept, so nothing can log them. */
+/**
+ * A LINE event after shape checks. The raw event is not kept. A text message's words are kept (capped) only so the
+ * bot can answer them: they are never logged.
+ */
 interface LineEvent {
   type: string;
   webhookEventId: string;
@@ -30,6 +35,7 @@ interface LineEvent {
   replyToken?: string;
   isRedelivery: boolean;
   messageType?: string;
+  text?: string;
 }
 
 interface Ctx {
@@ -62,6 +68,9 @@ export function parseEvents(body: unknown): LineEvent[] {
       event.replyToken = replyToken;
     }
     if (isRecord(message) && typeof message.type === "string") event.messageType = message.type;
+    if (isRecord(message) && message.type === "text" && typeof message.text === "string") {
+      event.text = Array.from(message.text).slice(0, MAX_TEXT_CHARS).join("");
+    }
     events.push(event);
   }
   return events;
@@ -90,8 +99,11 @@ class LineSendError extends Error {
   }
 }
 
-/** Issues a fresh one-time link (only the newest per LINE user is valid) and sends it. */
-async function offerLink(ctx: Ctx, event: LineEvent, userId: string): Promise<void> {
+/**
+ * Issues a fresh one-time link (only the newest per LINE user is valid) and sends it. With `text`, the user's message
+ * is answered by the bot and the link goes in that answer; without it (a follow), the link message is sent alone.
+ */
+async function offerLink(ctx: Ctx, event: LineEvent, userId: string, text?: string): Promise<void> {
   const raw = randomBytes(32).toString("base64url");
   const tokenHash = hashToken(raw);
   const expiresAt = new Date(Date.now() + config.LINE_LINK_TTL_MINUTES * 60_000);
@@ -102,7 +114,9 @@ async function offerLink(ctx: Ctx, event: LineEvent, userId: string): Promise<vo
 
   let sent: boolean;
   try {
-    sent = await send(ctx.client, event, userId, [{ type: "text", text: linkPrompt(`${config.APP_ORIGIN}/line/link?token=${raw}`, config.LINE_LINK_TTL_MINUTES) }]);
+    const linkText = linkPrompt(`${config.APP_ORIGIN}/line/link?token=${raw}`, config.LINE_LINK_TTL_MINUTES);
+    const messages = text === undefined ? [{ type: "text" as const, text: linkText }] : await answerText(text, { linked: false, linkText });
+    sent = await send(ctx.client, event, userId, messages);
   } catch (err) {
     // The user never got this link, so it must not stay usable.
     await prisma.lineLinkToken.deleteMany({ where: { tokenHash } });
@@ -112,6 +126,14 @@ async function offerLink(ctx: Ctx, event: LineEvent, userId: string): Promise<vo
     await prisma.lineLinkToken.deleteMany({ where: { tokenHash } });
     ctx.log.warn({ eventType: event.type }, "LINE rejected the link message permanently; not retried");
   }
+}
+
+async function hasUsableLinkToken(userId: string): Promise<boolean> {
+  const row = await prisma.lineLinkToken.findFirst({
+    where: { lineUserId: userId, usedAt: null, expiresAt: { gt: new Date() } },
+    select: { id: true },
+  });
+  return row !== null;
 }
 
 async function handleEvent(ctx: Ctx, event: LineEvent): Promise<void> {
@@ -156,11 +178,21 @@ async function handleEvent(ctx: Ctx, event: LineEvent): Promise<void> {
       where: { lineUserId: userId, user: { isActive: true } },
       select: { user: { select: { name: true } } },
     });
+    const text = event.text ?? "";
     if (linked) {
-      await send(ctx.client, event, userId, [{ type: "text", text: alreadyLinked(linked.user.name) }]);
+      await send(ctx.client, event, userId, await answerText(text, { linked: true, name: linked.user.name }));
       return;
     }
-    await offerLink(ctx, event, userId);
+    const intent = intentOf(text);
+    if (needsLinkOffer(intent, { linked: false })) {
+      // An explicit request always gets a fresh link. Unknown text only gets one when no usable link is out,
+      // so "thanks" after a link does not replace the link the user is about to tap.
+      if (intent.kind === "link" || !(await hasUsableLinkToken(userId))) {
+        await offerLink(ctx, event, userId, text);
+        return;
+      }
+    }
+    await send(ctx.client, event, userId, await answerText(text, { linked: false }));
   }
 }
 

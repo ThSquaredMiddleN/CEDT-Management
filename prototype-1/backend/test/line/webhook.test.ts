@@ -149,7 +149,7 @@ describe("webhook events", () => {
   it("runs two events from one LINE user in order: the later link token is the one left valid", async () => {
     const body = webhookBody([
       lineEvent({ type: "follow", userId: LINE_A, replyToken: "rt-first" }),
-      lineEvent({ type: "message", userId: LINE_A, replyToken: "rt-second" }),
+      lineEvent({ type: "message", userId: LINE_A, replyToken: "rt-second", text: "เชื่อม" }),
     ]);
     const res = await postWebhook(app, body);
     expect(res.statusCode).toBe(200);
