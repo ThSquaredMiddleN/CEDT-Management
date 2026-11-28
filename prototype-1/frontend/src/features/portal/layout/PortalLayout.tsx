@@ -1,5 +1,5 @@
 import { UserCircleIcon } from "@heroicons/react/24/outline";
-import { LayoutDashboard, LogOut, MessageCircle, Settings } from "lucide-react";
+import { LayoutDashboard, LogOut, MessageCircle, Receipt, Settings } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/AuthProvider";
 import { can, isStaff } from "@/app/permissions";
@@ -78,6 +78,14 @@ export function PortalLayout() {
               <Link to="/line">
                 <MessageCircle className="size-4" />
                 LINE
+              </Link>
+            </DropdownMenuItem>
+          )}
+          {can(user, "receipts.use") && (
+            <DropdownMenuItem asChild>
+              <Link to="/receipts">
+                <Receipt className="size-4" />
+                ใบเสร็จค่าเทอม
               </Link>
             </DropdownMenuItem>
           )}

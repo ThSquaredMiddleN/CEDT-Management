@@ -1,12 +1,19 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { AppError, badRequest } from "../../lib/errors.js";
+import { AppError, badRequest, conflict, forbidden } from "../../lib/errors.js";
+import type { SessionUser } from "../../core/permissions.js";
 import { requireUser } from "../../plugins/auth.js";
 import {
   checkReceipt,
+  currentTerm,
+  ownCheckForTerm,
+  studentLocked,
   deleteReceiptCheck,
+  listOwnReceiptChecks,
   listReceiptChecks,
   OcrUnavailableError,
+  RECEIPT_LOCKED_MESSAGE,
+  studentView,
   type UploadedFile,
 } from "./service.js";
 
@@ -63,6 +70,12 @@ async function readUpload(req: FastifyRequest): Promise<{ file?: UploadedFile; f
   return { file, fields };
 }
 
+/** The student number a student may act on. Staff accounts have none, so they get 403 here. */
+function ownStudentNo(me: SessionUser): string {
+  if (!me.studentNo) throw forbidden("Only students with a student number can submit a receipt");
+  return me.studentNo;
+}
+
 export async function receiptRoutes(app: FastifyInstance): Promise<void> {
   app.post("/receipts/check", { config: { auth: "user", permission: "receipts.manage" } }, async (req, reply) => {
     const me = requireUser(req);
@@ -84,6 +97,41 @@ export async function receiptRoutes(app: FastifyInstance): Promise<void> {
       }
       throw err;
     }
+  });
+
+  // Student routes: the student's own ID (never one from the form), the current term, a safe response.
+  app.post("/receipts/mine", { config: { auth: "user", permission: "receipts.use" } }, async (req) => {
+    const me = requireUser(req);
+    const studentId = ownStudentNo(me);
+    // Any studentId or term fields in the form are read and dropped.
+    const { file } = await readUpload(req);
+    if (!file) throw badRequest("A `file` field is required");
+
+    const term = currentTerm();
+    // Checked before the OCR call, so a locked upload costs nothing.
+    if (studentLocked(await ownCheckForTerm(studentId, term), me.id)) {
+      throw conflict(RECEIPT_LOCKED_MESSAGE);
+    }
+
+    try {
+      // selfService: the save re-checks the lock, because staff may have checked the term during the OCR call.
+      const { check } = await checkReceipt({ studentId, term, file, checkedById: me.id, selfService: true });
+      return { check: studentView(check, me.id) };
+    } catch (err) {
+      if (err instanceof OcrUnavailableError) {
+        throw new AppError("SERVICE_UNAVAILABLE", "OCR service unavailable");
+      }
+      throw err;
+    }
+  });
+
+  app.get("/receipts/mine", { config: { auth: "user", permission: "receipts.use" } }, async (req) => {
+    const me = requireUser(req);
+    const studentId = ownStudentNo(me);
+    const rows = await listOwnReceiptChecks(studentId);
+    const term = currentTerm();
+    // `locked`: this term's upload is settled, so the page shows "contact staff" instead of the form.
+    return { items: rows.map((r) => studentView(r, me.id)), locked: studentLocked(rows.find((r) => r.term === term) ?? null, me.id) };
   });
 
   app.get("/receipts", { config: { auth: "user", permission: "receipts.view" } }, async (req) => {

@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import net from "node:net";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.js";
@@ -30,7 +32,9 @@ const S_E = "6500000005"; // list filters
 const S_F = "6500000006"; // list filters (warn)
 const S_G = "6500000007"; // delete
 const S_H = "6500000008"; // sidecar errors
-const TEST_STUDENTS = [S_A, S_B, S_C, S_D, S_E, S_F, S_G, S_H];
+const S_OWN = "6800000001"; // the seeded student@test.local account's student number
+const S_OWN2 = "6800000002"; // the seeded student2@test.local account's student number
+const TEST_STUDENTS = [S_A, S_B, S_C, S_D, S_E, S_F, S_G, S_H, S_OWN, S_OWN2];
 
 const BOUNDARY = "----receipt-test-boundary";
 const PDF_BYTES = Buffer.from("%PDF-1.4 made-up test bytes, not a real receipt");
@@ -473,5 +477,370 @@ describe("DELETE /receipts/:id", () => {
       headers: { cookie, "x-requested-with": "XMLHttpRequest" },
     });
     expect(bad.statusCode).toBe(400);
+  });
+});
+
+describe("student receipts (POST and GET /receipts/mine)", () => {
+  const TERM_OLD = "3/2598"; // made-up term for an older row
+  let studentCookie: string;
+  let student2Cookie: string;
+  let staffCookie: string;
+  let noRoleCookie: string;
+  let studentUserId: string;
+  let staffUserId: string;
+
+  const submitMine = (c: string, fields: Record<string, string>, reference?: string) => {
+    if (reference) fake.reply = (call) => sidecarOk(call, { reference });
+    const body = formBody(fields, { type: "application/pdf", data: PDF_BYTES });
+    return app.inject({
+      method: "POST",
+      url: "/api/v1/receipts/mine",
+      headers: { cookie: c, "x-requested-with": "XMLHttpRequest", "content-type": body.contentType },
+      payload: body.payload,
+    });
+  };
+  const listMine = (c: string) => app.inject({ method: "GET", url: "/api/v1/receipts/mine", headers: { cookie: c } });
+
+  beforeAll(async () => {
+    studentCookie = await login("student@test.local", "test1234");
+    student2Cookie = await login("student2@test.local", "test1234");
+    staffCookie = await login("staff@test.local", "test1234");
+    noRoleCookie = await login("norole@test.local", "test1234");
+    studentUserId = (await prisma.user.findUniqueOrThrow({ where: { email: "student@test.local" } })).id;
+    staffUserId = (await prisma.user.findUniqueOrThrow({ where: { email: "staff@test.local" } })).id;
+    await prisma.receiptCheck.deleteMany({ where: { studentId: { in: TEST_STUDENTS } } });
+  });
+  // Each case starts with no row for the student, so a passed row from one case can't lock the next.
+  beforeEach(async () => {
+    await prisma.receiptCheck.deleteMany({ where: { studentId: { in: [S_OWN, S_OWN2] } } });
+  });
+  const warnChecks: SidecarCheckRow[] = [{ name: "Belongs to this student", state: "warn", detail: "prefix only" }];
+
+  it("saves the row under the student's own number, ignoring a studentId or term sent in the form", async () => {
+    const before = fake.calls.length;
+    const res = await submitMine(studentCookie, { studentId: S_A, term: TERM_OLD });
+    expect(res.statusCode).toBe(200);
+    expect(fake.calls.length).toBe(before + 1);
+    const call = fake.calls[fake.calls.length - 1]!;
+    expect(call.studentId).toBe(S_OWN);
+    expect(call.term).toBe(currentTerm());
+
+    const row = await prisma.receiptCheck.findUniqueOrThrow({
+      where: { studentId_term: { studentId: S_OWN, term: currentTerm() } },
+    });
+    expect(row.checkedById).toBe(studentUserId);
+    expect(await prisma.receiptCheck.count({ where: { studentId: S_A, checkedById: studentUserId } })).toBe(0);
+  });
+
+  it("answers with the safe shape only: no fields, name, reference, reviewer or other student's ID", async () => {
+    // Another student's row already holds the reference the student is about to submit.
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-MINE-DUP" });
+    expect((await pdf({ studentId: S_B, term: TERM_OLD })).statusCode).toBe(200);
+
+    const res = await submitMine(studentCookie, {}, "RC-MINE-DUP");
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { check: Record<string, unknown>; fields?: unknown };
+    expect(Object.keys(body)).toEqual(["check"]);
+    expect(Object.keys(body.check).sort()).toEqual(["checks", "createdAt", "id", "kind", "staffChecked", "term", "verdict"]);
+    expect(body.check).toMatchObject({ term: currentTerm(), kind: "pdf", verdict: "fail" });
+    expect(body.check.checks).toContainEqual({ name: "Not submitted before", state: "fail" });
+    expect(res.body).not.toContain(S_B);
+    expect(res.body).not.toContain("RC-MINE-DUP");
+    expect(res.body).not.toContain(MADE_UP_NAME);
+    expect(res.body).not.toContain(adminId);
+    expect(res.body).not.toContain(studentUserId);
+    expect(res.body).not.toContain("detail");
+  });
+
+  it("does not let someone else's receipt claim its reference, so the owner can still submit it", async () => {
+    fake.reply = (call) =>
+      sidecarOk(call, {
+        reference: "RC-NOT-MINE",
+        checks: [
+          { name: "Belongs to this student", state: "fail", detail: "ID does not match" },
+          { name: "Not submitted before", state: "ok", detail: "reference not seen before (this session)" },
+        ],
+      });
+    const res = await submitMine(studentCookie, {});
+    expect(res.statusCode).toBe(200);
+    const row = await prisma.receiptCheck.findUniqueOrThrow({
+      where: { studentId_term: { studentId: S_OWN, term: currentTerm() } },
+    });
+    expect(row.verdict).toBe("fail");
+    expect(row.reference).toBeNull();
+
+    // The real owner's receipt, checked afterwards, passes the duplicate check.
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-NOT-MINE" });
+    const owner = await pdf({ studentId: S_C, term: currentTerm() });
+    const dup = (owner.json() as { check: { checks: SidecarCheckRow[] } }).check.checks.find(
+      (c) => c.name === "Not submitted before",
+    );
+    expect(dup?.state).toBe("ok");
+  });
+
+  describe("duplicate check against an unsettled row", () => {
+    const dupOf = (res: { json: () => unknown }) =>
+      (res.json() as { check: { verdict: string; checks: { name: string; state: string }[] } }).check;
+
+    it("is only a warn when the other row is an unchecked student upload; both rows keep the reference", async () => {
+      // B (a student whose ID matches the visible prefix) uploads A's screenshot first: warn, unsettled.
+      fake.reply = (call) => sidecarOk(call, { reference: "RC-UNSETTLED-1", checks: warnChecks });
+      expect((await submitMine(student2Cookie, {})).json()).toMatchObject({ check: { verdict: "warn" } });
+
+      // A's genuine upload: warn, not fail, and not ok.
+      fake.reply = (call) => sidecarOk(call, { reference: "RC-UNSETTLED-1" });
+      const a = await submitMine(studentCookie, {});
+      expect(a.statusCode).toBe(200);
+      const check = dupOf(a);
+      expect(check.verdict).toBe("warn");
+      expect(check.checks).toContainEqual({ name: "Not submitted before", state: "warn" });
+      // Student-facing view: no other student's ID, reference or detail text.
+      expect(a.body).not.toContain(S_OWN2);
+      expect(a.body).not.toContain("RC-UNSETTLED-1");
+      expect(a.body).not.toContain("detail");
+
+      const rowA = await prisma.receiptCheck.findUniqueOrThrow({
+        where: { studentId_term: { studentId: S_OWN, term: currentTerm() } },
+      });
+      expect(rowA.reference).toBe("RC-UNSETTLED-1");
+      expect(rowA.checks as unknown as SidecarCheckRow[]).toContainEqual(
+        expect.objectContaining({ name: "Not submitted before", state: "warn", detail: expect.stringContaining("staff") }),
+      );
+      const rowB = await prisma.receiptCheck.findUniqueOrThrow({
+        where: { studentId_term: { studentId: S_OWN2, term: currentTerm() } },
+      });
+      expect(rowB.reference).toBe("RC-UNSETTLED-1");
+      expect(rowB.verdict).toBe("warn");
+    });
+
+    it("is also a warn for a staff check against an unchecked student upload", async () => {
+      fake.reply = (call) => sidecarOk(call, { reference: "RC-UNSETTLED-2", checks: warnChecks });
+      expect((await submitMine(student2Cookie, {})).statusCode).toBe(200);
+      fake.reply = (call) => sidecarOk(call, { reference: "RC-UNSETTLED-2" });
+      const res = await pdf({ studentId: S_A, term: currentTerm() });
+      const check = dupOf(res);
+      expect(check.verdict).toBe("warn");
+      expect(check.checks).toContainEqual(expect.objectContaining({ name: "Not submitted before", state: "warn" }));
+      await prisma.receiptCheck.deleteMany({ where: { studentId: S_A, term: currentTerm() } });
+    });
+
+    it("is still a fail when the other row passed", async () => {
+      expect((await submitMine(studentCookie, {}, "RC-SETTLED-OK")).json()).toMatchObject({ check: { verdict: "ok" } });
+      const res = await submitMine(student2Cookie, {}, "RC-SETTLED-OK");
+      expect(res.statusCode).toBe(200);
+      expect(dupOf(res).verdict).toBe("fail");
+      expect(dupOf(res).checks).toContainEqual({ name: "Not submitted before", state: "fail" });
+      expect(res.body).not.toContain(S_OWN);
+    });
+
+    it("is still a fail when staff checked the other row, even if it only warned", async () => {
+      fake.reply = (call) => sidecarOk(call, { reference: "RC-SETTLED-STAFF", checks: warnChecks });
+      const staffRes = await pdf({ studentId: S_OWN, term: currentTerm() });
+      expect(dupOf(staffRes).verdict).toBe("warn");
+      const res = await submitMine(student2Cookie, {}, "RC-SETTLED-STAFF");
+      expect(res.statusCode).toBe(200);
+      expect(dupOf(res).verdict).toBe("fail");
+      expect(dupOf(res).checks).toContainEqual({ name: "Not submitted before", state: "fail" });
+    });
+  });
+
+  it("replaces the term's row on a re-upload while the student's own check is unsettled", async () => {
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-MINE-1", checks: warnChecks });
+    const first = (await submitMine(studentCookie, {})).json() as { check: { id: string } };
+    expect((await listMine(studentCookie)).json()).toMatchObject({ locked: false });
+    const again = await submitMine(studentCookie, {}, "RC-MINE-2");
+    expect(again.statusCode).toBe(200);
+    const rows = await prisma.receiptCheck.findMany({ where: { studentId: S_OWN } });
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.reference).toBe("RC-MINE-2");
+    expect((again.json() as { check: { id: string } }).check.id).toBe(first.check.id);
+  });
+
+  it("refuses a re-upload once the term's receipt passed (409), without calling the OCR service", async () => {
+    expect((await submitMine(studentCookie, {}, "RC-MINE-OK")).json()).toMatchObject({ check: { verdict: "ok" } });
+    expect((await listMine(studentCookie)).json()).toMatchObject({ locked: true });
+    const before = fake.calls.length;
+    const res = await submitMine(studentCookie, {}, "RC-MINE-LATER");
+    expect(res.statusCode).toBe(409);
+    expect(fake.calls.length).toBe(before);
+    const row = await prisma.receiptCheck.findUniqueOrThrow({
+      where: { studentId_term: { studentId: S_OWN, term: currentTerm() } },
+    });
+    expect(row.reference).toBe("RC-MINE-OK");
+  });
+
+  it("refuses a re-upload once staff checked the term (409), even when it did not pass", async () => {
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-MINE-STAFF", checks: warnChecks });
+    expect((await pdf({ studentId: S_OWN, term: currentTerm() })).statusCode).toBe(200);
+    expect((await listMine(studentCookie)).json()).toMatchObject({
+      locked: true,
+      items: [{ verdict: "warn", staffChecked: true }],
+    });
+    const res = await submitMine(studentCookie, {}, "RC-MINE-AFTER-STAFF");
+    expect(res.statusCode).toBe(409);
+    // Staff can still check again.
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-MINE-STAFF-2" });
+    expect((await pdf({ studentId: S_OWN, term: currentTerm() })).statusCode).toBe(200);
+  });
+
+  it("hides the Funding row from students; staff still see it", async () => {
+    fake.reply = (call) =>
+      sidecarOk(call, {
+        reference: "RC-MINE-LOAN",
+        checks: [...warnChecks, { name: "Funding", state: "info", detail: "กยศ. student loan" }],
+      });
+    const res = await submitMine(studentCookie, {});
+    expect(res.statusCode).toBe(200);
+    const names = (res.json() as { check: { checks: { name: string }[] } }).check.checks.map((c) => c.name);
+    expect(names).not.toContain("Funding");
+    expect(res.body).not.toContain("กยศ");
+    const listed = await listMine(studentCookie);
+    expect(listed.body).not.toContain("Funding");
+    const row = await prisma.receiptCheck.findUniqueOrThrow({
+      where: { studentId_term: { studentId: S_OWN, term: currentTerm() } },
+    });
+    expect(row.checks as { name: string }[]).toContainEqual(expect.objectContaining({ name: "Funding" }));
+  });
+
+  it("shows a student only the check names on the allowlist", async () => {
+    fake.reply = (call) =>
+      sidecarOk(call, {
+        reference: "RC-MINE-ALLOW",
+        checks: [...warnChecks, { name: "X", state: "info", detail: "made-up staff note" }],
+      });
+    const res = await submitMine(studentCookie, {});
+    expect(res.statusCode).toBe(200);
+    const names = (res.json() as { check: { checks: { name: string }[] } }).check.checks.map((c) => c.name);
+    expect(names).toEqual(["Belongs to this student", "Not submitted before"]); // the second is added from the database
+    expect((await listMine(studentCookie)).body).not.toContain('"X"');
+  });
+
+  it("answers 409 and keeps the staff row when staff checked the term while the student's OCR call was running", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    fake.reply = (call) => ({ ...sidecarOk(call, { reference: "RC-RACE-STUDENT" }), hold: gate });
+    const before = fake.calls.length;
+    const studentUpload = submitMine(studentCookie, {});
+    for (let i = 0; i < 500 && fake.calls.length < before + 1; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(fake.calls.length).toBe(before + 1); // the student's call is now waiting in the OCR stub
+
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-RACE-STAFF" });
+    expect((await pdf({ studentId: S_OWN, term: currentTerm() })).statusCode).toBe(200);
+    release();
+
+    const res = await studentUpload;
+    expect(res.statusCode).toBe(409);
+    const row = await prisma.receiptCheck.findUniqueOrThrow({
+      where: { studentId_term: { studentId: S_OWN, term: currentTerm() } },
+    });
+    expect(row.checkedById).toBe(adminId);
+    expect(row.reference).toBe("RC-RACE-STAFF");
+  });
+
+  it("never answers 500 for two first uploads at once with no reference", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    fake.reply = (call) => ({ ...sidecarOk(call, { reference: null }), hold: gate });
+    const before = fake.calls.length;
+    const both = Promise.all([submitMine(studentCookie, {}), submitMine(studentCookie, {})]);
+    for (let i = 0; i < 500 && fake.calls.length < before + 2; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(fake.calls.length).toBe(before + 2); // both are past the early lock check
+    release();
+
+    const [a, b] = await both;
+    for (const res of [a, b]) expect([200, 409]).toContain(res.statusCode);
+    expect([a, b].some((r) => r.statusCode === 200)).toBe(true);
+    expect(await prisma.receiptCheck.count({ where: { studentId: S_OWN, term: currentTerm() } })).toBe(1);
+  });
+
+  it("requires a file field with 400", async () => {
+    const body = formBody({ studentId: S_A });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/receipts/mine",
+      headers: { cookie: studentCookie, "x-requested-with": "XMLHttpRequest", "content-type": body.contentType },
+      payload: body.payload,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("returns 503 when the sidecar answers 503", async () => {
+    fake.reply = () => ({ status: 503, body: { error: "OCR engine unavailable" } });
+    const res = await submitMine(studentCookie, {});
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error).toMatchObject({ code: "SERVICE_UNAVAILABLE", message: "OCR service unavailable" });
+  });
+
+  it("GET lists only the student's own rows, all terms, newest first, with the safe shape", async () => {
+    // Another student's row in the same term must not appear; an older row in another term must.
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-MINE-OTHER" });
+    expect((await pdf({ studentId: S_B, term: currentTerm() })).statusCode).toBe(200);
+    const old = await prisma.receiptCheck.create({
+      data: {
+        studentId: S_OWN,
+        term: TERM_OLD,
+        kind: "pdf",
+        reference: "RC-MINE-OLD",
+        checks: [{ name: "Not submitted before", state: "fail", detail: `reference already used for student ${S_A}` }],
+        verdict: "fail",
+        checkedById: adminId,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    });
+
+    expect((await submitMine(studentCookie, {}, "RC-MINE-NOW")).statusCode).toBe(200);
+
+    const res = await listMine(studentCookie);
+    expect(res.statusCode).toBe(200);
+    expect(Object.keys(res.json()).sort()).toEqual(["items", "locked"]);
+    const items = (res.json() as { items: Record<string, unknown>[] }).items;
+    expect(items.map((i) => i.term)).toEqual([currentTerm(), TERM_OLD]);
+    expect(items[1]!.id).toBe(old.id);
+    for (const item of items) {
+      expect(Object.keys(item).sort()).toEqual(["checks", "createdAt", "id", "kind", "staffChecked", "term", "verdict"]);
+      for (const c of item.checks as Record<string, unknown>[]) expect(Object.keys(c).sort()).toEqual(["name", "state"]);
+    }
+    expect(res.body).not.toContain(S_A);
+    expect(res.body).not.toContain(S_B);
+    expect(res.body).not.toContain("RC-MINE");
+    expect(res.body).not.toContain(MADE_UP_NAME);
+  });
+
+  it("returns 403 to a staff account with no student number, with or without the permission", async () => {
+    const before = fake.calls.length;
+    expect((await submitMine(staffCookie, { studentId: S_A })).statusCode).toBe(403);
+    expect((await listMine(staffCookie)).statusCode).toBe(403);
+
+    // With receipts.use granted directly, the student-number check is what refuses.
+    await prisma.userPermission.create({ data: { userId: staffUserId, permission: "receipts.use", reason: "test" } });
+    try {
+      const granted = await submitMine(staffCookie, { studentId: S_A });
+      expect(granted.statusCode).toBe(403);
+      expect(granted.json().error.message).toBe("Only students with a student number can submit a receipt");
+      expect((await listMine(staffCookie)).statusCode).toBe(403);
+    } finally {
+      await prisma.userPermission.deleteMany({ where: { userId: staffUserId, permission: "receipts.use" } });
+    }
+    expect(fake.calls.length).toBe(before);
+  });
+
+  it("returns 403 to a user without receipts.use, and never calls the OCR service", async () => {
+    const before = fake.calls.length;
+    expect((await submitMine(noRoleCookie, {})).statusCode).toBe(403);
+    expect((await listMine(noRoleCookie)).statusCode).toBe(403);
+    expect(fake.calls.length).toBe(before);
+  });
+});
+
+describe("receipts_use migration", () => {
+  it("can run again without a duplicate-key error (ON CONFLICT DO NOTHING)", async () => {
+    const sql = readFileSync(
+      fileURLToPath(new URL("../../prisma/schema/migrations/20261125150000_receipts_use/migration.sql", import.meta.url)),
+      "utf8",
+    );
+    const count = () => prisma.rolePermission.count({ where: { permission: "receipts.use" } });
+    const before = await count();
+    await prisma.$executeRawUnsafe(sql);
+    expect(await count()).toBe(before);
   });
 });

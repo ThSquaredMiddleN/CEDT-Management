@@ -21,6 +21,7 @@ import type {
   Course,
   DirectoryUser,
   LineStatus,
+  MyReceiptCheck,
   NotificationsResponse,
   ReceiptCheckResponse,
   ReceiptCheckRow,
@@ -404,6 +405,31 @@ export function useDeleteReceiptCheck() {
     },
   });
 }
+// ------------------------------------------------ student's own receipt checks
+
+/** The signed-in student's checks, all terms, newest first. Needs receipts.use. */
+export function useMyReceipts() {
+  return useQuery({
+    queryKey: qk.myReceipts,
+    queryFn: () => api<{ items: MyReceiptCheck[]; locked: boolean }>("/receipts/mine"),
+  });
+}
+
+/**
+ * Uploads the student's own receipt for the current term; a new upload replaces this term's check.
+ * The response has no student name or fields read, so it can sit in the mutation state.
+ */
+export function useUploadMyReceipt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (form: FormData) =>
+      api<{ check: MyReceiptCheck }>("/receipts/mine", { method: "POST", body: form }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.myReceipts });
+    },
+  });
+}
+
 // --------------------------------------------------------------------------- line
 
 /** Links the signed-in user's LINE account. 400 = invalid, expired or used token. */

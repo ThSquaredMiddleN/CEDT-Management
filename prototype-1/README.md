@@ -100,6 +100,11 @@ shows the fields read and the checks (paid, this semester, belongs to this stude
 another student). The result is saved, one row per student per term; **the file and the student's name are
 never stored**.
 
+Students upload their own receipt at **Tuition receipt** (`/receipts`, permission `receipts.use`, granted to the
+student role). The student ID comes from their account, never from the form; the term is the current one. They see
+each check as passed / check / failed, never the fields read or another student's data. A new upload replaces the
+term's row. API: `POST /api/v1/receipts/mine` (upload), `GET /api/v1/receipts/mine` (own checks, newest first).
+
 Reading the receipt is done by a small Python service on localhost (`ocr-service/`, see its README). Start
 it next to the backend:
 
