@@ -224,6 +224,36 @@ describe("receipt status, linked student", () => {
     expectNoLeak(m);
   });
 
+  it("staff settled Pass: passed, says staff checked, no resend", async () => {
+    await addRow(S_OWN, "ok", staffId);
+    await prisma.receiptCheck.updateMany({
+      where: { studentId: S_OWN },
+      data: { settlement: "pass", settledById: staffId, settledAt: new Date() },
+    });
+    const m = await ask("ใบเสร็จ");
+    expect(m.text).toContain("ผ่าน (เจ้าหน้าที่ตรวจแล้ว)");
+    expect(m.text).not.toContain("ไม่ผ่าน");
+    expect(m.text).toContain(LOCKED_NOTE);
+    expect(m.text).not.toContain(RESEND);
+    expectNoLeak(m);
+  });
+
+  it("staff settled Fail: not passed, says upload again, never the staff note", async () => {
+    const note = "SETTLE-NOTE-NOT-ON-LINE";
+    // Staff-run, so only the Fail settlement unlocks it (a student's own fail row is open anyway).
+    await addRow(S_OWN, "fail", staffId);
+    await prisma.receiptCheck.updateMany({
+      where: { studentId: S_OWN },
+      data: { settlement: "fail", settleNote: note, settledById: staffId, settledAt: new Date() },
+    });
+    const m = await ask("ใบเสร็จ");
+    expect(m.text).toContain("ไม่ผ่าน (เจ้าหน้าที่ตรวจแล้ว)");
+    expect(m.text).toContain("ส่งใบเสร็จใหม่ได้ที่หน้าเว็บ");
+    expect(m.text).not.toContain(LOCKED_NOTE);
+    expect(m.text).not.toContain(note);
+    expectNoLeak(m);
+  });
+
   it("another student's row is never shown", async () => {
     await addRow(S_OWN2, "ok", student2Id);
     const m = await ask("ใบเสร็จ");

@@ -10,6 +10,7 @@ Env: OCR_ENGINE (paddle | stub, default paddle), OCR_HOST, OCR_PORT, OCR_TMPDIR 
 cedt-ocr-uploads subfolder, read once at import), PADDLE_PYTHON (interpreter for paddle_worker.py, default this one), PADDLE_DEVICE and PADDLE_PDX_CACHE_HOME
 (read by paddle_worker.py).
 """
+import base64
 import json
 import logging
 import os
@@ -22,11 +23,21 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import pymupdf
+
 from receipt_parse import checks, current_term, parse_pdf, parse_screenshot
 
 HERE = Path(__file__).resolve().parent
 MAX_BODY = 10 * 1024 * 1024
 SUFFIX = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png"}
+STORED_WIDTH = 870  # px: the staff copy is at most this wide (images are never enlarged)
+STORED_QUALITY = 70  # JPEG quality of the staff copy
+STORED_MAX_ZOOM = 2.0  # PDF render zoom cap, so a small page is not blown up
+STORED_HEIGHT = 6 * STORED_WIDTH  # px: a tall PDF page is rendered at a lower zoom so the copy is at most this high
+MAX_PIXELS = 40_000_000  # images: more pixels than this is refused with 413, before any decode or OCR
+MAX_ASPECT = 6  # images: height above 6 x width is refused with 413
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+SOF_MARKERS = set(range(0xC0, 0xD0)) - {0xC4, 0xC8, 0xCC}  # JPEG start-of-frame markers (not DHT, JPG, DAC)
 UPLOAD_DIR = Path(os.environ.get("OCR_TMPDIR") or tempfile.gettempdir()) / "cedt-ocr-uploads"
 logger = logging.getLogger("ocr")
 
@@ -185,6 +196,73 @@ def _remove_quietly(path):
     logger.error("temp file not deleted")
 
 
+def image_size(body):
+    """(width, height) from the PNG IHDR or the JPEG start-of-frame segment, read without decoding the raster.
+    None if the bytes are not a PNG or JPEG with a readable header."""
+    try:
+        if body[:8] == PNG_SIGNATURE and len(body) >= 24 and body[12:16] == b"IHDR":
+            return int.from_bytes(body[16:20], "big"), int.from_bytes(body[20:24], "big")
+        if body[:2] == b"\xff\xd8":
+            pos = 2
+            while True:
+                if body[pos] != 0xFF:
+                    return None
+                marker = body[pos + 1]
+                if marker == 0xFF:  # fill byte before a marker
+                    pos += 1
+                elif marker in SOF_MARKERS:
+                    if pos + 9 > len(body):
+                        return None
+                    return int.from_bytes(body[pos + 7:pos + 9], "big"), int.from_bytes(body[pos + 5:pos + 7], "big")
+                elif marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:  # standalone markers: no length field
+                    pos += 2
+                elif marker in (0xD9, 0xDA):  # end of image, or scan data, before any frame header
+                    return None
+                else:
+                    pos += 2 + int.from_bytes(body[pos + 2:pos + 4], "big")
+    except IndexError:
+        return None
+    return None
+
+
+def image_too_large(body):
+    """True when the image header says the raster is over MAX_PIXELS or taller than MAX_ASPECT x its width. An
+    unreadable header is not refused here: the decode path already fails safely on it."""
+    size = image_size(body)
+    if size is None:
+        return False
+    width, height = size
+    return width * height > MAX_PIXELS or height > MAX_ASPECT * width
+
+
+def stored_copy(body, suffix):
+    """A JPEG of the upload for the backend to store and staff to view, as {"mime", "data"} (data is base64), or
+    None if it cannot be made. Images: converted to RGB without alpha, scaled to STORED_WIDTH if wider; an image
+    that image_too_large() refuses is not decoded. PDF: page 1 rendered at a zoom that makes it STORED_WIDTH wide
+    (zoom at most STORED_MAX_ZOOM), or lower when the page is so tall that the copy would exceed STORED_HEIGHT.
+    Never raises; logs the exception type only (messages can carry file names)."""
+    try:
+        if suffix == ".pdf":
+            with pymupdf.open(stream=body, filetype="pdf") as doc:
+                page = doc[0]
+                zoom = min(STORED_MAX_ZOOM, STORED_WIDTH / page.rect.width, STORED_HEIGHT / page.rect.height)
+                pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
+        else:
+            if image_too_large(body):
+                logger.warning("staff copy not made (image too large)")
+                return None
+            pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.Pixmap(body))
+            if pix.alpha:
+                pix = pymupdf.Pixmap(pix, 0)
+            if pix.width > STORED_WIDTH:
+                pix = pymupdf.Pixmap(pix, STORED_WIDTH, round(pix.height * STORED_WIDTH / pix.width))
+        jpg = pix.tobytes("jpeg", jpg_quality=STORED_QUALITY)
+    except Exception as e:
+        logger.warning("staff copy not made (%s)", type(e).__name__)
+        return None
+    return {"mime": "image/jpeg", "data": base64.b64encode(jpg).decode("ascii")}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ocr-service"
     timeout = 30  # socket timeout: a client that stalls mid-body frees its thread
@@ -238,6 +316,8 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(int(length))
         if len(body) != int(length):
             return self._json(400, {"error": "incomplete body"})
+        if suffix != ".pdf" and image_too_large(body):  # refused before any decode, the OCR or the staff copy
+            return self._json(413, {"error": "image too large"})
         q = parse_qs(urlparse(self.path).query)
         expected = {"term": _first(q, "term") or current_term(), "student_id": _first(q, "student_id")}
         status, payload = self._parse(body, suffix, expected)
@@ -265,7 +345,8 @@ class Handler(BaseHTTPRequestHandler):
                     return 422, {"error": "could not read this image"}
         finally:
             _remove_quietly(tmp)
-        return 200, {"kind": kind, "fields": fields, "checks": checks(kind, fields, expected, seen_by=None)}
+        return 200, {"kind": kind, "fields": fields, "checks": checks(kind, fields, expected, seen_by=None),
+                     "stored_copy": stored_copy(body, suffix)}
 
     def _json(self, status, obj):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")

@@ -64,6 +64,11 @@ export function ReceiptResult({ result }: { result: ReceiptCheckResponse }) {
         <span className="text-sm text-neutral-500">
           {isScreenshot ? "Screenshot" : "PDF receipt"} · term {check.term}
         </span>
+        {check.verdict === "warn" && (
+          <p className="w-full text-sm text-neutral-700">
+            Settle it from the list below once you've looked at the receipt.
+          </p>
+        )}
       </div>
 
       <section className="flex flex-col gap-3">

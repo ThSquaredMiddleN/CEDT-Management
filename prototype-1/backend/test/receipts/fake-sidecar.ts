@@ -4,6 +4,11 @@ import type { AddressInfo } from "node:net";
 /** A made-up name. The fake sidecar returns it as a field, as the real one does; it must never reach the DB. */
 export const MADE_UP_NAME = "นาย ทดสอบ ตัวอย่าง";
 
+/** A 2x2 white JPEG, base64: the stand-in for the sidecar's stored copy of a receipt. */
+export const TINY_JPEG_B64 =
+  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6PTBCYFVlZF9VXVtqeJmBanGQc1tdhbWGkJ6jq62rZ4C8ybqmx5moq6T/2wBDARweHigjKE4rK06kbl1upKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKT/wAARCAACAAIDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDpqKKKAP/Z";
+export const TINY_JPEG = Buffer.from(TINY_JPEG_B64, "base64");
+
 export interface SidecarCall {
   term: string | null;
   studentId: string | null;
@@ -36,7 +41,13 @@ export interface SidecarCheckRow {
 /** Answer shaped like the real sidecar's 200 response, with made-up values. */
 export function sidecarOk(
   call: SidecarCall,
-  opts: { kind?: "pdf" | "screenshot"; reference?: string | null; checks?: SidecarCheckRow[] } = {},
+  opts: {
+    kind?: "pdf" | "screenshot";
+    reference?: string | null;
+    checks?: SidecarCheckRow[];
+    /** false: the sidecar sends `stored_copy: null`, as when it has no copy to give. Default: a small JPEG. */
+    storedCopy?: boolean;
+  } = {},
 ): SidecarReply {
   const kind = opts.kind ?? "pdf";
   const reference = opts.reference === undefined ? "RC-TEST-0001" : opts.reference;
@@ -70,7 +81,12 @@ export function sidecarOk(
   }
   return {
     status: 200,
-    body: { kind, fields, checks: opts.checks ?? defaultChecks },
+    body: {
+      kind,
+      fields,
+      checks: opts.checks ?? defaultChecks,
+      stored_copy: opts.storedCopy === false ? null : { mime: "image/jpeg", data: TINY_JPEG_B64 },
+    },
   };
 }
 

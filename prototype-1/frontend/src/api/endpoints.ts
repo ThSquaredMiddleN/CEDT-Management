@@ -25,6 +25,7 @@ import type {
   NotificationsResponse,
   ReceiptCheckResponse,
   ReceiptCheckRow,
+  ReceiptSettlement,
   ReceiptVerdict,
   NewsArticle,
   NewsInput,
@@ -405,13 +406,28 @@ export function useDeleteReceiptCheck() {
     },
   });
 }
+
+/** Staff settle a warn check: pass, or fail with a note the student sees. 409 if already settled or not a warn. */
+export function useSettleReceiptCheck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, decision, note }: { id: string; decision: ReceiptSettlement; note?: string }) =>
+      post<{ check: ReceiptCheckRow }>(`/receipts/${id}/settle`, { decision, note }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.receipts });
+    },
+  });
+}
+
+/** The stored receipt copy, for staff. A plain link in a new tab; the session cookie authorises it. */
+export const receiptFileUrl = (id: string) => `/api/v1/receipts/${id}/file`;
 // ------------------------------------------------ student's own receipt checks
 
 /** The signed-in student's checks, all terms, newest first. Needs receipts.use. */
 export function useMyReceipts() {
   return useQuery({
     queryKey: qk.myReceipts,
-    queryFn: () => api<{ items: MyReceiptCheck[]; locked: boolean }>("/receipts/mine"),
+    queryFn: () => api<{ items: MyReceiptCheck[]; locked: boolean; fileDays: number }>("/receipts/mine"),
   });
 }
 

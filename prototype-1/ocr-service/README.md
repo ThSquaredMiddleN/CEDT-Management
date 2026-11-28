@@ -69,9 +69,12 @@ PDFs take under 0.1 s anywhere (text layer, no OCR). Plan for 4 CPU / 4 GB.
 - `Content-Type`: `application/pdf`, `image/jpeg` or `image/png`. Anything else gets 415.
 - Body: 10 MB at most (413 beyond). A missing `Content-Length` gets 411.
 - Query (optional): `term` (e.g. `1/2569`, default: the current CU term) and `student_id`. Put this service behind nothing that logs query strings (the student ID is in it); the backend calls it directly on localhost.
-- 200: `{"kind": "pdf" | "screenshot", "fields": {...}, "checks": [...]}`. Each field is
+- 200: `{"kind": "pdf" | "screenshot", "fields": {...}, "checks": [...], "stored_copy": {...} | null}`. Each field is
   `{"value", "box", "pii"}`; `box` is `[left, top, right, bottom]` in image pixels or PDF points.
   Each check is `{"name", "state", "detail"}`, with state `ok`, `warn`, `fail` or `info`.
+- `stored_copy` is `{"mime": "image/jpeg", "data": <base64>}`, a JPEG of the upload for staff to view (the backend
+  stores it). Rule: 870 px wide at most (images never enlarged; PDF page 1 rendered 870 px wide), JPEG quality 70.
+  Tested: keeps every field readable on sample screenshots. `null` if it cannot be made; the parse still succeeds.
 - A PDF with no text layer, or a file that is not a PDF, is still 200 with fewer fields; the checks report
   what is missing.
 - 503 `{"error": "OCR engine unavailable"}` when the Paddle worker cannot start (PDFs still work).

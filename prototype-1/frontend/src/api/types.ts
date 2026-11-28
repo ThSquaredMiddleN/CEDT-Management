@@ -257,6 +257,8 @@ export interface AffectedBooking {
 
 export type ReceiptVerdict = "ok" | "warn" | "fail";
 export type ReceiptCheckState = "ok" | "warn" | "fail" | "info";
+/** Staff decision on a warn check (POST /receipts/:id/settle). */
+export type ReceiptSettlement = "pass" | "fail";
 
 export interface ReceiptCheckItem {
   name: string;
@@ -280,6 +282,16 @@ export interface ReceiptCheckRow {
   checkedById: string;
   createdAt: string;
   updatedAt: string;
+  /** A stored copy of the upload exists (GET /receipts/:id/file works). */
+  hasFile: boolean;
+  /** The name read from the receipt. Only sent to staff who can manage receipts; null otherwise. */
+  ocrName: string | null;
+  /** Staff decision on a warn check. Null until settled. */
+  settlement: ReceiptSettlement | null;
+  settleNote: string | null;
+  settledAt: string | null;
+  settledByName: string | null;
+  checkedByName: string | null;
 }
 
 /** Sidecar field: `value` is what the page shows; `pii` marks name, student ID and reference. */
@@ -319,6 +331,9 @@ export interface MyReceiptCheck {
   verdict: ReceiptVerdict;
   createdAt: string;
   checks: MyReceiptCheckItem[];
-  /** True when staff ran this check (the term is then locked). */
+  /** True when staff ran this check. Not the lock: the list response's `locked` decides that. */
   staffChecked: boolean;
+  /** Staff decision on a warn check. `fail` comes with `settleNote`, the reason shown to the student. */
+  settlement: ReceiptSettlement | null;
+  settleNote: string | null;
 }
