@@ -225,7 +225,7 @@ describe("receipt status, linked student", () => {
   });
 
   it("staff settled Pass: passed, says staff checked, no resend", async () => {
-    await addRow(S_OWN, "ok", studentId);
+    await addRow(S_OWN, "ok", staffId);
     await prisma.receiptCheck.updateMany({
       where: { studentId: S_OWN },
       data: { settlement: "pass", settledById: staffId, settledAt: new Date() },
@@ -240,7 +240,8 @@ describe("receipt status, linked student", () => {
 
   it("staff settled Fail: not passed, says upload again, never the staff note", async () => {
     const note = "SETTLE-NOTE-NOT-ON-LINE";
-    await addRow(S_OWN, "fail", studentId);
+    // Staff-run, so only the Fail settlement unlocks it (a student's own fail row is open anyway).
+    await addRow(S_OWN, "fail", staffId);
     await prisma.receiptCheck.updateMany({
       where: { studentId: S_OWN },
       data: { settlement: "fail", settleNote: note, settledById: staffId, settledAt: new Date() },
