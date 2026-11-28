@@ -1,10 +1,13 @@
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { config } from "../../config.js";
+import { audit } from "../../core/audit.js";
+import { deleteFileRecord, readFile, withFileTransaction, type FileWriter } from "../../core/files.js";
 import { prisma, type Tx } from "../../db.js";
 import { can, loadSessionUser, type SessionUser } from "../../core/permissions.js";
 import { AppError, conflict, notFound } from "../../lib/errors.js";
 
-/** Receipts are buffered in memory (max 10 MB) and forwarded to the OCR sidecar; nothing is written to disk. */
+/** Receipts are buffered in memory (max 10 MB) and forwarded to the OCR sidecar. Only its JPEG copy is stored (see checkReceipt). */
 export interface UploadedFile {
   buffer: Buffer;
   mimetype: string;
@@ -17,8 +20,10 @@ const BELONGS_CHECK = "Belongs to this student";
 
 const sidecarResponse = z.object({
   kind: z.enum(["pdf", "screenshot"]),
-  // Each field is {value, box, pii}; only `value` is read here. Names come back to staff, never stored.
+  // Each field is {value, box, pii}; only `value` is read here. The name is stored only on warn rows (`ocrName`).
   fields: z.record(z.string(), z.object({ value: z.string().nullable() }).passthrough()),
+  // A JPEG copy of the receipt (a PDF's first page, or the screenshot) for staff to look at. Older sidecars omit it.
+  stored_copy: z.object({ mime: z.literal("image/jpeg"), data: z.string() }).nullable().optional(),
   checks: z.array(
     z.object({
       name: z.string(),
@@ -177,7 +182,7 @@ export async function checkReceipt(input: CheckInput) {
   const reference = columns.reference;
 
   // The duplicate lookup and the save. A re-check replaces the earlier row, so it starts a new retention clock.
-  const save = async (db: Tx) => {
+  const save = async (db: Tx, files: FileWriter) => {
     // Other rows with this reference, newest first. A settled one wins, so a pending upload never hides a real duplicate.
     const others = reference
       ? await db.receiptCheck.findMany({
@@ -187,12 +192,14 @@ export async function checkReceipt(input: CheckInput) {
             term: true,
             verdict: true,
             checkedById: true,
+            settlement: true,
             checkedBy: { select: { studentNo: true } },
           },
           orderBy: { createdAt: "desc" },
         })
       : [];
-    const withSettled = others.map((r) => ({
+    // A row staff rejected (settled Fail) no longer holds its reference: the real owner's upload must not be flagged against it.
+    const withSettled = others.filter((r) => r.settlement !== "fail").map((r) => ({
       studentId: r.studentId,
       term: r.term,
       // Same rule as studentLocked, from the row student's side: their own check is the one whose checker has their number.
@@ -204,13 +211,46 @@ export async function checkReceipt(input: CheckInput) {
     // A receipt that isn't this student's must not claim its reference: otherwise anyone who uploads a classmate's
     // screenshot makes the classmate's own upload fail "Not submitted before".
     const notTheirs = checks.some((c) => c.name === BELONGS_CHECK && c.state === "fail");
+    const verdict = verdictOf(checks);
+
+    // The stored copy (for staff to look at) is kept for a warn, and for every verdict while RECEIPT_KEEP_ALL_FILES is on.
+    // A re-check replaces the earlier row, so its old file goes too (bytes removed after the commit).
+    const old = await db.receiptCheck.findUnique({
+      where: { studentId_term: { studentId: input.studentId, term } },
+      select: { fileId: true },
+    });
+    if (old?.fileId) {
+      const staleKey = await deleteCheckFileRecord(db, old.fileId);
+      if (staleKey) staleKeys.push(staleKey);
+    }
+    const copy = sidecar.stored_copy ? Buffer.from(sidecar.stored_copy.data, "base64") : null;
+    const fileId =
+      copy && copy.length > 0 && (verdict === "warn" || config.RECEIPT_KEEP_ALL_FILES)
+        ? (
+            await files.save({
+              buffer: copy,
+              mime: "image/jpeg",
+              originalName: `receipt-${term.replace("/", "-")}.jpg`, // never the student's ID or name
+              module: "receipts",
+              uploadedBy: input.checkedById,
+            })
+          ).id
+        : null;
+
     const data = {
       kind: sidecar.kind,
       ...columns,
       ...(notTheirs ? { reference: null } : {}),
       checks,
-      verdict: verdictOf(checks),
+      verdict,
       checkedById: input.checkedById,
+      fileId,
+      // The name is kept only while staff still have to decide on a warn.
+      ocrName: verdict === "warn" ? fieldValue(sidecar.fields, "name") : null,
+      settlement: null,
+      settleNote: null,
+      settledById: null,
+      settledAt: null,
     };
 
     return db.receiptCheck.upsert({
@@ -219,6 +259,7 @@ export async function checkReceipt(input: CheckInput) {
       update: { ...data, createdAt: new Date() },
     });
   };
+  const staleKeys: string[] = [];
 
   // The lookup and the save run in one transaction holding advisory locks. Always taken in this order, so two
   // transactions cannot wait on each other:
@@ -226,7 +267,9 @@ export async function checkReceipt(input: CheckInput) {
   //     A student's upload re-reads the row here and is refused if it is now locked; staff are never refused.
   //  2. the reference (when there is one): two concurrent checks with the same reference cannot both read
   //     "no duplicate" before either one saves.
-  const check = await prisma.$transaction(async (tx) => {
+  // withFileTransaction is a prisma.$transaction that also removes a newly stored copy if the transaction rolls back.
+  const check = await withFileTransaction(async (tx, files) => {
+    staleKeys.length = 0; // a retried transaction starts clean
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`receipt-term|${input.studentId}|${term}`}))`;
     if (input.selfService) {
       const current = await tx.receiptCheck.findUnique({
@@ -235,10 +278,11 @@ export async function checkReceipt(input: CheckInput) {
       if (studentLocked(current, input.checkedById)) throw conflict(RECEIPT_LOCKED_MESSAGE);
     }
     if (reference) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${reference}))`;
-    return save(tx);
+    return save(tx, files);
   });
 
-  return { check, fields: sidecar.fields };
+  // `staleKeys`: contents of a replaced row's file. The route removes them (the row is already gone from `files`).
+  return { check, fields: sidecar.fields, staleKeys };
 }
 
 export async function listReceiptChecks(filter: { term?: string; verdict?: Verdict }) {
@@ -249,6 +293,92 @@ export async function listReceiptChecks(filter: { term?: string; verdict?: Verdi
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
+}
+
+type ReceiptRow = NonNullable<Awaited<ReturnType<typeof ownCheckForTerm>>>;
+
+/**
+ * The staff-facing row: every column except `fileId` (replaced by `hasFile`; the file is fetched by check id) and
+ * `ocrName` (the name on the receipt) and `settleNote` (the staff note), each only for viewers who can manage
+ * receipts (`canSeeName` / `canSeeNote`). Adds the display names of whoever checked and settled it. Never goes to students.
+ */
+export async function staffRowViews(rows: ReceiptRow[], opts: { canSeeName: boolean; canSeeNote: boolean }) {
+  const ids = [...new Set(rows.flatMap((r) => [r.checkedById, r.settledById]).filter((x): x is string => !!x))];
+  const users = ids.length
+    ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
+    : [];
+  const names = new Map(users.map((u) => [u.id, u.name]));
+  return rows.map(({ fileId, ocrName, settleNote, ...row }) => ({
+    ...row,
+    hasFile: fileId !== null,
+    ocrName: opts.canSeeName ? ocrName : null,
+    settleNote: opts.canSeeNote ? settleNote : null,
+    checkedByName: names.get(row.checkedById) ?? null,
+    settledByName: row.settledById ? (names.get(row.settledById) ?? null) : null,
+  }));
+}
+
+export const settleSchema = z.object({
+  decision: z.enum(["pass", "fail"]),
+  note: z.string().trim().max(300).default(""),
+});
+
+/**
+ * Staff decide on a check that warned. Pass makes the verdict ok (the student is locked); Fail makes it fail and
+ * unlocks the student to upload again. The file and the OCR'd name are dropped either way. Returns the row and the
+ * storage key to remove after the commit.
+ */
+export async function settleReceiptCheck(id: string, input: z.infer<typeof settleSchema>, actorId: string) {
+  if (input.decision === "fail" && input.note === "") {
+    throw new AppError("BAD_REQUEST", "A note is required when failing a receipt", [
+      { field: "note", message: "required for a fail" },
+    ]);
+  }
+  return prisma.$transaction(async (tx) => {
+    const found = await tx.receiptCheck.findUnique({ where: { id }, select: { studentId: true, term: true } });
+    if (!found) throw notFound("Receipt check not found");
+    // The same per-term lock as checkReceipt, so a settle and a re-check of this row cannot interleave.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`receipt-term|${found.studentId}|${found.term}`}))`;
+    const row = await tx.receiptCheck.findUnique({ where: { id } });
+    if (!row) throw notFound("Receipt check not found");
+    if (row.verdict !== "warn" || row.settlement) throw conflict("Only a receipt check that warned and is not yet settled can be settled");
+
+    const verdict: Verdict = input.decision === "pass" ? "ok" : "fail";
+    const storageKey = row.fileId ? await deleteCheckFileRecord(tx, row.fileId) : null;
+    const updated = await tx.receiptCheck.update({
+      where: { id },
+      data: {
+        verdict,
+        settlement: input.decision,
+        settleNote: input.note === "" ? null : input.note,
+        settledById: actorId,
+        settledAt: new Date(),
+        fileId: null,
+        ocrName: null,
+      },
+    });
+    // No note and no name in the audit row.
+    await audit(tx, {
+      actorId,
+      action: "receipts.check.settle",
+      subjectType: "receipt_check",
+      subjectId: id,
+      before: { verdict: "warn" },
+      after: { verdict, settlement: input.decision },
+    });
+    return { row: updated, storageKey };
+  });
+}
+
+/** The stored copy of a check, for staff. Audited. 404 when there is no row or no file. */
+export async function receiptFileFor(id: string, actorId: string) {
+  const row = await prisma.receiptCheck.findUnique({ where: { id }, select: { fileId: true } });
+  if (!row?.fileId) throw notFound("No stored copy for this receipt check");
+  const file = await readFile(row.fileId);
+  await prisma.$transaction((tx) =>
+    audit(tx, { actorId, action: "receipts.file.view", subjectType: "receipt_check", subjectId: id }),
+  );
+  return file;
 }
 
 /**
@@ -264,6 +394,8 @@ export function studentView(
     createdAt: Date;
     checks: unknown;
     checkedById: string | null;
+    settlement: string | null;
+    settleNote: string | null;
   },
   viewerId: string,
 ) {
@@ -279,6 +411,9 @@ export function studentView(
     checks: checks.map((c) => ({ name: c.name, state: c.state })),
     // The same test studentLocked uses: a check run by someone else is a staff check. Only a yes/no, never who.
     staffChecked: row.checkedById !== viewerId,
+    // Staff's decision on a warn. The note is shown only for a Fail: it tells the student what to fix.
+    settlement: row.settlement === "pass" || row.settlement === "fail" ? row.settlement : null,
+    settleNote: row.settlement === "fail" ? row.settleNote : null,
   };
 }
 
@@ -296,11 +431,15 @@ const STUDENT_VISIBLE_CHECKS: ReadonlySet<string> = new Set([
 
 /**
  * A student may replace their own check for a term only while it is unsettled: not passed, and not run by staff.
+ * A check staff settled as Fail is open again: the student can upload a new receipt.
  * Staff can always check again.
  */
-export function studentLocked(row: { verdict: string; checkedById: string | null } | null, viewerId: string): boolean {
+export function studentLocked(
+  row: { verdict: string; checkedById: string | null; settlement?: string | null } | null,
+  viewerId: string,
+): boolean {
   if (!row) return false;
-  return row.verdict === "ok" || row.checkedById !== viewerId;
+  return row.verdict === "ok" || (row.checkedById !== viewerId && row.settlement !== "fail");
 }
 
 export async function ownCheckForTerm(studentId: string, term: string) {
@@ -315,9 +454,30 @@ export async function listOwnReceiptChecks(studentId: string) {
   });
 }
 
-export async function deleteReceiptCheck(id: string): Promise<void> {
-  const { count } = await prisma.receiptCheck.deleteMany({ where: { id } });
-  if (count === 0) throw notFound("Receipt check not found");
+/**
+ * deleteFileRecord for a check's file id. The check has no relation to `files` (no foreign key), so its file row can
+ * already be gone (swept, or removed by a concurrent request). Then there is nothing to delete and no bytes to remove:
+ * returns null instead of letting Prisma's P2025 fail the transaction.
+ */
+export async function deleteCheckFileRecord(tx: Tx, fileId: string): Promise<string | null> {
+  try {
+    return await deleteFileRecord(tx, fileId);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return null;
+    throw error;
+  }
+}
+
+/** Deletes the row and its file record. Returns the storage key to remove after the commit (null when no file). */
+export async function deleteReceiptCheck(id: string): Promise<string | null> {
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.receiptCheck.findUnique({ where: { id }, select: { fileId: true } });
+    if (!row) throw notFound("Receipt check not found");
+    // deleteMany: a concurrent delete of the same id answers 404 instead of a Prisma error.
+    const { count } = await tx.receiptCheck.deleteMany({ where: { id } });
+    if (count === 0) throw notFound("Receipt check not found");
+    return row.fileId ? deleteCheckFileRecord(tx, row.fileId) : null;
+  });
 }
 
 const VERDICT_TH: Record<string, string> = { ok: "ผ่าน", warn: "รอเจ้าหน้าที่ตรวจ", fail: "ไม่ผ่าน" };

@@ -1,4 +1,5 @@
 """HTTP contract of server.py, with the stub engine (no Paddle), plus the Paddle protocol against a fake worker."""
+import base64
 import http.client
 import json
 import os
@@ -13,9 +14,10 @@ from unittest import mock
 from urllib.parse import urlencode
 
 import helpers  # noqa: F401  (puts the service folder on sys.path)
-from helpers import make_pdf
+import pymupdf
+from helpers import crafted_jpeg_header, crafted_png_header, make_pdf, make_png
 import server
-from server import PaddleEngine, make_server, stub_words
+from server import PaddleEngine, make_server, stub_words, image_size
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"synthetic test image, the stub ignores the content"
 
@@ -219,6 +221,107 @@ class StubServerTest(ServerCase):
         self.assertNotIn("6800000021", joined)
         self.assertNotIn("student_id", joined)
         self.assertNotIn("1234567890123", joined)
+
+
+class StoredCopyTest(ServerCase):
+    """stored_copy: a JPEG of the upload, 870 px wide at most (PDF: 870 wide), quality 70, from the stub path too."""
+
+    def decoded(self, copy):
+        self.assertEqual(copy["mime"], "image/jpeg")
+        raw = base64.b64decode(copy["data"])
+        self.assertEqual(raw[:2], b"\xff\xd8")  # JPEG start-of-image marker
+        return pymupdf.Pixmap(raw)
+
+    def test_wide_png_comes_back_as_870_wide_jpeg(self):
+        status, body = self.post(make_png(1600, 900), "image/png")
+        self.assertEqual(status, 200)
+        pix = self.decoded(body["stored_copy"])
+        self.assertEqual((pix.width, pix.height), (870, 489))  # aspect kept: 900 * 870 / 1600
+
+    def test_narrow_png_keeps_its_size(self):
+        status, body = self.post(make_png(600, 400), "image/png")
+        self.assertEqual(status, 200)
+        pix = self.decoded(body["stored_copy"])
+        self.assertEqual((pix.width, pix.height), (600, 400))
+
+    def test_wide_png_with_alpha_is_flattened_and_shrunk(self):
+        status, body = self.post(make_png(1200, 600, alpha=True), "image/png")
+        self.assertEqual(status, 200)
+        pix = self.decoded(body["stored_copy"])
+        self.assertEqual((pix.width, pix.height), (870, 435))
+
+    def test_pdf_comes_back_as_870_wide_jpeg(self):
+        status, body = self.post(make_pdf(), "application/pdf")
+        self.assertEqual(status, 200)
+        pix = self.decoded(body["stored_copy"])
+        self.assertEqual(pix.width, 870)
+
+    def test_unreadable_upload_still_parses_with_null_copy(self):
+        # The fake PNG in this file is not an image: the parse answers 200 and the copy is null, with no path logged.
+        with self.assertLogs("ocr", level="WARNING") as cm:
+            status, body = self.post(PNG, "image/png", term="1/2569", student_id="6800000021")
+        self.assertEqual(status, 200)
+        self.assertIsNone(body["stored_copy"])
+        self.assertNotIn(str(self.upload_dir), "\n".join(cm.output))
+
+    def test_broken_pdf_has_null_copy(self):
+        status, body = self.post(b"this is not a pdf", "application/pdf")
+        self.assertEqual(status, 200)
+        self.assertIsNone(body["stored_copy"])
+
+    def test_tall_pdf_page_is_rendered_no_taller_than_6_times_870(self):
+        # A 595 x 6000 pt page: at zoom 2 it would be 12000 px high; the zoom drops so the copy stays within the cap.
+        status, body = self.post(make_pdf(lines=[], height=6000), "application/pdf")
+        self.assertEqual(status, 200)
+        pix = self.decoded(body["stored_copy"])
+        self.assertLessEqual(pix.height, 6 * 870)
+        self.assertGreater(pix.height, 870)  # still a real copy of the whole page, not a clip or an empty image
+
+
+class ImageLimitTest(ServerCase):
+    """Images whose header claims too many pixels, or a 6:1 shape, are refused before any decode or OCR."""
+
+    def assert_refused_before_ocr(self, body, ctype):
+        with mock.patch.object(self.httpd.engine, "words") as words:
+            status, payload = self.post(body, ctype, term="1/2569", student_id="6800000021")
+        self.assertEqual((status, payload), (413, {"error": "image too large"}))
+        words.assert_not_called()
+        self.assertEqual(self.temp_files(), [])  # nothing written to the upload folder
+
+    def test_png_header_claiming_20000_square_is_413(self):
+        self.assert_refused_before_ocr(crafted_png_header(20000, 20000), "image/png")
+
+    def test_png_just_over_40_million_pixels_is_413(self):
+        self.assert_refused_before_ocr(crafted_png_header(8000, 5001), "image/png")
+
+    def test_tall_png_over_6_to_1_is_413(self):
+        self.assert_refused_before_ocr(crafted_png_header(100, 601), "image/png")
+
+    def test_jpeg_header_claiming_20000_square_is_413(self):
+        self.assert_refused_before_ocr(crafted_jpeg_header(20000, 20000), "image/jpeg")
+
+    def test_image_under_the_limits_reaches_the_ocr(self):
+        # 6000 x 6000 is 36 million pixels and square: allowed, so it reaches the OCR (the stub answers 200).
+        status, body = self.post(crafted_png_header(6000, 6000), "image/png")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["kind"], "screenshot")
+
+    def test_pdf_is_not_refused_by_the_image_limits(self):
+        status, body = self.post(make_pdf(), "application/pdf")
+        self.assertEqual(status, 200)
+
+    def test_header_reader(self):
+        self.assertEqual(image_size(crafted_png_header(1234, 567)), (1234, 567))
+        self.assertEqual(image_size(crafted_jpeg_header(321, 654)), (321, 654))
+        # A JPEG with an APP0 segment, then a fill byte before the frame header (SOF2, 300 x 700).
+        app0 = b"\xff\xe0" + (16).to_bytes(2, "big") + b"JFIF\x00" + bytes(9)
+        sof = b"\xff\xff\xc2" + (11).to_bytes(2, "big") + bytes([8]) + (700).to_bytes(2, "big") + (300).to_bytes(2, "big") + bytes([1, 1, 0x11, 0])
+        self.assertEqual(image_size(b"\xff\xd8" + app0 + sof), (300, 700))
+        # Unreadable or truncated headers give None (the decode path handles them).
+        self.assertIsNone(image_size(b"\x89PNG\r\n\x1a\n"))
+        self.assertIsNone(image_size(crafted_jpeg_header(10, 10)[:9]))
+        self.assertIsNone(image_size(b"\xff\xd8\xff\xd9"))
+        self.assertIsNone(image_size(PNG))
 
 
 class PaddleServerTest(ServerCase):

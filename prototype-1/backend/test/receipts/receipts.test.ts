@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { access } from "node:fs/promises";
+import path from "node:path";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -12,6 +14,7 @@ import {
   sidecarOk,
   sidecarUnreadable,
   startFakeSidecar,
+  TINY_JPEG,
   type FakeSidecar,
   type SidecarCheckRow,
 } from "./fake-sidecar.js";
@@ -34,7 +37,10 @@ const S_G = "6500000007"; // delete
 const S_H = "6500000008"; // sidecar errors
 const S_OWN = "6800000001"; // the seeded student@test.local account's student number
 const S_OWN2 = "6800000002"; // the seeded student2@test.local account's student number
-const TEST_STUDENTS = [S_A, S_B, S_C, S_D, S_E, S_F, S_G, S_H, S_OWN, S_OWN2];
+const S_I = "6500000009"; // stored files and settling
+const S_J = "6500000010"; // stored files and settling
+const S_K = "6500000011"; // stored files and settling
+const TEST_STUDENTS = [S_A, S_B, S_C, S_D, S_E, S_F, S_G, S_H, S_I, S_J, S_K, S_OWN, S_OWN2];
 
 const BOUNDARY = "----receipt-test-boundary";
 const PDF_BYTES = Buffer.from("%PDF-1.4 made-up test bytes, not a real receipt");
@@ -83,7 +89,12 @@ async function login(email: string, password: string): Promise<string> {
 }
 
 async function cleanup(): Promise<void> {
+  const rows = await prisma.receiptCheck.findMany({
+    where: { studentId: { in: TEST_STUDENTS } },
+    select: { fileId: true },
+  });
   await prisma.receiptCheck.deleteMany({ where: { studentId: { in: TEST_STUDENTS } } });
+  await prisma.file.deleteMany({ where: { id: { in: rows.flatMap((r) => (r.fileId ? [r.fileId] : [])) } } });
 }
 
 beforeAll(async () => {
@@ -424,14 +435,16 @@ describe("GET /receipts", () => {
     expect((await pdf({ studentId: S_F, term: TERM_B })).statusCode).toBe(200);
   });
 
-  it("lists rows newest first, with no name in the list", async () => {
+  it("lists rows newest first; the OCR'd name is on the warn row only", async () => {
     const res = await listRows(`?term=${encodeURIComponent(TERM_B)}`);
     expect(res.statusCode).toBe(200);
     const items = (res.json() as { items: { studentId: string; term: string }[] }).items;
     const mine = items.filter((i) => i.studentId === S_E || i.studentId === S_F);
     expect(mine.map((i) => i.studentId)).toEqual([S_F, S_E]);
     expect(items.every((i) => i.term === TERM_B)).toBe(true);
-    expect(res.body).not.toContain(MADE_UP_NAME);
+    const names = (res.json() as { items: { studentId: string; ocrName: string | null }[] }).items;
+    expect(names.find((i) => i.studentId === S_F)!.ocrName).toBe(MADE_UP_NAME);
+    expect(names.find((i) => i.studentId === S_E)!.ocrName).toBeNull();
   });
 
   it("filters by verdict", async () => {
@@ -541,7 +554,7 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as { check: Record<string, unknown>; fields?: unknown };
     expect(Object.keys(body)).toEqual(["check"]);
-    expect(Object.keys(body.check).sort()).toEqual(["checks", "createdAt", "id", "kind", "staffChecked", "term", "verdict"]);
+    expect(Object.keys(body.check).sort()).toEqual(["checks", "createdAt", "id", "kind", "settleNote", "settlement", "staffChecked", "term", "verdict"]);
     expect(body.check).toMatchObject({ term: currentTerm(), kind: "pdf", verdict: "fail" });
     expect(body.check.checks).toContainEqual({ name: "Not submitted before", state: "fail" });
     expect(res.body).not.toContain(S_B);
@@ -792,12 +805,13 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
 
     const res = await listMine(studentCookie);
     expect(res.statusCode).toBe(200);
-    expect(Object.keys(res.json()).sort()).toEqual(["items", "locked"]);
+    expect(Object.keys(res.json()).sort()).toEqual(["fileDays", "items", "locked"]);
+    expect(res.json()).toMatchObject({ fileDays: config.RECEIPT_FILE_DAYS });
     const items = (res.json() as { items: Record<string, unknown>[] }).items;
     expect(items.map((i) => i.term)).toEqual([currentTerm(), TERM_OLD]);
     expect(items[1]!.id).toBe(old.id);
     for (const item of items) {
-      expect(Object.keys(item).sort()).toEqual(["checks", "createdAt", "id", "kind", "staffChecked", "term", "verdict"]);
+      expect(Object.keys(item).sort()).toEqual(["checks", "createdAt", "id", "kind", "settleNote", "settlement", "staffChecked", "term", "verdict"]);
       for (const c of item.checks as Record<string, unknown>[]) expect(Object.keys(c).sort()).toEqual(["name", "state"]);
     }
     expect(res.body).not.toContain(S_A);
@@ -829,6 +843,376 @@ describe("student receipts (POST and GET /receipts/mine)", () => {
     expect((await submitMine(noRoleCookie, {})).statusCode).toBe(403);
     expect((await listMine(noRoleCookie)).statusCode).toBe(403);
     expect(fake.calls.length).toBe(before);
+  });
+});
+
+describe("stored copy, settling a warn", () => {
+  const warnChecks: SidecarCheckRow[] = [{ name: "Belongs to this student", state: "warn", detail: "prefix only" }];
+  const keepAll = config.RECEIPT_KEEP_ALL_FILES;
+  let studentCookie: string;
+  let noRoleCookie: string;
+  let studentUserId: string;
+  let noRoleUserId: string;
+
+  type Row = {
+    id: string;
+    verdict: string;
+    hasFile: boolean;
+    fileId?: unknown;
+    ocrName: string | null;
+    settlement: string | null;
+    settleNote: string | null;
+    settledAt: string | null;
+    settledByName: string | null;
+    checkedByName: string | null;
+  };
+
+  const exists = (storageKey: string) =>
+    access(path.resolve(config.FILE_STORAGE_DIR, ...storageKey.split("/"))).then(
+      () => true,
+      () => false,
+    );
+  const rowOf = (studentId: string, term = TERM) =>
+    prisma.receiptCheck.findUniqueOrThrow({ where: { studentId_term: { studentId, term } } });
+  /** A staff upload for a student; `warn` makes the sidecar's checks warn. */
+  const staffUpload = async (studentId: string, reference: string, warn: boolean, storedCopy = true) => {
+    fake.reply = (call) => sidecarOk(call, { reference, checks: warn ? warnChecks : undefined, storedCopy });
+    const res = await pdf({ studentId, term: TERM });
+    expect(res.statusCode).toBe(200);
+    return rowOf(studentId);
+  };
+  const hdr = (c: string) => ({ cookie: c, "x-requested-with": "XMLHttpRequest" });
+  const settle = (id: string, body: unknown, c = cookie) =>
+    app.inject({ method: "POST", url: `/api/v1/receipts/${id}/settle`, headers: hdr(c), payload: body as object });
+  const getFile = (id: string, c = cookie) =>
+    app.inject({ method: "GET", url: `/api/v1/receipts/${id}/file`, headers: hdr(c) });
+  const listMine = (c: string) => app.inject({ method: "GET", url: "/api/v1/receipts/mine", headers: { cookie: c } });
+  const submitMine = (reference: string, warn: boolean) => {
+    fake.reply = (call) => sidecarOk(call, { reference, checks: warn ? warnChecks : undefined });
+    const body = formBody({}, { type: "application/pdf", data: PDF_BYTES });
+    return app.inject({
+      method: "POST",
+      url: "/api/v1/receipts/mine",
+      headers: { ...hdr(studentCookie), "content-type": body.contentType },
+      payload: body.payload,
+    });
+  };
+
+  beforeAll(async () => {
+    studentCookie = await login("student@test.local", "test1234");
+    noRoleCookie = await login("norole@test.local", "test1234");
+    studentUserId = (await prisma.user.findUniqueOrThrow({ where: { email: "student@test.local" } })).id;
+    noRoleUserId = (await prisma.user.findUniqueOrThrow({ where: { email: "norole@test.local" } })).id;
+  });
+  beforeEach(async () => {
+    config.RECEIPT_KEEP_ALL_FILES = true;
+    await cleanup();
+  });
+  afterAll(() => {
+    config.RECEIPT_KEEP_ALL_FILES = keepAll;
+  });
+
+  it("a warn upload stores the file (named without the student) and the OCR'd name", async () => {
+    const row = await staffUpload(S_I, "RC-FILE-W", true);
+    expect(row.verdict).toBe("warn");
+    expect(row.ocrName).toBe(MADE_UP_NAME);
+    expect(row.fileId).not.toBeNull();
+    const file = await prisma.file.findUniqueOrThrow({ where: { id: row.fileId! } });
+    expect(file).toMatchObject({ module: "receipts", mime: "image/jpeg", uploadedById: adminId });
+    expect(file.originalName).toBe("receipt-2-2599.jpg");
+    expect(file.originalName).not.toContain(S_I);
+    expect(await exists(file.storageKey)).toBe(true);
+  });
+
+  it("an ok upload keeps a file while RECEIPT_KEEP_ALL_FILES is on and none when it is off; never the name", async () => {
+    const kept = await staffUpload(S_I, "RC-FILE-OK", false);
+    expect(kept.verdict).toBe("ok");
+    expect(kept.fileId).not.toBeNull();
+    expect(kept.ocrName).toBeNull();
+
+    config.RECEIPT_KEEP_ALL_FILES = false;
+    const dropped = await staffUpload(S_J, "RC-FILE-OK-2", false);
+    expect(dropped.verdict).toBe("ok");
+    expect(dropped.fileId).toBeNull();
+    expect(dropped.ocrName).toBeNull();
+    // A warn still keeps its file with the switch off.
+    const warn = await staffUpload(S_K, "RC-FILE-W-2", true);
+    expect(warn.fileId).not.toBeNull();
+    expect(warn.ocrName).toBe(MADE_UP_NAME);
+  });
+
+  it("stores no file when the sidecar sends no copy (null or the field missing)", async () => {
+    expect((await staffUpload(S_I, "RC-FILE-NONE", true, false)).fileId).toBeNull();
+    fake.reply = (call) => {
+      const r = sidecarOk(call, { reference: "RC-FILE-OLD" });
+      delete (r.body as { stored_copy?: unknown }).stored_copy;
+      return r;
+    };
+    expect((await pdf({ studentId: S_J, term: TERM })).statusCode).toBe(200);
+    expect((await rowOf(S_J)).fileId).toBeNull();
+  });
+
+  it("staff can open the file: JPEG bytes, no-store, audited; students and anonymous cannot", async () => {
+    const row = await staffUpload(S_I, "RC-FILE-GET", true);
+    const res = await getFile(row.id);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("image/jpeg");
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["content-disposition"]).toBe('inline; filename="receipt.jpg"');
+    expect(res.rawPayload.equals(TINY_JPEG)).toBe(true);
+    const views = await prisma.auditLog.findMany({ where: { action: "receipts.file.view", subjectId: row.id } });
+    expect(views.length).toBe(1);
+    expect(views[0]!.actorId).toBe(adminId);
+
+    expect((await getFile(row.id, studentCookie)).statusCode).toBe(403);
+    expect((await getFile(row.id, noRoleCookie)).statusCode).toBe(403);
+    expect((await app.inject({ method: "GET", url: `/api/v1/receipts/${row.id}/file` })).statusCode).toBe(401);
+    expect((await getFile("00000000-0000-4000-8000-000000000000")).statusCode).toBe(404);
+    expect((await getFile("not-a-uuid")).statusCode).toBe(400);
+    // A row with no stored copy is a 404 too.
+    const none = await staffUpload(S_J, "RC-FILE-GET-2", true, false);
+    expect((await getFile(none.id)).statusCode).toBe(404);
+  });
+
+  it("the list shows hasFile and names, never the file id; the OCR'd name only to receipts.manage", async () => {
+    const row = await staffUpload(S_I, "RC-LIST-FILE", true);
+    const admin = (await prisma.user.findUniqueOrThrow({ where: { id: adminId } })).name;
+
+    const res = await listRows(`?term=${encodeURIComponent(TERM)}`);
+    const item = (res.json() as { items: (Row & { studentId: string })[] }).items.find((i) => i.studentId === S_I)!;
+    expect(item).toMatchObject({ hasFile: true, ocrName: MADE_UP_NAME, checkedByName: admin, settlement: null, settledAt: null, settledByName: null });
+    expect("fileId" in item).toBe(false);
+    expect(res.body).not.toContain(row.fileId!);
+
+    // A viewer without receipts.manage sees the row but not the name.
+    await prisma.userPermission.create({ data: { userId: noRoleUserId, permission: "receipts.view", reason: "test" } });
+    try {
+      const viewer = await app.inject({
+        method: "GET",
+        url: `/api/v1/receipts?term=${encodeURIComponent(TERM)}`,
+        headers: { cookie: noRoleCookie },
+      });
+      expect(viewer.statusCode).toBe(200);
+      const seen = (viewer.json() as { items: (Row & { studentId: string })[] }).items.find((i) => i.studentId === S_I)!;
+      expect(seen.hasFile).toBe(true);
+      expect(seen.ocrName).toBeNull();
+      expect(viewer.body).not.toContain(MADE_UP_NAME);
+    } finally {
+      await prisma.userPermission.deleteMany({ where: { userId: noRoleUserId, permission: "receipts.view" } });
+    }
+  });
+
+  it("settle pass: verdict ok, student locked, file and name gone, audited without the note", async () => {
+    // The student's own warn upload, then staff pass it.
+    const mine = (await submitMine("RC-SETTLE-PASS", true)).json() as { check: { id: string; verdict: string } };
+    expect(mine.check.verdict).toBe("warn");
+    const before = await rowOf(S_OWN, currentTerm());
+    expect(before.fileId).not.toBeNull();
+    const file = await prisma.file.findUniqueOrThrow({ where: { id: before.fileId! } });
+    expect(await exists(file.storageKey)).toBe(true);
+    expect((await listMine(studentCookie)).json()).toMatchObject({ locked: false });
+
+    const res = await settle(before.id, { decision: "pass", note: "  looks fine, bank slip  " });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { check: Row };
+    expect(body.check).toMatchObject({
+      id: before.id,
+      verdict: "ok",
+      settlement: "pass",
+      settleNote: "looks fine, bank slip",
+      hasFile: false,
+      ocrName: null,
+    });
+    expect(body.check.settledByName).toBe((await prisma.user.findUniqueOrThrow({ where: { id: adminId } })).name);
+    expect(body.check.settledAt).not.toBeNull();
+    expect("fileId" in body.check).toBe(false);
+
+    const after = await rowOf(S_OWN, currentTerm());
+    expect(after).toMatchObject({ verdict: "ok", settlement: "pass", settledById: adminId, fileId: null, ocrName: null });
+    expect(await prisma.file.count({ where: { id: before.fileId! } })).toBe(0);
+    expect(await exists(file.storageKey)).toBe(false);
+    expect((await getFile(before.id)).statusCode).toBe(404);
+
+    const logs = await prisma.auditLog.findMany({ where: { action: "receipts.check.settle", subjectId: before.id } });
+    expect(logs.length).toBe(1);
+    expect(logs[0]).toMatchObject({
+      actorId: adminId,
+      subjectType: "receipt_check",
+      before: { verdict: "warn" },
+      after: { verdict: "ok", settlement: "pass" },
+    });
+    const logText = JSON.stringify(logs[0], (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+    expect(logText).not.toContain("bank slip");
+    expect(logText).not.toContain(MADE_UP_NAME);
+
+    // The student is locked and sees no note for a pass.
+    const mineList = await listMine(studentCookie);
+    expect(mineList.json()).toMatchObject({ locked: true, items: [{ verdict: "ok", settlement: "pass", settleNote: null }] });
+    expect(mineList.body).not.toContain("bank slip");
+    expect((await submitMine("RC-SETTLE-LATER", false)).statusCode).toBe(409);
+  });
+
+  it("settle fail: a note is required; the student sees it, is unlocked and can upload again", async () => {
+    const mine = (await submitMine("RC-SETTLE-FAIL", true)).json() as { check: { id: string } };
+    const id = mine.check.id;
+    const fileId = (await rowOf(S_OWN, currentTerm())).fileId!;
+
+    expect((await settle(id, { decision: "fail" })).statusCode).toBe(400);
+    expect((await settle(id, { decision: "fail", note: "   " })).statusCode).toBe(400);
+    expect((await settle(id, { decision: "fail", note: "x".repeat(301) })).statusCode).toBe(400);
+    expect((await settle(id, { decision: "maybe", note: "x" })).statusCode).toBe(400);
+    expect((await rowOf(S_OWN, currentTerm())).verdict).toBe("warn"); // untouched by the refused calls
+
+    const res = await settle(id, { decision: "fail", note: "ใบเสร็จของคนอื่น" });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { check: Row }).check).toMatchObject({ verdict: "fail", settlement: "fail", settleNote: "ใบเสร็จของคนอื่น" });
+    expect(await prisma.file.count({ where: { id: fileId } })).toBe(0);
+
+    const list = await listMine(studentCookie);
+    expect(list.json()).toMatchObject({
+      locked: false,
+      items: [{ verdict: "fail", settlement: "fail", settleNote: "ใบเสร็จของคนอื่น" }],
+    });
+    const again = await submitMine("RC-SETTLE-FAIL-2", false);
+    expect(again.statusCode).toBe(200);
+    expect(again.json()).toMatchObject({ check: { id, verdict: "ok", settlement: null, settleNote: null } });
+    const row = await rowOf(S_OWN, currentTerm());
+    expect(row).toMatchObject({ settlement: null, settleNote: null, settledById: null, settledAt: null, checkedById: studentUserId });
+  });
+
+  it("a pass may have no note, and an unknown id is 404", async () => {
+    const row = await staffUpload(S_I, "RC-SETTLE-NONOTE", true);
+    const res = await settle(row.id, { decision: "pass" });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { check: Row }).check).toMatchObject({ settlement: "pass", settleNote: null });
+    expect((await settle("00000000-0000-4000-8000-000000000000", { decision: "pass" })).statusCode).toBe(404);
+    expect((await settle("not-a-uuid", { decision: "pass" })).statusCode).toBe(400);
+  });
+
+  it("settling an ok row or settling twice is 409", async () => {
+    const ok = await staffUpload(S_I, "RC-SETTLE-OK", false);
+    expect((await settle(ok.id, { decision: "pass" })).statusCode).toBe(409);
+    const failed = await staffUpload(S_J, "RC-SETTLE-FAILROW", false);
+    await prisma.receiptCheck.update({ where: { id: failed.id }, data: { verdict: "fail" } });
+    expect((await settle(failed.id, { decision: "pass" })).statusCode).toBe(409);
+
+    const warn = await staffUpload(S_K, "RC-SETTLE-TWICE", true);
+    expect((await settle(warn.id, { decision: "fail", note: "no" })).statusCode).toBe(200);
+    expect((await settle(warn.id, { decision: "pass" })).statusCode).toBe(409);
+    expect((await settle(warn.id, { decision: "fail", note: "again" })).statusCode).toBe(409);
+    expect(await prisma.auditLog.count({ where: { action: "receipts.check.settle", subjectId: warn.id } })).toBe(1);
+  });
+
+  it("students and anonymous callers cannot settle", async () => {
+    const row = await staffUpload(S_I, "RC-SETTLE-403", true);
+    expect((await settle(row.id, { decision: "pass" }, studentCookie)).statusCode).toBe(403);
+    expect((await settle(row.id, { decision: "pass" }, noRoleCookie)).statusCode).toBe(403);
+    const anon = await app.inject({
+      method: "POST",
+      url: `/api/v1/receipts/${row.id}/settle`,
+      headers: { "x-requested-with": "XMLHttpRequest" },
+      payload: { decision: "pass" },
+    });
+    expect(anon.statusCode).toBe(401);
+    expect((await rowOf(S_I)).verdict).toBe("warn");
+  });
+
+  it("a staff-rejected receipt no longer holds its reference", async () => {
+    const first = await staffUpload(S_I, "RC-REJECTED-REF", true);
+    expect((await settle(first.id, { decision: "fail", note: "not theirs" })).statusCode).toBe(200);
+    fake.reply = (call) => sidecarOk(call, { reference: "RC-REJECTED-REF" });
+    const res = await pdf({ studentId: S_J, term: TERM });
+    const check = (res.json() as { check: { verdict: string; checks: SidecarCheckRow[] } }).check;
+    expect(check.verdict).toBe("ok");
+    expect(check.checks.find((c) => c.name === "Not submitted before")?.state).toBe("ok");
+  });
+
+  it("a re-check replaces the row's file and removes the old one", async () => {
+    const first = await staffUpload(S_I, "RC-RECHECK-1", true);
+    const oldFile = await prisma.file.findUniqueOrThrow({ where: { id: first.fileId! } });
+    const second = await staffUpload(S_I, "RC-RECHECK-2", true);
+    expect(second.id).toBe(first.id);
+    expect(second.fileId).not.toBeNull();
+    expect(second.fileId).not.toBe(first.fileId);
+    expect(await prisma.file.count({ where: { id: first.fileId! } })).toBe(0);
+    expect(await exists(oldFile.storageKey)).toBe(false);
+    expect((await getFile(second.id)).statusCode).toBe(200);
+
+    // A re-check that ends ok drops the name, and one with no copy leaves no file behind.
+    const third = await staffUpload(S_I, "RC-RECHECK-3", false, false);
+    expect(third).toMatchObject({ fileId: null, ocrName: null, verdict: "ok" });
+    expect(await prisma.file.count({ where: { id: second.fileId! } })).toBe(0);
+  });
+
+  it("a re-check of a settled row clears the settlement", async () => {
+    const row = await staffUpload(S_I, "RC-RECHECK-SETTLED", true);
+    expect((await settle(row.id, { decision: "fail", note: "unclear" })).statusCode).toBe(200);
+    const again = await staffUpload(S_I, "RC-RECHECK-SETTLED-2", true);
+    expect(again).toMatchObject({ verdict: "warn", settlement: null, settleNote: null, settledById: null, settledAt: null });
+    expect(again.fileId).not.toBeNull();
+  });
+
+  it("the settle note is listed only to viewers who can manage receipts", async () => {
+    const row = await staffUpload(S_J, "RC-LIST-NOTE", true);
+    const settled = await settle(row.id, { decision: "fail", note: "MADE-UP-NOTE" });
+    expect(settled.statusCode).toBe(200);
+    const staff = await listRows(`?term=${encodeURIComponent(TERM)}`);
+    const own = (staff.json() as { items: (Row & { studentId: string })[] }).items.find((i) => i.studentId === S_J)!;
+    expect(own.settleNote).toBe("MADE-UP-NOTE");
+
+    // A viewer without receipts.manage still sees the verdict, but not the note.
+    await prisma.userPermission.create({ data: { userId: noRoleUserId, permission: "receipts.view", reason: "test" } });
+    try {
+      const viewer = await app.inject({
+        method: "GET",
+        url: `/api/v1/receipts?term=${encodeURIComponent(TERM)}`,
+        headers: { cookie: noRoleCookie },
+      });
+      expect(viewer.statusCode).toBe(200);
+      const seen = (viewer.json() as { items: (Row & { studentId: string })[] }).items.find((i) => i.studentId === S_J)!;
+      expect(seen).toMatchObject({ settlement: "fail", settleNote: null });
+      expect(viewer.body).not.toContain("MADE-UP-NOTE");
+    } finally {
+      await prisma.userPermission.deleteMany({ where: { userId: noRoleUserId, permission: "receipts.view" } });
+    }
+  });
+
+  it("deleting a check whose file row is already gone still answers 204", async () => {
+    const row = await staffUpload(S_K, "RC-DELETE-GONE", true);
+    await prisma.file.deleteMany({ where: { id: row.fileId! } });
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/receipts/${row.id}`, headers: hdr(cookie) });
+    expect(del.statusCode).toBe(204);
+    expect(await prisma.receiptCheck.count({ where: { id: row.id } })).toBe(0);
+  });
+
+  it("settling a check whose file row is already gone still settles it", async () => {
+    const row = await staffUpload(S_K, "RC-SETTLE-GONE", true);
+    await prisma.file.deleteMany({ where: { id: row.fileId! } });
+    const res = await settle(row.id, { decision: "pass", note: "" });
+    expect(res.statusCode).toBe(200);
+    expect(await prisma.receiptCheck.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({
+      verdict: "ok",
+      settlement: "pass",
+      fileId: null,
+    });
+  });
+
+  it("a re-check whose old file row is already gone still replaces the row", async () => {
+    const first = await staffUpload(S_K, "RC-RECHECK-GONE-1", true);
+    await prisma.file.deleteMany({ where: { id: first.fileId! } });
+    const again = await staffUpload(S_K, "RC-RECHECK-GONE-2", true);
+    expect(again.fileId).not.toBeNull();
+    expect(again.fileId).not.toBe(first.fileId);
+  });
+
+  it("deleting a row deletes its file", async () => {
+    const row = await staffUpload(S_I, "RC-DELETE-FILE", true);
+    const file = await prisma.file.findUniqueOrThrow({ where: { id: row.fileId! } });
+    const del = await app.inject({ method: "DELETE", url: `/api/v1/receipts/${row.id}`, headers: hdr(cookie) });
+    expect(del.statusCode).toBe(204);
+    expect(await prisma.file.count({ where: { id: file.id } })).toBe(0);
+    expect(await exists(file.storageKey)).toBe(false);
   });
 });
 

@@ -1,11 +1,22 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
-import { Trash2 } from "lucide-react";
+import { FileImage, Trash2 } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { ApiError } from "@/api/client";
-import { checkReceipt, useDeleteReceiptCheck, useReceiptChecks } from "@/api/endpoints";
+import {
+  checkReceipt,
+  receiptFileUrl,
+  useDeleteReceiptCheck,
+  useReceiptChecks,
+  useSettleReceiptCheck,
+} from "@/api/endpoints";
 import { qk } from "@/api/queryKeys";
-import type { ReceiptCheckResponse, ReceiptCheckRow, ReceiptVerdict } from "@/api/types";
+import type {
+  ReceiptCheckResponse,
+  ReceiptCheckRow,
+  ReceiptSettlement,
+  ReceiptVerdict,
+} from "@/api/types";
 import { useToast } from "@/app/toast";
 import { EmptyState, ErrorCard, SkeletonRow, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -21,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -44,6 +56,18 @@ const VERDICT_OPTIONS: { value: ReceiptVerdict | ""; label: string }[] = [
   { value: "warn", label: "Review" },
   { value: "fail", label: "Fail" },
 ];
+
+const SETTLE_NOTE_MAX = 300;
+
+const SETTLED_LABEL: Record<ReceiptSettlement, string> = { pass: "Pass", fail: "Fail" };
+
+/** The checks that made a row need a look (warn or fail), for the dialog and the Why column. */
+const needsLook = (row: ReceiptCheckRow) => row.checks.filter((c) => c.state === "warn" || c.state === "fail");
+
+const whyText = (row: ReceiptCheckRow) => {
+  const names = needsLook(row).map((c) => c.name);
+  return names.length > 0 ? names.join(", ") : "—";
+};
 
 interface Notice {
   title: string;
@@ -98,6 +122,13 @@ export function ReceiptChecksPage() {
   const del = useDeleteReceiptCheck();
   const [pendingDelete, setPendingDelete] = useState<ReceiptCheckRow | null>(null);
 
+  // Settle dialog: staff pick pass or fail, and a note (required for fail).
+  const settle = useSettleReceiptCheck();
+  const [pendingSettle, setPendingSettle] = useState<ReceiptCheckRow | null>(null);
+  const [decision, setDecision] = useState<ReceiptSettlement | null>(null);
+  const [settleNote, setSettleNote] = useState("");
+  const [settleError, setSettleError] = useState<string | null>(null);
+
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const problem = validate(studentId, term, file);
@@ -133,6 +164,43 @@ export function ReceiptChecksPage() {
       },
       onError: () => toast("Could not delete that check."),
     });
+  };
+
+  const openSettle = (row: ReceiptCheckRow) => {
+    setDecision(null);
+    setSettleNote("");
+    setSettleError(null);
+    setPendingSettle(row);
+  };
+
+  const closeSettle = () => setPendingSettle(null);
+
+  const confirmSettle = () => {
+    if (!pendingSettle || !decision) return;
+    const note = settleNote.trim();
+    if (decision === "fail" && note === "") {
+      setSettleError("Fail needs a note. The student will see it.");
+      return;
+    }
+    settle.mutate(
+      { id: pendingSettle.id, decision, note: note === "" ? undefined : note },
+      {
+        onSuccess: () => {
+          toast("Check settled");
+          closeSettle();
+        },
+        onError: (err) => {
+          if (err instanceof ApiError && err.status === 409) {
+            // Already settled, or not a warn any more: show the server's words and reload the list.
+            toast(err.message);
+            closeSettle();
+            void qc.invalidateQueries({ queryKey: qk.receipts });
+            return;
+          }
+          setSettleError(err instanceof ApiError ? err.message : "Could not settle this check.");
+        },
+      },
+    );
   };
 
   const items = list.data?.items ?? [];
@@ -241,7 +309,7 @@ export function ReceiptChecksPage() {
           </div>
         </div>
 
-        <Card className="overflow-hidden p-0">
+        <Card className="overflow-x-auto p-0">
           {list.isPending ? (
             <div className="flex flex-col gap-3 p-6">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -259,19 +327,40 @@ export function ReceiptChecksPage() {
                   <TableHead className="pl-6">Student ID</TableHead>
                   <TableHead>Term</TableHead>
                   <TableHead>Verdict</TableHead>
+                  <TableHead>Why</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Reference</TableHead>
-                  <TableHead>Checked at</TableHead>
+                  <TableHead>Checked</TableHead>
                   <TableHead className="pr-6 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.map((row, i) => (
                   <TableRow key={row.id} className={cn(i % 2 === 1 && "bg-neutral-100/50")}>
-                    <TableCell className="pl-6 font-mono text-xs">{row.studentId}</TableCell>
+                    <TableCell className="pl-6 font-mono text-xs">
+                      {row.studentId}
+                      {row.ocrName && (
+                        <div className="font-sans text-xs text-neutral-500">{row.ocrName}</div>
+                      )}
+                    </TableCell>
                     <TableCell>{row.term}</TableCell>
                     <TableCell>
                       <VerdictBadge verdict={row.verdict} />
+                    </TableCell>
+                    <TableCell className="max-w-xs text-sm">
+                      {row.settlement ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span>
+                            Settled: {SETTLED_LABEL[row.settlement]}
+                            {row.settledByName && ` by ${row.settledByName}`}
+                          </span>
+                          {row.settleNote && (
+                            <span className="break-words text-xs text-neutral-500">{row.settleNote}</span>
+                          )}
+                        </div>
+                      ) : (
+                        whyText(row)
+                      )}
                     </TableCell>
                     <TableCell>{row.amount ?? "—"}</TableCell>
                     <TableCell className="whitespace-nowrap font-mono text-xs text-neutral-500">
@@ -279,16 +368,36 @@ export function ReceiptChecksPage() {
                     </TableCell>
                     <TableCell className="text-neutral-500">
                       {format(parseISO(row.createdAt), "d MMM yyyy, HH:mm")}
+                      {row.checkedByName && <div className="text-xs">by {row.checkedByName}</div>}
                     </TableCell>
                     <TableCell className="pr-6 text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Delete check"
-                        onClick={() => setPendingDelete(row)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        {row.hasFile && (
+                          <Button variant="ghost" size="icon-sm" asChild>
+                            <a
+                              href={receiptFileUrl(row.id)}
+                              target="_blank"
+                              rel="noopener"
+                              aria-label="View receipt"
+                            >
+                              <FileImage className="size-4" />
+                            </a>
+                          </Button>
+                        )}
+                        {row.verdict === "warn" && row.settlement === null && (
+                          <Button variant="secondary" size="sm" onClick={() => openSettle(row)}>
+                            Settle
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Delete check"
+                          onClick={() => setPendingDelete(row)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -319,6 +428,108 @@ export function ReceiptChecksPage() {
             <Button disabled={del.isPending} onClick={confirmDelete}>
               {del.isPending && <Spinner />}
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingSettle !== null}
+        onOpenChange={(open) => {
+          if (!open) closeSettle();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Settle this check</DialogTitle>
+            <DialogDescription>
+              Student {pendingSettle?.studentId}, term {pendingSettle?.term}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <section className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold">Why it needs a look</h3>
+            <ul className="flex flex-col gap-1.5 text-sm">
+              {pendingSettle &&
+                needsLook(pendingSettle).map((c) => (
+                  <li key={c.name} className="break-words">
+                    <span className="font-medium">{c.name}</span>
+                    {c.detail && <span className="text-neutral-500"> · {c.detail}</span>}
+                  </li>
+                ))}
+            </ul>
+            {pendingSettle?.hasFile && (
+              <a
+                href={receiptFileUrl(pendingSettle.id)}
+                target="_blank"
+                rel="noopener"
+                className="w-fit text-sm font-medium underline underline-offset-4"
+              >
+                View receipt
+              </a>
+            )}
+          </section>
+
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1.5 text-sm font-medium">Decision</legend>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="settle-decision"
+                value="pass"
+                checked={decision === "pass"}
+                onChange={() => {
+                  setDecision("pass");
+                  setSettleError(null);
+                }}
+              />
+              Pass
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="settle-decision"
+                value="fail"
+                checked={decision === "fail"}
+                onChange={() => {
+                  setDecision("fail");
+                  setSettleError(null);
+                }}
+              />
+              Fail
+            </label>
+          </fieldset>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="settle-note">Note</Label>
+            <Textarea
+              id="settle-note"
+              maxLength={SETTLE_NOTE_MAX}
+              value={settleNote}
+              aria-invalid={settleError !== null}
+              aria-describedby="settle-note-help"
+              onChange={(e) => {
+                setSettleNote(e.target.value);
+                setSettleError(null);
+              }}
+            />
+            <p id="settle-note-help" className="text-xs text-neutral-500">
+              Required for Fail. The student sees this note, so don't name other students.
+            </p>
+            {settleError && (
+              <p role="alert" className="text-xs font-medium text-neutral-950">
+                {settleError}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeSettle}>
+              Cancel
+            </Button>
+            <Button disabled={decision === null || settle.isPending} onClick={confirmSettle}>
+              {settle.isPending && <Spinner />}
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>

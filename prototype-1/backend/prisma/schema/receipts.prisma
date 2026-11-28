@@ -1,20 +1,32 @@
-// Tuition receipt check (once per student per term). Holds the extracted check fields only:
-// never the file, never the student's name (the sidecar's `name` field is returned to staff, not stored).
+// Tuition receipt check (once per student per term). Holds the extracted check fields.
+// Short-term extras, all removed by `npm run receipts:purge` (RECEIPT_FILE_DAYS) or when staff settle the check:
+// the JPEG copy of the receipt (`fileId`, so staff can look at it) and, on warn rows only, the OCR'd name (`ocrName`).
+// `fileId` and the settle columns are plain uuids with no relations, so the core schema stays untouched.
 model ReceiptCheck {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  studentId     String   @map("student_id")
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId     String    @map("student_id")
   term          String
   kind          String
   reference     String?
   amount        String?
-  paymentStatus String?  @map("payment_status")
-  paidAt        String?  @map("paid_at")
+  paymentStatus String?   @map("payment_status")
+  paidAt        String?   @map("paid_at")
   funding       String?
   checks        Json
   verdict       String
-  checkedById   String   @map("checked_by") @db.Uuid
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  checkedById   String    @map("checked_by") @db.Uuid
+  /// files.id of the stored JPEG copy. Null once cleared (settled, purged, or never stored).
+  fileId        String?   @unique @map("file_id") @db.Uuid
+  /// The name read from the receipt. Kept only while the row is a warn awaiting staff; cleared on settle.
+  ocrName       String?   @map("ocr_name")
+  /// "pass" | "fail" once staff settled a warn row. Null otherwise.
+  settlement    String?
+  settleNote    String?   @map("settle_note")
+  /// users.id of the staff member who settled (no relation; looked up by name when listing).
+  settledById   String?   @map("settled_by") @db.Uuid
+  settledAt     DateTime? @map("settled_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   checkedBy User @relation(fields: [checkedById], references: [id])
 

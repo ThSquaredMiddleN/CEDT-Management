@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { ApiError } from "@/api/client";
 import { useMyReceipts, useUploadMyReceipt } from "@/api/endpoints";
 import { qk } from "@/api/queryKeys";
-import type { MyReceiptCheck, ReceiptCheckState, ReceiptVerdict } from "@/api/types";
+import type { MyReceiptCheck, ReceiptCheckState, ReceiptSettlement, ReceiptVerdict } from "@/api/types";
 import { EmptyState, ErrorCard, SkeletonRow, Spinner } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -58,18 +58,36 @@ const STATE: Record<ReceiptCheckState, { label: string; Icon: typeof Info; class
   info: { label: "ข้อมูล", Icon: Info, className: "text-neutral-500" },
 };
 
-// A warn that staff already looked at is not "waiting for staff" any more (the same words as the LINE reply).
-const STAFF_CHECKED_WARN = "เจ้าหน้าที่ตรวจแล้ว มีข้อสังเกต";
+// A warn that staff ran but has not settled yet: the student waits for staff's decision.
+const STAFF_CHECKED_WARN = "รอเจ้าหน้าที่ตรวจ";
 
-function VerdictPill({ verdict, staffChecked }: { verdict: ReceiptVerdict; staffChecked: boolean }) {
-  const { Icon, box } = VERDICT[verdict];
-  const label = staffChecked && verdict === "warn" ? STAFF_CHECKED_WARN : VERDICT[verdict].label;
+/** Settled by staff: pass reads as OK, fail as not passed. Unsettled rows keep their own verdict. */
+function VerdictPill({
+  verdict,
+  staffChecked,
+  settlement,
+}: {
+  verdict: ReceiptVerdict;
+  staffChecked: boolean;
+  settlement: ReceiptSettlement | null;
+}) {
+  const shown: ReceiptVerdict = settlement === "pass" ? "ok" : settlement === "fail" ? "fail" : verdict;
+  const { Icon, box } = VERDICT[shown];
+  let label = VERDICT[shown].label;
+  if (settlement === "pass") label = `${VERDICT.ok.label} (เจ้าหน้าที่ตรวจแล้ว)`;
+  else if (staffChecked && verdict === "warn") label = STAFF_CHECKED_WARN;
   return (
     <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium", box)}>
       <Icon className="size-3.5" aria-hidden="true" />
       {label}
     </span>
   );
+}
+
+/** The reason staff gave for a fail. Shown only when the check was settled as fail. */
+function SettleNote({ settlement, note }: { settlement: ReceiptSettlement | null; note: string | null }) {
+  if (settlement !== "fail" || !note) return null;
+  return <p className="break-words text-sm text-neutral-700">เจ้าหน้าที่แจ้ง: {note}</p>;
 }
 
 /** Client-side checks mirror the server's, so a wrong file is refused before the upload. */
@@ -107,15 +125,18 @@ function describeUploadError(err: unknown): string {
 }
 
 function ResultCard({ check, locked }: { check: MyReceiptCheck; locked: boolean }) {
-  // No "upload again" hint once the term is locked: only staff can change it then.
-  const needsAction = check.verdict !== "ok" && !locked;
+  // No "upload again" hint once the term is locked (only staff can change it then), or once staff passed it.
+  const needsAction = check.verdict !== "ok" && check.settlement !== "pass" && !locked;
   return (
     <Card className="flex flex-col gap-5 p-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <VerdictPill verdict={check.verdict} staffChecked={check.staffChecked} />
-        <span className="text-sm text-neutral-500">
-          ภาคการศึกษา {check.term} · {check.kind === "pdf" ? "ไฟล์ PDF" : "ภาพหน้าจอ CU NEX"}
-        </span>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <VerdictPill verdict={check.verdict} staffChecked={check.staffChecked} settlement={check.settlement} />
+          <span className="text-sm text-neutral-500">
+            ภาคการศึกษา {check.term} · {check.kind === "pdf" ? "ไฟล์ PDF" : "ภาพหน้าจอ CU NEX"}
+          </span>
+        </div>
+        <SettleNote settlement={check.settlement} note={check.settleNote} />
       </div>
 
       <ul className="flex flex-col gap-3">
@@ -152,8 +173,9 @@ export function MyReceiptPage() {
   const uploading = upload.isPending;
   const notice = localNotice ?? (upload.isError ? describeUploadError(upload.error) : null);
   const items = list.data?.items ?? [];
-  // Settled (passed, or checked by staff): no form. A 409 from a stale page gets the same message.
+  // The server decides the lock (a settled pass, or a term staff checked). A 409 from a stale page gets the same message.
   const locked = list.data?.locked ?? false;
+  const fileDays = list.data?.fileDays;
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -183,7 +205,9 @@ export function MyReceiptPage() {
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">ใบเสร็จค่าเทอม</h1>
         <p className="text-sm text-neutral-500">
-          อัปโหลดใบเสร็จค่าเทอมของภาคการศึกษานี้ (ไฟล์ PDF จาก CU หรือภาพหน้าจอการชำระเงินใน CU NEX) ระบบไม่เก็บไฟล์
+          อัปโหลดใบเสร็จค่าเทอมของภาคการศึกษานี้ (ไฟล์ PDF จาก CU หรือภาพหน้าจอการชำระเงินใน CU NEX){" "}
+          {fileDays !== undefined &&
+            `ระบบเก็บสำเนาใบเสร็จไว้ไม่เกิน ${fileDays} วัน เพื่อให้เจ้าหน้าที่ตรวจ แล้วลบทิ้ง`}
         </p>
       </header>
 
@@ -252,8 +276,9 @@ export function MyReceiptPage() {
                   <div className="flex flex-col gap-0.5">
                     <span className="text-sm font-medium text-neutral-950">ภาคการศึกษา {row.term}</span>
                     <span className="text-xs text-neutral-500">{shortDate(row.createdAt)}</span>
+                    <SettleNote settlement={row.settlement} note={row.settleNote} />
                   </div>
-                  <VerdictPill verdict={row.verdict} staffChecked={row.staffChecked} />
+                  <VerdictPill verdict={row.verdict} staffChecked={row.staffChecked} settlement={row.settlement} />
                 </li>
               ))}
             </ul>

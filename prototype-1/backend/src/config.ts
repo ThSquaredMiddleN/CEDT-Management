@@ -52,6 +52,12 @@ const schema = z.object({
     .default("http://127.0.0.1:8790"),
   OCR_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
   RECEIPT_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
+  // The JPEG copy of a receipt (and the OCR'd name on warn rows) is cleared by `npm run receipts:purge` after this many days.
+  RECEIPT_FILE_DAYS: z.preprocess(emptyAsUnset, z.coerce.number().int().positive().default(30)),
+  // true: keep the copy of every checked receipt (first-term trial). false: keep only the ones that warned.
+  RECEIPT_KEEP_ALL_FILES: z.preprocess(emptyAsUnset, z.enum(["true", "1", "false", "0"]).default("true")).transform(
+    (v) => v === "true" || v === "1",
+  ),
   // Course Change demo/test hook: pretend "today" is this date (YYYY-MM-DD) so any week of
   // the term — and therefore any of flows A/B/C — can be shown on demand. Unset = real date.
   COURSE_CHANGE_TODAY: z
