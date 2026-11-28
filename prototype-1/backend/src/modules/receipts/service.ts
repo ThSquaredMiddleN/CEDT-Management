@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { config } from "../../config.js";
 import { prisma, type Tx } from "../../db.js";
+import { can, loadSessionUser, type SessionUser } from "../../core/permissions.js";
 import { AppError, conflict, notFound } from "../../lib/errors.js";
 
 /** Receipts are buffered in memory (max 10 MB) and forwarded to the OCR sidecar; nothing is written to disk. */
@@ -317,4 +318,44 @@ export async function listOwnReceiptChecks(studentId: string) {
 export async function deleteReceiptCheck(id: string): Promise<void> {
   const { count } = await prisma.receiptCheck.deleteMany({ where: { id } });
   if (count === 0) throw notFound("Receipt check not found");
+}
+
+const VERDICT_TH: Record<string, string> = { ok: "ผ่าน", warn: "รอเจ้าหน้าที่ตรวจ", fail: "ไม่ผ่าน" };
+const LOCKED_NOTE = "หากต้องการเปลี่ยน กรุณาติดต่อเจ้าหน้าที่";
+
+/** The receipt feature is for accounts with a student number and `receipts.use` (the same rule as /receipts/mine). */
+export const canUseReceipts = (me: SessionUser): boolean => me.studentNo !== null && can(me, "receipts.use");
+
+/** A summary for the user, or why there is none, so the bot can say the right thing. */
+export type LineSummary = { text: string; link: string } | { reason: "not-student" | "no-permission" };
+
+/**
+ * A short status for the LINE bot ("ใบเสร็จ"), and the pattern for other modules' LINE summaries: one exported
+ * function in the module's service that takes a user ID, applies the module's own permission and rules, and returns
+ * `{ text, link }`, or `{ reason }` when the user has nothing to ask here. The bot adds the app origin to `link`.
+ *
+ * Same lookups and rules as GET /receipts/mine: the user's own student number, the current term, `studentView`
+ * for what may be shown, `studentLocked` for whether they can send again. The text is built only from the verdict
+ * and who checked it: never a reference, amount, name, ID, check detail or another student's row.
+ * `no-permission`: unknown or inactive account, or no `receipts.use`. `not-student`: no student number.
+ */
+export async function lineSummary(userId: string): Promise<LineSummary> {
+  const me = await loadSessionUser(userId);
+  if (!me) return { reason: "no-permission" };
+  if (me.studentNo === null) return { reason: "not-student" };
+  if (!canUseReceipts(me)) return { reason: "no-permission" };
+
+  const link = "/receipts";
+  const row = await ownCheckForTerm(me.studentNo, currentTerm());
+  if (!row) return { text: "ยังไม่ได้ส่งใบเสร็จภาคการศึกษานี้", link };
+
+  // staffChecked: the same test studentLocked uses (a check run by someone else is a staff check), as on the web page.
+  const { verdict, staffChecked } = studentView(row, me.id);
+  // A warn that staff already looked at is not "waiting for staff" any more.
+  const label = staffChecked && verdict === "warn" ? "เจ้าหน้าที่ตรวจแล้ว มีข้อสังเกต" : (VERDICT_TH[verdict] ?? "รอเจ้าหน้าที่ตรวจ");
+  // Locked (passed, or checked by staff): no resend, as on the web page. Otherwise the student may send again.
+  const second = studentLocked(row, me.id)
+    ? `${staffChecked ? "เจ้าหน้าที่ตรวจแล้ว" : "ระบบตรวจให้อัตโนมัติ"} ${LOCKED_NOTE}`
+    : "ยังไม่มีเจ้าหน้าที่ตรวจ ส่งใหม่ได้ที่หน้าเว็บ";
+  return { text: `ใบเสร็จภาคการศึกษานี้: ${label}\n${second}`, link };
 }

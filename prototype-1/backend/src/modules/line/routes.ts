@@ -3,9 +3,11 @@ import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { config, lineEnabled } from "../../config.js";
 import { audit } from "../../core/audit.js";
+import { loadSessionUser } from "../../core/permissions.js";
 import { prisma } from "../../db.js";
 import { AppError, badRequest, isUniqueViolation, unauthenticated } from "../../lib/errors.js";
 import { hashToken, requireUser } from "../../plugins/auth.js";
+import { canUseReceipts } from "../receipts/service.js";
 import { answerText, intentOf, needsLinkOffer } from "./bot.js";
 import { createLineClient, type LineClient, type LineMessage } from "./client.js";
 import { linkedOk, linkPrompt } from "./messages.js";
@@ -128,6 +130,20 @@ async function offerLink(ctx: Ctx, event: LineEvent, userId: string, text?: stri
   }
 }
 
+/**
+ * Whether to offer the receipt quick reply: a student number and receipts.use, so staff and others do not see it.
+ * It runs on every linked user's message, so a failed lookup only hides the button: it must not turn "ข่าว" or "เมนู"
+ * into a 500 (and a LINE retry). A receipt question still reads the user again in lineSummary.
+ */
+async function canReceipts(userId: string): Promise<boolean> {
+  try {
+    const me = await loadSessionUser(userId);
+    return me !== null && canUseReceipts(me);
+  } catch {
+    return false;
+  }
+}
+
 async function hasUsableLinkToken(userId: string): Promise<boolean> {
   const row = await prisma.lineLinkToken.findFirst({
     where: { lineUserId: userId, usedAt: null, expiresAt: { gt: new Date() } },
@@ -176,11 +192,11 @@ async function handleEvent(ctx: Ctx, event: LineEvent): Promise<void> {
     // A deactivated user counts as unlinked here: no name is shown, and a new link is offered.
     const linked = await prisma.lineAccount.findFirst({
       where: { lineUserId: userId, user: { isActive: true } },
-      select: { user: { select: { name: true } } },
+      select: { user: { select: { id: true, name: true } } },
     });
     const text = event.text ?? "";
     if (linked) {
-      await send(ctx.client, event, userId, await answerText(text, { linked: true, name: linked.user.name }));
+      await send(ctx.client, event, userId, await answerText(text, { linked: true, name: linked.user.name, userId: linked.user.id, canReceipts: await canReceipts(linked.user.id) }));
       return;
     }
     const intent = intentOf(text);
