@@ -28,7 +28,7 @@ const ICONS: Record<string, typeof Check> = {
 export function NotificationBell({
   variant = "default",
 }: {
-  variant?: "default" | "topbar";
+  variant?: "default" | "topbar" | "sidebar";
 } = {}) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -65,6 +65,20 @@ export function NotificationBell({
               </span>
             )}
           </button>
+        ) : variant === "sidebar" ? (
+          <button
+            type="button"
+            aria-label="การแจ้งเตือน"
+            title="การแจ้งเตือน"
+            className="relative flex size-8 shrink-0 items-center justify-center rounded-lg text-grey-700 transition-colors hover:bg-slate-200/80 hover:text-grey-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+          >
+            <BellIcon className="size-5" aria-hidden="true" />
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-brand-primary text-[10px] font-semibold text-white">
+                {unread}
+              </span>
+            )}
+          </button>
         ) : (
           <Button variant="ghost" size="icon" className="relative" aria-label="การแจ้งเตือน">
             <Bell className="size-5" />
@@ -77,7 +91,12 @@ export function NotificationBell({
         )}
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-0">
+      <PopoverContent
+        side={variant === "sidebar" ? "right" : undefined}
+        align="end"
+        sideOffset={variant === "sidebar" ? 8 : 4}
+        className="w-[min(22rem,calc(100vw-2rem))] p-0"
+      >
         <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
           <span className="text-sm font-semibold">การแจ้งเตือน</span>
           {unread > 0 && (
